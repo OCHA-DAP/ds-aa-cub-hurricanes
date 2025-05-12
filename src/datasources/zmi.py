@@ -16,12 +16,7 @@ ZMI_COORDS = [
 
 
 def load_zmi():
-    # Create a Polygon object
+    """Create gdf of ZMI based on coords from Cuba Met map"""
     poly = Polygon(ZMI_COORDS)
-
-    # Create a GeoDataFrame
-    gdf = gpd.GeoDataFrame(
-        index=[0], geometry=[poly], crs="EPSG:4326"
-    )  # WGS84
-
+    gdf = gpd.GeoDataFrame(index=[0], geometry=[poly], crs="EPSG:4326")
     return gdf
