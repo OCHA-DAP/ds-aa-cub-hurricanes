@@ -1,0 +1,2 @@
+matplotlib==3.10.3
+ocha-stratus==0.1.2
