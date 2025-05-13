@@ -1,0 +1,9 @@
+---
+title: ZMA
+---
+
+# ZMA
+<!-- markdownlint-disable MD013 -->
+Showing the Zona de Máxima Atención, based on the map (dotted red line):
+
+![][image1]

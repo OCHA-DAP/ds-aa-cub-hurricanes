@@ -1,0 +1,115 @@
+---
+title: IMERG
+---
+
+
+<!-- markdownlint-disable MD013 -->
+
+```python
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+```python
+import pandas as pd
+import ocha_stratus as stratus
+
+from src.datasources import imerg, ibtracs, zma
+from src.constants import *
+```
+
+## Load IMERG
+
+```python
+pcode = "CU"
+```
+
+```python
+%%time
+# load all IMERG data - bit slow
+df_imerg = imerg.load_imerg(pcode)
+```
+
+```python
+df_imerg["valid_date"] = pd.to_datetime(df_imerg["valid_date"])
+```
+
+```python
+df_imerg["mean"].hist()
+```
+
+```python
+df_imerg["roll2_mean"] = df_imerg["mean"].rolling(2).sum()
+```
+
+Just get a general idea of yearly peak values
+
+```python
+df_imerg.groupby(df_imerg["valid_date"].dt.year)[
+    "roll2_mean"
+].max().reset_index().sort_values("roll2_mean", ascending=False)
+```
+
+```python
+df_imerg
+```
+
+## Process rainfall
+### Load storms
+
+```python
+gdf_zma = zma.load_zma()
+```
+
+```python
+df_all = ibtracs.load_ibtracs_in_bounds(*gdf_zma.total_bounds)
+```
+
+```python
+df_agg = (
+    df_all.groupby("sid")
+    .agg(
+        valid_time_min=("valid_time", "min"),
+        valid_time_max=("valid_time", "max"),
+        wind_speed_max=("wind_speed", "max"),
+    )
+    .reset_index()
+)
+```
+
+### Get rainfall per storm
+
+Relatively simplistic - look at the dates the storm was in the ZMI, and take the 2-day rolling sum of rainfall over the whole country (this is what is used as a trigger in Haiti, so could be a good starting point). We include one day on either side of the time the storm is in the ZMI.
+
+```python
+def get_storm_rainfall(storm_row):
+    min_date = storm_row["valid_time_min"].date()
+    max_date = storm_row["valid_time_max"].date() + pd.DateOffset(days=1)
+    dff_imerg = df_imerg[
+        (df_imerg["valid_date"] >= pd.Timestamp(min_date))
+        & (df_imerg["valid_date"] <= pd.Timestamp(max_date))
+    ]
+    storm_row["max_roll2_mean"] = dff_imerg["roll2_mean"].max()
+    return storm_row
+```
+
+```python
+df_agg = df_agg.apply(get_storm_rainfall, axis=1)
+```
+
+```python
+df_agg
+```
+
+```python
+blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
+```
+
+```python
+stratus.upload_parquet_to_blob(df_agg, blob_name)
+```
+
+```python
+
+```
