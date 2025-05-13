@@ -8,10 +8,6 @@ title: IBTrACS
 Load IBTrACS from Postgres, and plot just to check the right stuff has been loaded.
 
 ```{python}
-1+1
-```
-
-```{python}
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -65,13 +61,15 @@ def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
     df = df.sort_values(["sid"])  # optionally add 'time' or similar
 
     # Group and build LineStrings
+
     lines = (
         df.groupby("sid")
+        .filter(lambda group: len(group) > 1)  # Keep only groups with more than one point
+        .groupby("sid")
         .apply(
             lambda group: LineString(
                 zip(group["longitude"], group["latitude"])
-            ),
-            include_groups=False,
+            )
         )
         .reset_index(name="geometry")
     )
@@ -89,6 +87,24 @@ gdf_lines
 
 ```{python}
 fig, ax = plt.subplots()
+max_lines = 100
+plotted_lines = 0
+for sid, row in gdf_lines.iterrows():
+    plotted_lines += 1
+    if plotted_lines > max_lines:
+        break
+    x, y = row.geometry.xy
+    ax.plot(x, y, label=str(row["sid"]))  # matplotlib auto-assigns color
+
+gdf_zma.boundary.plot(ax=ax, color="k")
+```
+Looks like all the tracks are inside the ZMA, so should be good
+
+```{python}
+# | eval: false
+# | include: false
+
+fig, ax = plt.subplots()
 gdf_zma.boundary.plot(ax=ax, color="k")
 for sid, row in gdf_lines.iterrows():
     x, y = row.geometry.xy
@@ -96,5 +112,3 @@ for sid, row in gdf_lines.iterrows():
 
     ax.legend(title="sid", loc="upper right")
 ```
-
-Looks like all the tracks are inside the ZMA, so should be good

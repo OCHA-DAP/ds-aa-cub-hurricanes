@@ -57,7 +57,3 @@ for _, row in df_stats.iterrows():
 ax.set_xlabel("Max. wind speed while in ZMA (knots)")
 ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
 ```
-
-```{python}
-
-```

@@ -6,4 +6,4 @@ title: ZMA
 <!-- markdownlint-disable MD013 -->
 Showing the Zona de Máxima Atención, based on the map (dotted red line):
 
-![][image1]
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAqsAAAHDCAYAAAADVFNbAAAAAXNSR0IArs4c6QAAIABJREFUeF7svQmUZFd5Jvi9WDMjMjIiMzJy30q1oV1IQkhCYrFhMC3AgBl8jscN7mZtM2DMtLFxN4vdbjieMfi4AXtsN7axEQ0Gg1mMACGxyA2SEJKQkEol1ZqVlXvGvq9zvv/e+96LLTOqmBl8sIKDqiriLXf573+///uXa/3bF32glUkW0UIDzZYHVgvqY/7U/1R/eNQfVhOtFmBZ8g/7ipbc1IIlD7GAliXX6Zvs251HtuQ99jvND/o1phl8QwsWrJZ5V8/GOY+1m+S6ju9x90X/ZD/S/ZvqWNdAWM22wdDdsuyhYhvV+Khx6Pz0+rrlsdraxWtalhrJrvs7329xTPRE2ANtoenpdbfdOqdpMrCuvtoTwbnreLtl+ml+ULMi89ejrd33twDTLtc73U9ra0vX..." alt="Zona de Máxima Atención" />

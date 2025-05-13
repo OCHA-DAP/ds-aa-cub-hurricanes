@@ -10,9 +10,9 @@ book:
   chapters:
     - index.qmd
     - intro.qmd
+    - zma.qmd
     - ibtracs.qmd
     - imerg.qmd
-    - zma.qmd
     - combine_imerg_ibtracs.qmd
     - summary.qmd
     - references.qmd
