@@ -15,3 +15,6 @@ temp
 .Rproj.user
 
 *.png
+
+book_cub_hurricanes/_book/*
+book_cub_hurricanes/_freeze/*

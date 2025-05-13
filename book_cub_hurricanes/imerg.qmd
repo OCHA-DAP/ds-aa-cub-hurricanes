@@ -107,5 +107,7 @@ blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
 ```
 
 ```{python}
+# | eval: false
+
 stratus.upload_parquet_to_blob(df_agg, blob_name)
 ```

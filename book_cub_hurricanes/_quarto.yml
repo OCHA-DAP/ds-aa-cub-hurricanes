@@ -4,9 +4,9 @@ project:
 jupyter: ds-aa-cub-hurricanes
 
 book:
-  title: "Anticipatory Action - Drought Afghanistan - 2025"
+  title: "Anticipatory Action - Cuba Hurricanes"
   author: "OCHA Centre for Humanitarian Data"
-  date: "12/10/2024"
+  date: "13/05/2024"
   chapters:
     - index.qmd
     - intro.qmd
