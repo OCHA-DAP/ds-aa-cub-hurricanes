@@ -12,3 +12,6 @@ __pycache__
 */venv/*
 
 temp
+.Rproj.user
+
+*.png
