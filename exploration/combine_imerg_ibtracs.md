@@ -1,0 +1,74 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,md
+    text_representation:
+      extension: .md
+      format_name: markdown
+      format_version: '1.3'
+      jupytext_version: 1.16.1
+  kernelspec:
+    display_name: ds-aa-cub-hurricanes
+    language: python
+    name: ds-aa-cub-hurricanes
+---
+
+# Combine IMERG and IBTrACS
+
+```python
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+```python
+import ocha_stratus as stratus
+import matplotlib.pyplot as plt
+
+from src.datasources import ibtracs
+from src.constants import *
+```
+
+```python
+df_storms = ibtracs.load_storms()
+```
+
+```python
+df_storms
+```
+
+```python
+blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
+```
+
+```python
+df_stats = stratus.load_parquet_from_blob(blob_name)
+```
+
+```python
+df_stats = df_stats.merge(df_storms)
+df_stats
+```
+
+```python
+fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
+
+df_stats.plot(
+    x="wind_speed_max", y="max_roll2_mean", linewidth=0, ax=ax, legend=False
+)
+
+for _, row in df_stats.iterrows():
+    ax.annotate(
+        row["name"].capitalize() + "\n" + str(row["season"]),
+        (row["wind_speed_max"], row["max_roll2_mean"]),
+        ha="center",
+        va="center",
+    )
+
+ax.set_xlabel("Max. wind speed while in ZMA (knots)")
+ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
+```
+
+```python
+
+```

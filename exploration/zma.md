@@ -31,7 +31,7 @@ Showing the Zona de Máxima Atención, based on the map (dotted red line):
 import ocha_stratus as stratus
 import matplotlib.pyplot as plt
 
-from src.datasources import codab, zmi
+from src.datasources import codab, zma
 ```
 
 ```python
@@ -43,13 +43,13 @@ adm = codab.load_codab_from_blob()
 ```
 
 ```python
-gdf_zmi = zmi.load_zmi()
+gdf_zma = zma.load_zma()
 ```
 
 ```python
 fig, ax = plt.subplots()
 adm.plot(ax=ax)
-gdf_zmi.boundary.plot(ax=ax)
+gdf_zma.boundary.plot(ax=ax)
 ```
 
 Looks about right
