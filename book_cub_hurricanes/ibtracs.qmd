@@ -1,7 +1,7 @@
 ## IBTrACS
 <!-- markdownlint-disable MD013 -->
 
-Load IBTrACS from Postgres, and plot just to check the right stuff has been loaded.
+Load IBTrACS (@knapp2010ibtracs) from Postgres, and plot just to check the right stuff has been loaded.
 
 ```{python}
 %load_ext jupyter_black
