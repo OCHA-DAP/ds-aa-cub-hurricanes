@@ -70,10 +70,10 @@ def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
     # Group and build LineStrings
     lines = (
         df.groupby("sid")
+        .filter(lambda g: len(g) >= 2)
+        .groupby("sid")
         .apply(
-            lambda group: LineString(
-                zip(group["longitude"], group["latitude"])
-            ),
+            lambda g: LineString(zip(g["longitude"], g["latitude"])),
             include_groups=False,
         )
         .reset_index(name="geometry")
@@ -92,12 +92,16 @@ gdf_lines
 
 ```python
 fig, ax = plt.subplots()
-gdf_zma.boundary.plot(ax=ax, color="k")
+max_lines = 100
+plotted_lines = 0
 for sid, row in gdf_lines.iterrows():
+    plotted_lines += 1
+    if plotted_lines > max_lines:
+        break
     x, y = row.geometry.xy
     ax.plot(x, y, label=str(row["sid"]))  # matplotlib auto-assigns color
 
-    ax.legend(title="sid", loc="upper right")
+gdf_zma.boundary.plot(ax=ax, color="k")
 ```
 
 Looks like all the tracks are inside the ZMA, so should be good
