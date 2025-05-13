@@ -42,35 +42,34 @@ df_storms
 ```
 
 ```python
+blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2023.parquet"
+df_impact = stratus.load_parquet_from_blob(blob_name)
+```
+
+```python
+df_impact["cerf"] = ~df_impact["Amount in US$"].isnull()
+```
+
+```python
+cols = ["sid", "cerf", "Total Affected"]
+df_impact[cols]
+```
+
+```python
 blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
+
+df_stats_raw = stratus.load_parquet_from_blob(blob_name)
 ```
 
 ```python
-df_stats = stratus.load_parquet_from_blob(blob_name)
-```
-
-```python
-df_stats = df_stats.merge(df_storms)
+df_stats = df_stats_raw.merge(df_storms)
 df_stats
 ```
 
 ```python
-fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
-
-df_stats.plot(
-    x="wind_speed_max", y="max_roll2_mean", linewidth=0, ax=ax, legend=False
-)
-
-for _, row in df_stats.iterrows():
-    ax.annotate(
-        row["name"].capitalize() + "\n" + str(row["season"]),
-        (row["wind_speed_max"], row["max_roll2_mean"]),
-        ha="center",
-        va="center",
-    )
-
-ax.set_xlabel("Max. wind speed while in ZMA (knots)")
-ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
+cols = ["sid", "cerf", "Total Affected"]
+df_stats = df_stats.merge(df_impact[cols], how="left")
+df_stats["cerf"] = df_stats["cerf"].fillna(False)
 ```
 
 ```python
@@ -82,7 +81,11 @@ df_stats
 ```
 
 ```python
-df_stats_complete = df_stats.dropna()
+df_stats_complete = df_stats.dropna(subset=["max_roll2_mean"])
+```
+
+```python
+df_stats_complete
 ```
 
 ```python
@@ -163,8 +166,26 @@ cat_colors = {
 ```python
 fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
 
-ymax = df_stats_complete["max_roll2_mean"].max()
-xmax = df_stats_complete["wind_speed_max"].max()
+ymax = df_stats_complete["max_roll2_mean"].max() * 1.1
+xmax = df_stats_complete["wind_speed_max"].max() * 1.1
+
+# Bubble sizes (handle NaNs as zero)
+bubble_sizes = df_stats_complete["Total Affected"].fillna(0)
+# Optional: scale for visual clarity
+bubble_sizes_scaled = (
+    bubble_sizes / bubble_sizes.max() * 5000
+)  # Adjust 300 as needed
+
+# Plot bubbles
+ax.scatter(
+    df_stats_complete["wind_speed_max"],
+    df_stats_complete["max_roll2_mean"],
+    s=bubble_sizes_scaled,
+    alpha=0.3,
+    color="crimson",
+    edgecolor="none",
+    zorder=1,
+)
 
 for _, row in df_stats_complete.iterrows():
     ax.annotate(
@@ -173,6 +194,7 @@ for _, row in df_stats_complete.iterrows():
         ha="center",
         va="center",
         fontsize=6,
+        color="crimson" if row["cerf"] else "k",
     )
 
 for cat_name, row in df_threshs.set_index("cat").iterrows():
@@ -217,4 +239,8 @@ ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
 
 ax.spines.top.set_visible(False)
 ax.spines.right.set_visible(False)
+```
+
+```python
+
 ```

@@ -25,7 +25,10 @@ Load IBTrACS from Postgres, and plot just to check the right stuff has been load
 ```
 
 ```python
+import ocha_stratus as stratus
+
 from src.datasources import ibtracs, zma
+from src.constants import *
 ```
 
 ```python
@@ -105,3 +108,8 @@ gdf_zma.boundary.plot(ax=ax, color="k")
 ```
 
 Looks like all the tracks are inside the ZMA, so should be good
+
+```python
+blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2023.parquet"
+stratus.upload_parquet_to_blob(df_all, blob_name)
+```
