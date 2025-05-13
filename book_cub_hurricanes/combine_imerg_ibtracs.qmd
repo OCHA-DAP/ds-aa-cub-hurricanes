@@ -1,8 +1,5 @@
----
-title: Combine Imerge and IBtracs
----
 
-# Combine IMERG and IBTrACS
+## Combine IMERG and IBTrACS
 
 ```{python}
 %load_ext jupyter_black

@@ -1,8 +1,4 @@
----
-title: IBTrACS
----
-
-# IBTrACS
+## IBTrACS
 <!-- markdownlint-disable MD013 -->
 
 Load IBTrACS from Postgres, and plot just to check the right stuff has been loaded.
@@ -58,10 +54,10 @@ def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
         GeoDataFrame with one LineString per 'sid'
     """
     # Ensure sorted order if needed (e.g., by time)
+    
     df = df.sort_values(["sid"])  # optionally add 'time' or similar
 
     # Group and build LineStrings
-
     lines = (
         df.groupby("sid")
         .filter(lambda group: len(group) > 1)  # Keep only groups with more than one point
