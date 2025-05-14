@@ -93,11 +93,19 @@ total_years = df_stats_complete["season"].nunique()
 ```
 
 ```python
+total_years
+```
+
+```python
 target_year_count = math.floor((total_years + 1) / target_rp)
 ```
 
 ```python
-target_year_count
+target_year_count = 7
+```
+
+```python
+26 / 7
 ```
 
 ```python
@@ -236,6 +244,89 @@ ax.set_ylim(bottom=0, top=ymax)
 
 ax.set_xlabel("Max. wind speed while in ZMA (knots)")
 ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
+ax.set_title(f"{target_rp}-year return period trigger options")
+
+ax.spines.top.set_visible(False)
+ax.spines.right.set_visible(False)
+```
+
+```python
+fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
+
+ymax = df_stats_complete["max_roll2_mean"].max() * 1.1
+xmax = df_stats_complete["wind_speed_max"].max() * 1.1
+
+# Bubble sizes (handle NaNs as zero)
+bubble_sizes = df_stats_complete["Total Affected"].fillna(0)
+# Optional: scale for visual clarity
+bubble_sizes_scaled = (
+    bubble_sizes / bubble_sizes.max() * 5000
+)  # Adjust 300 as needed
+
+# Plot bubbles
+ax.scatter(
+    df_stats_complete["wind_speed_max"],
+    df_stats_complete["max_roll2_mean"],
+    s=bubble_sizes_scaled,
+    alpha=0.3,
+    color="crimson",
+    edgecolor="none",
+    zorder=1,
+)
+
+for _, row in df_stats_complete.iterrows():
+    ax.annotate(
+        row["name"].capitalize() + "\n" + str(row["season"]),
+        (row["wind_speed_max"], row["max_roll2_mean"]),
+        ha="center",
+        va="center",
+        fontsize=6,
+        color="crimson" if row["cerf"] else "k",
+    )
+
+for cat_name, row in df_threshs.set_index("cat").iterrows():
+    if cat_name is None:
+        continue
+    color = cat_colors[cat_name]
+    ax.axhline(row["max_roll2_mean"], color=color, linewidth=0.5)
+    ax.axvline(row["wind_speed_max"], color=color, linewidth=0.5)
+    ax.add_patch(
+        patches.Rectangle(
+            (row["wind_speed_max"], row["max_roll2_mean"]),  # bottom left
+            xmax - row["wind_speed_max"],  # width
+            ymax - row["max_roll2_mean"],  # height
+            facecolor=color,
+            alpha=0.1,
+            zorder=0,
+        )
+    )
+    ax.annotate(
+        cat_name,
+        (row["wind_speed_max"], 1),
+        va="bottom",
+        ha="right",
+        color=color,
+        rotation=90,
+        fontweight="bold",
+        fontsize=8,
+        bbox=dict(
+            boxstyle="round,pad=0",
+            facecolor="white",  # Highlight color
+            edgecolor="none",  # No border
+            alpha=0.8,  # Transparency
+        ),
+    )
+
+
+ax.set_xlim(left=0, right=xmax)
+ax.set_ylim(bottom=0, top=ymax)
+
+ax.set_xlabel("Velocidad máxima del viento en la ZMA (nudos)")
+ax.set_ylabel("Precipitación total en 2 días, media en todo el país (mm)")
+ax.set_title(
+    f"Opciones de activación del período de retorno de {target_rp} años"
+)
+
 
 ax.spines.top.set_visible(False)
 ax.spines.right.set_visible(False)

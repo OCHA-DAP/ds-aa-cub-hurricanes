@@ -48,7 +48,7 @@ df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
 ```
 
 ```python
-df_all
+df_all.sort_values("valid_time", ascending=False)
 ```
 
 ```python
@@ -110,6 +110,11 @@ gdf_zma.boundary.plot(ax=ax, color="k")
 Looks like all the tracks are inside the ZMA, so should be good
 
 ```python
-blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2023.parquet"
+blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2024.parquet"
 stratus.upload_parquet_to_blob(df_all, blob_name)
+```
+
+```python
+# blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2023.parquet"
+# stratus.upload_parquet_to_blob(df_all, blob_name)
 ```
