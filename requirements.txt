@@ -1,2 +1,4 @@
 matplotlib==3.10.3
 ocha-stratus==0.1.2
+tqdm==4.67.1
+ipywidgets==8.1.7

@@ -32,10 +32,9 @@ from src.constants import *
 
 ```python
 blob_name = f"{PROJECT_PREFIX}/raw/impact/cerf-storms-with-sids-2024-02-27.csv"
-```
-
-```python
-df_cerf = stratus.load_csv_from_blob(blob_name)
+df_cerf = stratus.load_csv_from_blob(
+    blob_name, parse_dates=["Allocation date"]
+)
 ```
 
 ```python
@@ -43,14 +42,46 @@ iso2 = "CU"
 ```
 
 ```python
-df_cerf_cub = df_cerf[df_cerf["iso2"] == iso2]
+df_cerf_cub_old = df_cerf[df_cerf["iso2"] == iso2]
+```
+
+```python
+df_cerf_cub_old
+```
+
+```python
+# add 2024 allocations
+blob_name = f"{PROJECT_PREFIX}/raw/impact/cerf_cub_storms.csv"
+df_cerf_cub_recent = stratus.load_csv_from_blob(
+    blob_name, parse_dates=["Allocation date"]
+)
+df_cerf_cub_recent["Amount in US$"] = (
+    df_cerf_cub_recent["Amount in US$"].str.replace(",", "").astype(int)
+)
+```
+
+```python
+df_cerf_cub_recent
+```
+
+```python
+df_cerf_cub = df_cerf_cub_old.merge(df_cerf_cub_recent, how="outer")
+```
+
+```python
 df_cerf_cub
 ```
 
-Here are the CERF storms. There are more recent ones in 2024, but none in 2023. Since we only have tracks for up to 2023, we can stick with this record for now. And we can drop the one without a `sid` since this was a tornado.
+```python
+# Oscar and Rafael
+df_cerf_cub.loc[5, "sid"] = "2024293N21294"
+df_cerf_cub.loc[6, "sid"] = "2024309N13283"
+# drop tornado
+df_cerf_cub = df_cerf_cub[df_cerf_cub["Allocation date"] != "2019-03-05"]
+```
 
 ```python
-df_cerf_cub = df_cerf_cub.dropna()
+df_cerf_cub
 ```
 
 ## EM-DAT
@@ -61,13 +92,13 @@ df_emdat_2000_2022 = stratus.load_csv_from_blob(blob_name)
 ```
 
 ```python
-blob_name = f"{PROJECT_PREFIX}/raw/impact/cub_emdat_2023only.csv"
-df_emdat_2023 = stratus.load_csv_from_blob(blob_name)
-df_emdat_2023["iso2"] = iso2
+blob_name = f"{PROJECT_PREFIX}/raw/impact/cub_emdat_2023-2024.csv"
+df_emdat_recent = stratus.load_csv_from_blob(blob_name)
+df_emdat_recent["iso2"] = iso2
 ```
 
 ```python
-df_emdat = pd.concat([df_emdat_2000_2022, df_emdat_2023], ignore_index=True)
+df_emdat = pd.concat([df_emdat_2000_2022, df_emdat_recent], ignore_index=True)
 ```
 
 ```python
@@ -75,15 +106,18 @@ df_emdat_cub = df_emdat[df_emdat["iso2"] == iso2]
 df_emdat_cub
 ```
 
-There are two missing `sid`s.
+```python
+df_emdat_cub[df_emdat_cub["sid"].isnull()]
+```
+
+There are a few missing `sid`s.
 
 ```python
 df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
 ```
 
-Looks like it was Tropical Storm Alex
-
 ```python
+# Tropical Storm Alex
 df_emdat_cub.loc[973, "sid"] = "2022154N21273"
 ```
 
@@ -91,10 +125,40 @@ df_emdat_cub.loc[973, "sid"] = "2022154N21273"
 df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
 ```
 
-And this one was Idalia, clearly.
+```python
+# Helene
+df_emdat_cub.loc[1195, "sid"] = "2024268N17278"
+```
 
 ```python
-df_emdat_cub.loc[1195, "sid"] = "2023239N21274"
+df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
+```
+
+```python
+# Rafael
+df_emdat_cub.loc[1196, "sid"] = "2024309N13283"
+```
+
+```python
+df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
+```
+
+```python
+# Oscar
+df_emdat_cub.loc[1197, "sid"] = "2024293N21294"
+```
+
+```python
+df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
+```
+
+```python
+# Idalia
+df_emdat_cub.loc[1198, "sid"] = "2023239N21274"
+```
+
+```python
+df_emdat_cub[df_emdat_cub["sid"].isnull()].iloc[0]
 ```
 
 ## Combined
@@ -108,6 +172,10 @@ df_combined
 ```
 
 ```python
-blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2023.parquet"
+blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2024.parquet"
 stratus.upload_parquet_to_blob(df_combined, blob_name)
+```
+
+```python
+
 ```
