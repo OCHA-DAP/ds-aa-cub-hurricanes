@@ -38,10 +38,6 @@ df_storms = ibtracs.load_storms()
 ```
 
 ```python
-df_storms
-```
-
-```python
 blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2024.parquet"
 df_impact = stratus.load_parquet_from_blob(blob_name)
 ```
@@ -57,19 +53,59 @@ df_impact[cols]
 
 ```python
 blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
+df_stats_raw_meanonly = stratus.load_parquet_from_blob(blob_name)
+```
+
+```python
+blob_name = (
+    f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_imerg_quantiles.parquet"
+)
 
 df_stats_raw = stratus.load_parquet_from_blob(blob_name)
 ```
 
 ```python
-df_stats = df_stats_raw.merge(df_storms)
+blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_2000-2024.parquet"
+df_ibtracs = stratus.load_parquet_from_blob(blob_name)
+```
+
+```python
+df_ibtracs_agg = (
+    df_ibtracs[df_ibtracs["landfall"]]
+    .groupby("sid")
+    .agg(
+        valid_time_min=("valid_time", "min"),
+        valid_time_max=("valid_time", "max"),
+        wind_speed_max=("wind_speed", "max"),
+    )
+    .reset_index()
+)
+```
+
+```python
+df_ibtracs_agg
+```
+
+```python
+df_stats_raw
+```
+
+```python
+df_stats = (
+    df_stats_raw.merge(df_stats_raw_meanonly)
+    .drop(columns="wind_speed_max")
+    .merge(df_ibtracs_agg[["sid", "wind_speed_max"]])
+    .merge(df_storms)
+)
 df_stats
 ```
 
 ```python
 cols = ["sid", "cerf", "Total Affected"]
 df_stats = df_stats.merge(df_impact[cols], how="left")
-df_stats["cerf"] = df_stats["cerf"].fillna(False)
+# note we have to set type as "boolean" (NOT bool) to get the desired behaviour here,
+# without throwing warnings
+df_stats["cerf"] = df_stats["cerf"].astype("boolean").fillna(False)
 ```
 
 ```python
@@ -89,7 +125,7 @@ df_stats_complete
 ```
 
 ```python
-total_years = df_stats_complete["season"].nunique()
+total_years = 2024 - 2000 + 1
 ```
 
 ```python
@@ -109,6 +145,11 @@ target_year_count
 ```
 
 ```python
+rain_col = "max_roll2_mean"
+rain_col = "q80_roll2"
+```
+
+```python
 dicts = []
 
 # check for each Cat limit
@@ -116,15 +157,15 @@ for cat_limit in CAT_LIMITS + [(0, None)]:
     dff = df_stats_complete[
         df_stats_complete["wind_speed_max"] >= cat_limit[0]
     ].copy()
-    dff = dff.sort_values("max_roll2_mean", ascending=False)
+    dff = dff.sort_values(rain_col, ascending=False)
 
-    for rain_thresh in dff["max_roll2_mean"]:
-        dfff = dff[dff["max_roll2_mean"] >= rain_thresh]
+    for rain_thresh in dff[rain_col]:
+        dfff = dff[dff[rain_col] >= rain_thresh]
         trigger_year_count = dfff["season"].nunique()
         if trigger_year_count > target_year_count:
             break
         dict_out = {
-            "max_roll2_mean": rain_thresh,
+            rain_col: rain_thresh,
             "cat": cat_limit[1],
             "wind_speed_max": cat_limit[0],
             "trigger_year_count": trigger_year_count,
@@ -141,7 +182,7 @@ for wind_thresh in dff["wind_speed_max"]:
     if trigger_year_count > target_year_count:
         break
     dict_out = {
-        "max_roll2_mean": None,
+        rain_col: None,
         "cat": None,
         "wind_speed_max": wind_thresh,
         "trigger_year_count": trigger_year_count,
@@ -180,7 +221,7 @@ cat_colors = {
 ```
 
 ```python
-def plot_rain_wind_impact(lang: str = "EN"):
+def plot_rain_wind_impact(lang: str = "EN", rain_col: str = "q99_roll2"):
     if lang == "EN":
         title_text = f"{target_rp}-year return period trigger options"
         xlabel_text = "Max. wind speed while in ZMA (knots)"
@@ -195,7 +236,7 @@ def plot_rain_wind_impact(lang: str = "EN"):
         )
     fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
 
-    ymax = df_stats_complete["max_roll2_mean"].max() * 1.1
+    ymax = df_stats_complete[rain_col].max() * 1.1
     xmax = df_stats_complete["wind_speed_max"].max() * 1.1
 
     # Bubble sizes (handle NaNs as zero)
@@ -208,7 +249,7 @@ def plot_rain_wind_impact(lang: str = "EN"):
     # Plot bubbles
     ax.scatter(
         df_stats_complete["wind_speed_max"],
-        df_stats_complete["max_roll2_mean"],
+        df_stats_complete[rain_col],
         s=bubble_sizes_scaled,
         alpha=0.3,
         color="crimson",
@@ -219,7 +260,7 @@ def plot_rain_wind_impact(lang: str = "EN"):
     for _, row in df_stats_complete.iterrows():
         ax.annotate(
             row["name"].capitalize() + "\n" + str(row["season"]),
-            (row["wind_speed_max"], row["max_roll2_mean"]),
+            (row["wind_speed_max"], row[rain_col]),
             ha="center",
             va="center",
             fontsize=6,
@@ -231,13 +272,13 @@ def plot_rain_wind_impact(lang: str = "EN"):
         if cat_name is None:
             continue
         color = cat_colors[cat_name]
-        ax.axhline(row["max_roll2_mean"], color=color, linewidth=0.5)
+        ax.axhline(row[rain_col], color=color, linewidth=0.5)
         ax.axvline(row["wind_speed_max"], color=color, linewidth=0.5)
         ax.add_patch(
             patches.Rectangle(
-                (row["wind_speed_max"], row["max_roll2_mean"]),  # bottom left
+                (row["wind_speed_max"], row[rain_col]),  # bottom left
                 xmax - row["wind_speed_max"],  # width
-                ymax - row["max_roll2_mean"],  # height
+                ymax - row[rain_col],  # height
                 facecolor=color,
                 alpha=0.1,
                 zorder=0,
@@ -272,7 +313,7 @@ def plot_rain_wind_impact(lang: str = "EN"):
 ```
 
 ```python
-plot_rain_wind_impact()
+plot_rain_wind_impact(rain_col=rain_col)
 ```
 
 ```python

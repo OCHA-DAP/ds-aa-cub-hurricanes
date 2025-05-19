@@ -25,6 +25,7 @@ jupyter:
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import ocha_stratus as stratus
 from tqdm.auto import tqdm
 
 from src.datasources import imerg, zma, ibtracs, codab
@@ -45,16 +46,13 @@ gdf_zma = zma.load_zma()
 ```
 
 ```python
-df_all = ibtracs.load_ibtracs_in_bounds(*gdf_zma.total_bounds)
+blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_2000-2024.parquet"
+df_ibtracs = stratus.load_parquet_from_blob(blob_name)
 ```
 
 ```python
-df_all
-```
-
-```python
-df_agg = (
-    df_all.groupby("sid")
+df_agg_zma = (
+    df_ibtracs.groupby("sid")
     .agg(
         valid_time_min=("valid_time", "min"),
         valid_time_max=("valid_time", "max"),
@@ -62,6 +60,21 @@ df_agg = (
     )
     .reset_index()
 )
+```
+
+```python
+df_agg_landfall = (
+    df_ibtracs[df_ibtracs["landfall"]]
+    .groupby("sid")
+    .agg(
+        wind_speed_max_landfall=("wind_speed", "max"),
+    )
+    .reset_index()
+)
+```
+
+```python
+df_agg = df_agg_zma.merge(df_agg_landfall, how="left")
 ```
 
 ```python
@@ -108,11 +121,6 @@ df_agg
 ```
 
 ```python
-start_date = "2000-06-01"
-df_agg_recent = df_agg[df_agg["valid_time_min"] >= start_date]
-```
-
-```python
 da_test_clip
 ```
 
@@ -131,7 +139,7 @@ da_test_clip
 ```
 
 ```python
-da_rolling_test = da_test_clip.rolling(date=1).sum()
+da_rolling_test = da_test_clip.rolling(date=2).sum()
 ```
 
 ```python
@@ -155,15 +163,44 @@ da_rolling_test
 ```
 
 ```python
-float(da_rolling_test.quantile(0.8, dim=["x", "y"]).max())
+q_thresh = float(da_rolling_test.quantile(0.8, dim=["x", "y"]).max())
 ```
 
 ```python
-float(da_sum_test.quantile(0.8, dim=["x", "y"]))
+q_thresh
+```
+
+```python
+q_threshs = da_rolling_test.quantile(0.8, dim=["x", "y"])
+```
+
+```python
+q_threshs
+```
+
+```python
+float(q_threshs.max())
+```
+
+```python
+float(
+    da_rolling_test.where(da_rolling_test >= q_threshs)
+    .mean(dim=["x", "y"])
+    .max()
+)
+```
+
+```python
+da_sum_test.quantile(0.8, dim=["x", "y"]).max()
 ```
 
 ```python
 da_sum_test.plot()
+```
+
+```python
+start_date = "2000-06-01"
+df_agg_recent = df_agg[df_agg["valid_time_min"] >= start_date]
 ```
 
 ```python
@@ -187,22 +224,25 @@ def get_storm_rainfall_aggregations(row):
 
     # take quantiles
     for quantile in quantiles:
-        row[f"q{quantile*100:.0f}_total"] = float(
-            da_sum.quantile(quantile, dim=["x", "y"])
-        )
-        row[f"q{quantile*100:.0f}_roll2"] = float(
-            da_rolling2.quantile(quantile, dim=["x", "y"]).max()
-        )
-        row[f"q{quantile*100:.0f}_roll3"] = float(
-            da_rolling3.quantile(quantile, dim=["x", "y"]).max()
-        )
+        for da_agg, agg_str in [
+            (da_sum, "total"),
+            (da_rolling2, "roll2"),
+            (da_rolling3, "roll3"),
+        ]:
+            # get quantile threshs
+            quantile_threshs = da_agg.quantile(quantile, dim=["x", "y"])
+            # get max value
+            row[f"q{quantile*100:.0f}_{agg_str}"] = float(
+                quantile_threshs.max()
+            )
+            # mask by values above quantile threshs
+            row[f"q{quantile*100:.0f}_{agg_str}_mean_abv"] = float(
+                da_agg.where(da_agg >= quantile_threshs)
+                .mean(dim=["x", "y"])
+                .max()
+            )
 
     return row
-```
-
-```python
-q = 0.9
-f"q{q*100:.0f}"
 ```
 
 ```python
@@ -224,5 +264,8 @@ df_agg_recent
 ```
 
 ```python
-blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_.parquet"
+blob_name = (
+    f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_imerg_quantiles.parquet"
+)
+stratus.upload_parquet_to_blob(df_agg_recent, blob_name)
 ```

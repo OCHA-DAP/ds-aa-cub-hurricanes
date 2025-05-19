@@ -26,9 +26,19 @@ Load IBTrACS from Postgres, and plot just to check the right stuff has been load
 
 ```python
 import ocha_stratus as stratus
+import matplotlib.pyplot as plt
+import geopandas as gpd
 
-from src.datasources import ibtracs, zma
+from src.datasources import ibtracs, zma, codab
 from src.constants import *
+```
+
+```python
+adm0 = codab.load_codab_from_blob()
+```
+
+```python
+adm0.plot()
 ```
 
 ```python
@@ -52,69 +62,59 @@ df_all.sort_values("valid_time", ascending=False)
 ```
 
 ```python
-df_all.dtypes
+df_all
 ```
 
 ```python
-def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
-    """
-    Convert a DataFrame of points to a GeoDataFrame of LineStrings,
-    grouped by 'sid'.
-
-    Parameters:
-        df: DataFrame with 'sid', 'latitude', 'longitude' columns
-
-    Returns:
-        GeoDataFrame with one LineString per 'sid'
-    """
-    # Ensure sorted order if needed (e.g., by time)
-    df = df.sort_values(["sid"])  # optionally add 'time' or similar
-
-    # Group and build LineStrings
-    lines = (
-        df.groupby("sid")
-        .filter(lambda g: len(g) >= 2)
-        .groupby("sid")
-        .apply(
-            lambda g: LineString(zip(g["longitude"], g["latitude"])),
-            include_groups=False,
-        )
-        .reset_index(name="geometry")
-    )
-
-    return gpd.GeoDataFrame(lines, geometry="geometry", crs="EPSG:4326")
+gdf_all = gpd.GeoDataFrame(
+    data=df_all,
+    geometry=gpd.points_from_xy(df_all["longitude"], df_all["latitude"]),
+    crs=4326,
+)
 ```
 
 ```python
-gdf_lines = df_to_track_lines(df_all)
+gdf_filtered = gdf_all[gdf_all.within(gdf_zma.iloc[0].geometry)].copy()
 ```
 
 ```python
-gdf_lines
+gdf_filtered["landfall"] = gdf_filtered.within(adm0.iloc[0].geometry)
 ```
 
 ```python
-fig, ax = plt.subplots()
-max_lines = 100
-plotted_lines = 0
-for sid, row in gdf_lines.iterrows():
-    plotted_lines += 1
-    if plotted_lines > max_lines:
-        break
-    x, y = row.geometry.xy
-    ax.plot(x, y, label=str(row["sid"]))  # matplotlib auto-assigns color
+gdf_filtered_recent = gdf_filtered[gdf_filtered["valid_time"].dt.year >= 2000]
+```
 
-gdf_zma.boundary.plot(ax=ax, color="k")
+```python
+gdf_filtered_recent
+```
+
+```python
+fig, ax = plt.subplots(dpi=300)
+
+gdf_filtered_recent.drop(columns="geometry")[
+    ~gdf_filtered_recent["landfall"]
+].plot(x="longitude", y="latitude", ax=ax, kind="scatter", color="dodgerblue")
+
+gdf_filtered_recent.drop(columns="geometry")[
+    gdf_filtered_recent["landfall"]
+].plot(x="longitude", y="latitude", ax=ax, kind="scatter", color="crimson")
+
+
+adm0.boundary.plot(linewidth=0.5, ax=ax, color="k")
+gdf_zma.boundary.plot(linewidth=0.5, ax=ax, color="grey")
+ax.axis("off")
 ```
 
 Looks like all the tracks are inside the ZMA, so should be good
 
 ```python
-blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2024.parquet"
-stratus.upload_parquet_to_blob(df_all, blob_name)
+gdf_filtered_recent.drop(columns="geometry")
 ```
 
 ```python
-# blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_upto2023.parquet"
-# stratus.upload_parquet_to_blob(df_all, blob_name)
+blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_2000-2024.parquet"
+stratus.upload_parquet_to_blob(
+    gdf_filtered_recent.drop(columns="geometry"), blob_name
+)
 ```
