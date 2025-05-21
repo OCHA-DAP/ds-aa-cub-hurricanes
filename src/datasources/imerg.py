@@ -10,7 +10,9 @@ def load_imerg(pcode: str):
     SELECT * FROM public.imerg
     WHERE pcode = '{pcode}'
     """
-    df = pd.read_sql(query, stratus.get_engine("prod"))
+    df = pd.read_sql(
+        query, stratus.get_engine("prod"), parse_dates=["valid_date"]
+    )
     return df
 
 

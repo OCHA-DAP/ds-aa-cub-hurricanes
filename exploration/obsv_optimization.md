@@ -67,6 +67,10 @@ df_impact = df_impact[cols]
 ```
 
 ```python
+df_impact["Amount in US$"].mean()
+```
+
+```python
 df_stats = df_stats_raw.merge(df_impact, how="left").merge(
     df_storms[["sid", "season", "name", "name_season"]], how="left"
 )
@@ -362,7 +366,8 @@ df_results.sort_values(
 
 ```python
 # optimize_col = "target_with_cerf_sum"
-optimize_col = "impact_sum"
+optimize_col = "cerf_sum"
+# optimize_col = "impact_sum"
 df_results_top_single_col = df_results[
     df_results[optimize_col] == df_results[optimize_col].max()
 ]
@@ -371,7 +376,7 @@ df_results_top_duplicates = df_results_top_single_col[
     == df_results_top_single_col["impact_sum"].max()
 ]
 df_results_top = (
-    df_results_top.sort_values("rain_thresh")
+    df_results_top_duplicates.sort_values("rain_thresh")
     .drop_duplicates(
         subset=["wind_speed_max", "wind_speed_max_landfall", "rain_col"]
     )
@@ -382,6 +387,14 @@ df_results_top = (
     .sort_values("wind_speed_max_landfall")
     .drop_duplicates(subset=["rain_thresh", "wind_speed_max", "rain_col"])
 )
+```
+
+```python
+df_results_top_single_col
+```
+
+```python
+df_results_top_duplicates
 ```
 
 ```python
@@ -503,14 +516,14 @@ def plot_trigger_option(selected_index):
 ```
 
 ```python
-# based on cerf_sum
-selected_index = 11797
+# based on target_with_cerf_sum
+selected_index = 11734
 plot_trigger_option(selected_index)
 ```
 
 ```python
-# based on target_with_cerf_sum
-selected_index = 11734
+# based on cerf_sum
+selected_index = 11797
 plot_trigger_option(selected_index)
 ```
 

@@ -163,6 +163,10 @@ da_rolling_test
 ```
 
 ```python
+da_rolling_test.quantile(0.8, dim=["x", "y"]).values
+```
+
+```python
 q_thresh = float(da_rolling_test.quantile(0.8, dim=["x", "y"]).max())
 ```
 
