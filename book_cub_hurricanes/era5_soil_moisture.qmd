@@ -82,22 +82,6 @@ print(first_img.getInfo())
 
 
 Filter collection to storm dates
-```{python}
-# Convert valid_time_min to milliseconds since epoch (int)
-storm_dates_millis = df_ibtracs_agg["valid_time_min"].astype("int64") // 10**6
-storm_dates_millis_ee = ee.List(storm_dates_millis.tolist())
-
-# Filter using 'system:time_start'
-ic_sm_storm_date = ic_mean_sm.filter(
-    ee.Filter.inList("system:time_start", storm_dates_millis_ee)
-)
-print("Filtered collection size:", ic_sm_storm_date.size().getInfo())
-ic_sm_storm_date
-```
-
-
-
-
 
 ```{python}
 # Add a 'valid_date_min' property (YYYY-MM-DD) to each image in the collection
@@ -126,6 +110,9 @@ df_mean = geemap.zonal_stats(
 ```
 
 ```{python}
+
+# i thought the above would save in memory as data.frame, but i guess not.
+# will look more into gee.zonal_stats() at a later point
 df_mean = pd.read_csv("zonal_stats.csv")
 
 ```
@@ -212,3 +199,20 @@ for p in percentiles:
 # Example: dict_masked_collections[80] is the collection masked at the 80th percentile
 # You can now use these collections for further analysis or export
 ```
+
+
+```{python}
+# OLD CODE definitely throw out
+
+# Convert valid_time_min to milliseconds since epoch (int)
+storm_dates_millis = df_ibtracs_agg["valid_time_min"].astype("int64") // 10**6
+storm_dates_millis_ee = ee.List(storm_dates_millis.tolist())
+
+# Filter using 'system:time_start'
+ic_sm_storm_date = ic_mean_sm.filter(
+    ee.Filter.inList("system:time_start", storm_dates_millis_ee)
+)
+print("Filtered collection size:", ic_sm_storm_date.size().getInfo())
+ic_sm_storm_date
+```
+
