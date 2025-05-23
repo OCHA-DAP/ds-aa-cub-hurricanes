@@ -14,6 +14,7 @@ book:
     - ibtracs.qmd
     - imerg.qmd
     - combine_imerg_ibtracs.qmd
+    - plot_optimization.qmd
     - summary.qmd
     - references.qmd
 
