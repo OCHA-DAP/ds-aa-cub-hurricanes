@@ -163,6 +163,63 @@ blob_name = f"{PROJECT_PREFIX}/processed/era5_soil_moisture/era5_daily_sm_storm_
 stratus.upload_parquet_to_blob(df_long, blob_name)
 ```
 
+load storms
+```{python}
+df_storms = ibtracs.load_storms()
+# Filter df_storms to only sids present in df_ibtracs_agg
+df_storms_cuba= df_storms[df_storms["sid"].isin(df_ibtracs_agg["sid"])]
+# Join the "name" column from df_storms to df_ibtracs_agg by "name"
+df_ibtracs_agg_labelled = df_ibtracs_agg.merge(
+    df_storms[["sid", "name"]], on="sid", how="left"
+)
+
+# df_long = df_long.merge(
+#     df_storms_cuba[["sid", "name"]], left_on="parameter", right_on="sid", how="left"
+# )
+
+# Create a 'date' column in df_ibtracs_agg_labelled by converting 'valid_time_min' to date
+df_ibtracs_agg_labelled["date"] = pd.to_datetime(df_ibtracs_agg_labelled["valid_time_min"]).dt.date
+
+# Also ensure df_long["date"] is of type date (not datetime)
+df_long["date"] = pd.to_datetime(df_long["date"]).dt.date
+
+# Merge 'name' from df_ibtracs_agg_labelled into df_long by 'date'
+df_long_labelled = df_long.merge(
+    df_ibtracs_agg_labelled[["date", "name"]],
+    on="date",
+    how="left"
+)
+```
+
+```{python}
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(10, 5))
+plt.plot(
+    df_long_labelled["date"],
+    df_long_labelled["value"],
+    marker="o",
+    linestyle="-",
+)
+plt.xlabel("Date")
+plt.ylabel("Soil Moisture Mean")
+plt.title("ERA5 Soil Moisture Mean Time Series")
+plt.grid(True)
+plt.tight_layout()
+for i, row in df_long_labelled.iterrows():
+    if pd.notnull(row["name"]):
+        plt.annotate(
+            row["name"],
+            (row["date"], row["value"]),
+            textcoords="offset points",
+            xytext=(0, 10),
+            ha="center",
+            fontsize=8,
+            rotation=45,
+        )
+plt.show()
+```
+
 ## Percentile Aggregation - TBD
 
 All scrap for now (haven't actually run)
