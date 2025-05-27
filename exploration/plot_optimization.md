@@ -32,9 +32,13 @@ from src.constants import *
 
 ```python
 blob_name = (
-    f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
+    f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets2.parquet"
 )
 df_stats = stratus.load_parquet_from_blob(blob_name)
+```
+
+```python
+df_stats
 ```
 
 ```python
@@ -110,7 +114,7 @@ get_optimal_triggers("cerf_sum", 8)
 ```python
 def get_triggered_storms(selected_index):
     selected_trigger = df_results.loc[selected_index]
-    print(selected_trigger)
+    # print(selected_trigger)
     rain_col = selected_trigger["rain_col"]
     rain_thresh = selected_trigger["rain_thresh"]
     wind_speed_max = selected_trigger["wind_speed_max"]
@@ -267,8 +271,9 @@ def color_df(val):
 
 ```python
 plot_triggers = [
-    (226352, "4.3-yr RP"),
-    # (225077, "4.3-yr RP<br>[B]"),
+    # (689, "4.3-yr RP"),
+    # (226352, "4.3-yr RP"),
+    (225077, "4.3-yr RP<br>"),
     (72319, "3.7-yr RP<br>"),
     (225075, "3.3-yr RP"),
     # (73172, "3.3-yr RP<br>[B]"),

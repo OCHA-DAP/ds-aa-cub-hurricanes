@@ -73,7 +73,7 @@ df_impact = df_impact[cols]
 ```
 
 ```python
-df_impact
+df_impact[df_impact["cerf"]]
 ```
 
 ```python
@@ -214,11 +214,11 @@ plot_impact("Total Deaths")
 ```
 
 ```python
-
+cerf_year_count = df_stats[df_stats["cerf"] == True]["season"].nunique()
 ```
 
 ```python
-cerf_year_count = df_stats[df_stats["cerf"] == True]["season"].nunique()
+cerf_year_count
 ```
 
 ```python
@@ -243,6 +243,14 @@ df_stats
 
 ```python
 df_stats.columns
+```
+
+```python
+blob_name = (
+    f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets2.parquet"
+)
+stratus.upload_parquet_to_blob(df_stats, blob_name)
+df_stats
 ```
 
 ```python
@@ -287,10 +295,6 @@ df_results = pd.DataFrame(dicts)
 
 ```python
 df_results
-```
-
-```python
-df_results["rain_col"][0][1:3]
 ```
 
 ```python
