@@ -1,10 +1,17 @@
 ## ERA5 Soil Moisture
 
-<!-- markdownlint-disable MD013 -->
+Below is the end-to-end workflow for extracting and analyzing daily soil moisture over Cuba at storm landfall dates:
+
+- Authenticate and initialize Google Earth Engine
+- Load Cuba’s national boundary from FAO GAUL
+- Aggregate IBTrACS storm data to identify landfall dates
+- Compute mean soil moisture per day from ERA5-Land layers
+- Filter images to storm dates and calculate zonal mean over Cuba
+- Import results into pandas, reshape to long format, and parse dates
+- Merge with storm names and plot the soil moisture time series
+
 
 ```{python}
-import ee
-import geemap
 import pandas as pd
 import ocha_stratus as stratus
 
@@ -14,26 +21,28 @@ from src.constants import *
 
 
 ```{python}
-ee.Authenticate(auth_mode = 'gcloud')
-```
+# | eval: false
+import ee
+import geemap
 
-```{python}
+ee.Authenticate(auth_mode="gcloud")
 ee.Initialize()
 ```
 
 ```{python}
+
 adm0 = codab.load_codab_from_blob()
 adm0 = adm0[["ADM0_ES", "ADM0_PCODE", "geometry"]]
 ```
 
 ```{python}
-
 blob_name = f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_2000-2024.parquet"
 df_ibtracs = stratus.load_parquet_from_blob(blob_name)
 ```
 
 
 ```{python}
+
 df_ibtracs_agg = (
     df_ibtracs[df_ibtracs["landfall"]]
     .groupby("sid")
@@ -48,6 +57,8 @@ df_ibtracs_agg = (
 
 
 ```{python}
+#| eval: false
+
 # was having issues w/ this so i just got the FC  from FAO which 
 # is already on earth engine
 # geemap.geojson_to_ee(geojson)
@@ -84,6 +95,8 @@ print(first_img.getInfo())
 Filter collection to storm dates
 
 ```{python}
+# | eval: false
+
 # Add a 'valid_date_min' property (YYYY-MM-DD) to each image in the collection
 def add_valid_date_min(img):
     date_str = ee.Date(img.get("system:time_start")).format("yyyy-MM-dd")
@@ -104,12 +117,15 @@ ic_sm_storm_date
 ```
 
 ```{python}
+# | eval: false
+
 df_mean = geemap.zonal_stats(
     ic_sm_storm_date, fc_adm0, stat_type="MEAN", scale=10000
 )
 ```
 
 ```{python}
+# | eval: false
 
 # i thought the above would save in memory as data.frame, but i guess not.
 # will look more into gee.zonal_stats() at a later point
@@ -119,6 +135,8 @@ df_mean = pd.read_csv("zonal_stats.csv")
 
 
 ```{python}
+# | eval: false
+
 # Pivot all columns ending with '_soil_moisture_mean' to long format and parse dates
 value_vars = [
     col for col in df_mean.columns if col.endswith("_soil_moisture_mean")
@@ -140,7 +158,11 @@ if value_vars:
         value_name="value",
     )
     # Extract date from 'parameter' column (e.g., '20011104_soil_moisture_mean')
-    df_long["date"] = pd.to_datetime(df_long["parameter"].str.extract(r"(\d{8})")[0], format="%Y%m%d", errors="coerce")
+    df_long["date"] = pd.to_datetime(
+        df_long["parameter"].str.extract(r"(\d{8})")[0],
+        format="%Y%m%d",
+        errors="coerce",
+    )
 else:
     df_long = df_mean_sub.copy()
 
@@ -158,13 +180,27 @@ df_long.head()  # Show preview of the result
 
 ```{python}
 # | eval: false
+# | echo: false
 
 blob_name = f"{PROJECT_PREFIX}/processed/era5_soil_moisture/era5_daily_sm_storm_dates.csv"
 stratus.upload_parquet_to_blob(df_long, blob_name)
 ```
 
-load storms
 ```{python}
+# | eval: true
+# | echo: false
+
+blob_name = f"{PROJECT_PREFIX}/processed/era5_soil_moisture/era5_daily_sm_storm_dates.csv"
+
+df_long = stratus.load_parquet_from_blob(blob_name=blob_name)
+```
+
+load storms
+
+
+```{python}
+# | eval: true
+
 df_storms = ibtracs.load_storms()
 # Filter df_storms to only sids present in df_ibtracs_agg
 df_storms_cuba= df_storms[df_storms["sid"].isin(df_ibtracs_agg["sid"])]
@@ -172,6 +208,7 @@ df_storms_cuba= df_storms[df_storms["sid"].isin(df_ibtracs_agg["sid"])]
 df_ibtracs_agg_labelled = df_ibtracs_agg.merge(
     df_storms[["sid", "name"]], on="sid", how="left"
 )
+
 
 # df_long = df_long.merge(
 #     df_storms_cuba[["sid", "name"]], left_on="parameter", right_on="sid", how="left"
@@ -191,7 +228,16 @@ df_long_labelled = df_long.merge(
 )
 ```
 
+
 ```{python}
+
+df_storms.head()
+```
+
+
+```{python}
+# | eval: true
+
 import matplotlib.pyplot as plt
 
 plt.figure(figsize=(10, 5))
@@ -220,13 +266,50 @@ for i, row in df_long_labelled.iterrows():
 plt.show()
 ```
 
+
+```{python interestingAIexperiment}
+# | eval: false
+# | echo: false
+
+# Temporarily commented out to debug rendering issue
+# from df_ibtracs_agg_labelled i want to extract the year from
+# valid_time_min and and the storm name from 'name'. I want to get
+# these into my clipboard in a nice format to provide and AI like
+# chatGPT (maybe json)
+
+print("This chunk is temporarily disabled for debugging")
+
+# # Extract year and name, format as JSON, and copy to clipboard
+# import json
+
+# # Create a list of dicts with 'year' and 'name'
+# # Check if df_ibtracs_agg_labelled exists and has 'name' column
+# if 'df_ibtracs_agg_labelled' in locals() and 'name' in df_ibtracs_agg_labelled.columns:
+#     storm_info = [
+#         {"year": pd.to_datetime(row["valid_time_min"]).year, "name": row["name"]}
+#         for _, row in df_ibtracs_agg_labelled.iterrows()
+#     ]
+# else:
+#     storm_info = []
+#     print("Warning: df_ibtracs_agg_labelled or 'name' column not found")
+
+# # Convert to JSON string (pretty-printed)
+# storm_info_json = json.dumps(storm_info, indent=2)
+
+# # Copy to clipboard (commented out for rendering)
+# # pd.Series([storm_info_json]).to_clipboard(index=False, header=False)
+
+# print("Storm info prepared as JSON.")
+```
+
+
+```{python scrap-percentile}
+# | eval: false
+# | echo: false
+
 ## Percentile Aggregation - TBD
 
-All scrap for now (haven't actually run)
-
-```{python}
-# | eval: false
-
+# All scrap for now (haven't actually run)
 
 # Calculate and mask by percentiles for each image in the filtered collection
 percentiles = [80, 90, 95]
@@ -256,20 +339,3 @@ for p in percentiles:
 # Example: dict_masked_collections[80] is the collection masked at the 80th percentile
 # You can now use these collections for further analysis or export
 ```
-
-
-```{python}
-# OLD CODE definitely throw out
-
-# Convert valid_time_min to milliseconds since epoch (int)
-storm_dates_millis = df_ibtracs_agg["valid_time_min"].astype("int64") // 10**6
-storm_dates_millis_ee = ee.List(storm_dates_millis.tolist())
-
-# Filter using 'system:time_start'
-ic_sm_storm_date = ic_mean_sm.filter(
-    ee.Filter.inList("system:time_start", storm_dates_millis_ee)
-)
-print("Filtered collection size:", ic_sm_storm_date.size().getInfo())
-ic_sm_storm_date
-```
-

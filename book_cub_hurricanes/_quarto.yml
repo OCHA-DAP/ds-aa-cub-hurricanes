@@ -14,6 +14,7 @@ book:
     - ibtracs.qmd
     - imerg.qmd
     - combine_imerg_ibtracs.qmd
+    - era5_soil_moisture.qmd
     - summary.qmd
     - references.qmd
 
