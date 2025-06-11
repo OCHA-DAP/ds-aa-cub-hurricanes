@@ -65,7 +65,26 @@ df_cerf_cub_recent
 ```
 
 ```python
-df_cerf_cub = df_cerf_cub_old.merge(df_cerf_cub_recent, how="outer")
+# add reclassified allocations (Ike and Gustav)
+blob_name = f"{PROJECT_PREFIX}/raw/impact/cub_cerf_ike_gustav_reclassify.csv"
+df_cerf_cub_reclass = stratus.load_csv_from_blob(
+    blob_name, parse_dates=["Allocation date"]
+)
+df_cerf_cub_reclass["Amount in US$"] = (
+    df_cerf_cub_reclass["Amount in US$"].str.replace(",", "").astype(int)
+)
+```
+
+```python
+# problem with CERF export so have to fill in some extra details
+df_cerf_cub_reclass.loc[0, "Allocation date"] = "2008-09-12"
+df_cerf_cub_reclass.loc[1, "Allocation date"] = "2008-09-26"
+```
+
+```python
+df_cerf_cub = df_cerf_cub_old.merge(df_cerf_cub_recent, how="outer").merge(
+    df_cerf_cub_reclass, how="outer"
+)
 ```
 
 ```python
@@ -73,9 +92,16 @@ df_cerf_cub
 ```
 
 ```python
-# Oscar and Rafael
-df_cerf_cub.loc[5, "sid"] = "2024293N21294"
-df_cerf_cub.loc[6, "sid"] = "2024309N13283"
+df_cerf_cub = df_cerf_cub.set_index("Allocation date")
+# Oscar
+df_cerf_cub.loc["2024-11-08", "sid"] = "2024293N21294"
+# Rafael
+df_cerf_cub.loc["2024-11-25", "sid"] = "2024309N13283"
+# Ike
+df_cerf_cub.loc["2008-09-26", "sid"] = "2008245N17323"
+# Gustav
+df_cerf_cub.loc["2008-09-12", "sid"] = "2008238N13293"
+df_cerf_cub = df_cerf_cub.reset_index()
 # drop tornado
 df_cerf_cub = df_cerf_cub[df_cerf_cub["Allocation date"] != "2019-03-05"]
 ```
