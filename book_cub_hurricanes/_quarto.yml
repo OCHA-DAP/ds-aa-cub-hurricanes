@@ -13,6 +13,7 @@ book:
     - zma.qmd
     - ibtracs.qmd
     - imerg.qmd
+    - chirps_gefs.qmd
     - combine_imerg_ibtracs.qmd
     - plot_optimization.qmd
     - era5_soil_moisture.qmd
