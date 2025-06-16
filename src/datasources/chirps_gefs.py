@@ -320,6 +320,99 @@ class ChirpsGefsLoader:
         except Exception as e:
             raise ResourceNotFoundError(f"Could not load {dataset_name}: {e}")
 
+    def load_raster_time_series(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        combine_method: str = "concat",
+    ) -> xr.Dataset:
+        """
+        Load multiple CHIRPS GEFS rasters for configured time series.
+
+        Args:
+            start_date: Start date (YYYY-MM-DD). Uses config.start_date if None
+            end_date: End date (YYYY-MM-DD). Uses config.end_date if None
+            combine_method: How to combine rasters ('concat' or 'merge')
+
+        Returns:
+            xarray.Dataset with dimensions [issue_date, valid_date, y, x]
+        """
+        start_date = start_date or self.config.start_date
+        end_date = end_date or self.config.end_date
+
+        self.logger.info(
+            f"Loading raster time series: {start_date} to {end_date}"
+        )
+
+        issue_date_range = pd.date_range(
+            start=start_date, end=end_date, freq="D"
+        )
+
+        all_rasters = []
+        loaded_count = 0
+        failed_count = 0
+
+        for issue_date in issue_date_range:
+            issue_rasters = []
+
+            # Load all leadtimes for this issue date
+            for leadtime in range(self.config.leadtime_days):
+                valid_date = issue_date + pd.Timedelta(days=leadtime)
+
+                try:
+                    da = self.load_raster(issue_date, valid_date)
+
+                    # Add coordinate information
+                    da = da.expand_dims(
+                        {
+                            "issue_date": [issue_date],
+                            "valid_date": [valid_date],
+                            "leadtime": [leadtime],
+                        }
+                    )
+
+                    issue_rasters.append(da)
+                    loaded_count += 1
+
+                except ResourceNotFoundError:
+                    if self.config.verbose:
+                        self.logger.debug(
+                            f"No data for {issue_date.date()} -> "
+                            f"{valid_date.date()}"
+                        )
+                    failed_count += 1
+
+            if issue_rasters:
+                # Combine all leadtimes for this issue date
+                issue_combined = xr.concat(issue_rasters, dim="leadtime")
+                all_rasters.append(issue_combined)
+
+        if not all_rasters:
+            self.logger.warning(
+                f"No rasters found for {start_date} to {end_date}"
+            )
+            # Return empty dataset with expected dimensions
+            return xr.Dataset()
+
+        # Combine all issue dates
+        if combine_method == "concat":
+            # Concatenate along issue_date dimension
+            combined_ds = xr.concat(all_rasters, dim="issue_date")
+        else:  # merge
+            # Merge datasets (useful for overlapping time periods)
+            combined_ds = xr.merge(all_rasters)
+
+        # Convert to dataset for better handling of multiple variables
+        if isinstance(combined_ds, xr.DataArray):
+            combined_ds = combined_ds.to_dataset(name="precipitation")
+
+        self.logger.info(
+            f"Loaded {loaded_count} rasters, {failed_count} failed"
+        )
+        self.logger.info(f"Combined dataset shape: {combined_ds.dims}")
+
+        return combined_ds
+
 
 class ChirpsGefsProcessor:
     """Handles processing of CHIRPS GEFS data."""
