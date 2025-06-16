@@ -124,6 +124,7 @@ print(f"📊 Total attempted: {download_stats['total']}")
 loader = ChirpsGefsLoader(config)
 
 # Load a specific forecast: Dec 10 issue, Dec 12 valid (2-day leadtime)
+
 da = loader.load_raster(
     issue_date=pd.Timestamp("2024-12-10"),
     valid_date=pd.Timestamp("2024-12-12"),
@@ -138,7 +139,9 @@ print(f"💧 Data range: {da.min().values:.2f} to {da.max().values:.2f} mm/day")
 print(f"📊 Data size: {da.nbytes / 1024:.1f} KB (compare to ~103 MB global!)")
 ```
 
-**🎉 Congratulations!** You've successfully downloaded your first spatially-optimized CHIRPS GEFS COGs. Each file is ~88 KB instead of ~103 MB - that's 99.9% smaller!
+
+
+## TBD
 
 ## Understanding What Just Happened: COG Processing Deep Dive
 
