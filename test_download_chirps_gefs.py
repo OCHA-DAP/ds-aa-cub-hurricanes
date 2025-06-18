@@ -44,3 +44,16 @@ print(f"⏱️  Leadtime: {config.leadtime_days} days")
 date_range = pd.date_range(config.start_date, config.end_date, freq="D")
 total_files = len(date_range) * config.leadtime_days
 print(f"📊 Total forecasts: {total_files} files (small test!)")
+
+# Initialize downloader
+downloader = ChirpsGefsDownloader(config)
+
+# Download just our small test dataset
+download_stats = downloader.download_date_range(
+    config.start_date, config.end_date
+)
+
+print("Download Results:")
+print(f"✅ Successful: {download_stats['success']}")
+print(f"❌ Failed: {download_stats['failed']}")
+print(f"📊 Total attempted: {download_stats['total']}")
