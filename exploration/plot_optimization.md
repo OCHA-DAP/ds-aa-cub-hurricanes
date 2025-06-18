@@ -42,6 +42,14 @@ df_stats
 ```
 
 ```python
+df_stats.columns
+```
+
+```python
+df_stats.sort_values("q99_roll2", ascending=False)
+```
+
+```python
 blob_name = f"{PROJECT_PREFIX}/processed/trigger_metrics_ibtracs_imerg.parquet"
 df_results = stratus.load_parquet_from_blob(blob_name)
 ```
