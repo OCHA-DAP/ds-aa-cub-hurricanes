@@ -19,6 +19,7 @@ Storage Integration:
 """
 
 import datetime
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,12 +33,9 @@ import xarray as xr
 from azure.core.exceptions import ResourceNotFoundError
 from tqdm import tqdm
 
-import logging
+from src.constants import PROJECT_PREFIX
 
 print("All imports successful!")
-
-# Project constant
-PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 
 
 @dataclass
@@ -937,3 +935,15 @@ def process_chirps_gefs_for_region(
     """
     manager = ChirpsGefsManager(geometry, region_name, **config_kwargs)
     return manager.run_full_pipeline(download_recent_only=recent_only)
+
+
+def load_processed_chirps_gefs(variable_name: str = None):
+    query = f"""
+    SELECT *
+    FROM projects.{PROJECT_PREFIX.replace('-', '_')}_chirps_gefs
+    """
+    if variable_name is not None:
+        query += f"""
+        WHERE variable = '{variable_name}'
+        """
+    return pd.read_sql(query, stratus.get_engine())
