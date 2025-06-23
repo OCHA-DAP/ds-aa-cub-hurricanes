@@ -29,10 +29,10 @@ cuba_gdf.head()
 
 config = ChirpsGefsConfig(
     geometry=cuba_gdf,
-    region_name="cuba_databricks_test",
-    start_date="2024-12-10",  # Single day to start
-    end_date="2024-12-11",  # Just 2 days
-    leadtime_days=5,  # First 5 leadtimes only
+    region_name="databricks_run",
+    start_date="2000-01-01",  # Single day to start
+    end_date="2025-06-17",  # Just 2 days
+    leadtime_days=16,  # First 5 leadtimes only
     verbose=True,
 )
 
