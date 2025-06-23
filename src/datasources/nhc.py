@@ -3,6 +3,7 @@ from datetime import datetime
 from ftplib import FTP
 from io import BytesIO
 
+import geopandas as gpd
 import ocha_stratus as stratus
 import pandas as pd
 from tqdm.auto import tqdm
@@ -150,7 +151,14 @@ def process_historical_forecasts():
     stratus.upload_parquet_to_blob(df, save_blob)
 
 
-def load_historical_forecasts():
+def load_historical_forecasts(include_geometry: bool = False):
     blob_name = f"{PROJECT_PREFIX}/processed/noaa/nhc/historical_forecasts/al_2000_2024.parquet"  # noqa
     df = stratus.load_parquet_from_blob(blob_name)
-    return df
+    if include_geometry:
+        return gpd.GeoDataFrame(
+            data=df,
+            geometry=gpd.points_from_xy(df["lon"], df["lat"]),
+            crs=4326,
+        )
+    else:
+        return df

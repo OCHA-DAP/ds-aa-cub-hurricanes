@@ -46,7 +46,7 @@ TABLE_NAME
 ```
 
 ```python
-# create projects schema
+# create projects schema - this should never need running again
 # try:
 #     with stratus.get_engine("dev", write=True).begin() as conn:
 #         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_NAME}"))
@@ -55,6 +55,7 @@ TABLE_NAME
 ```
 
 ```python
+# create table in projects schema
 # create_chirps_gefs_table(TABLE_NAME, stratus.get_engine("dev", write=True))
 ```
 
@@ -72,6 +73,7 @@ loader = ChirpsGefsLoader(config)
 ```
 
 ```python
+# check which dates we already have processed
 query = f"""
 SELECT issued_date, COUNT(*) AS n_entries
 FROM projects.{TABLE_NAME}
@@ -130,6 +132,7 @@ display(missing_date_range)
 
 verbose = False
 
+# takes around 24 hours depending on internet connection
 for issue_date in tqdm(missing_date_range):
     das_i = []
     for leadtime in range(16):

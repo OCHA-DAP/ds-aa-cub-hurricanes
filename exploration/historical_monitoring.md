@@ -14,7 +14,7 @@ jupyter:
 ---
 
 # Historical monitoring
-
+<!-- markdownlint-disable MD013 -->
 Checking values from NHC and CHIRPS-GEFS historical forecasts
 
 ```python
@@ -31,7 +31,10 @@ import geopandas as gpd
 from tqdm.auto import tqdm
 
 from src.datasources import nhc, ibtracs, chirps_gefs, zma
+from src.constants import *
 ```
+
+## Load data
 
 ```python
 gdf_zma = zma.load_zma()
@@ -46,16 +49,7 @@ df_gefs
 ```
 
 ```python
-# replace with load
-df_nhc = nhc.load_historical_forecasts()
-```
-
-```python
-gdf_nhc = gpd.GeoDataFrame(
-    data=df_nhc,
-    geometry=gpd.points_from_xy(df_nhc["lon"], df_nhc["lat"]),
-    crs=4326,
-)
+gdf_nhc = nhc.load_historical_forecasts(include_geometry=True)
 ```
 
 ```python
@@ -70,13 +64,9 @@ gdf_nhc
 gdf_nhc_zma = gdf_nhc[gdf_nhc["in_zma"]]
 ```
 
-```python
-df_gefs_v
-```
+## Run historical simulation
 
-```python
-lt_group
-```
+Iterate over all past forecasts, checking the rainfall forecast if the forecasted track enters the ZMA.
 
 ```python
 dicts = []
@@ -122,6 +112,15 @@ df_monitors
 ```
 
 ```python
+blob_name = f"{PROJECT_PREFIX}/processed/nhc/monitors_nhc_chirpsgefs.parquet"
+stratus.upload_parquet_to_blob(df_monitors, blob_name)
+```
+
+## Basic plotting
+
+Get the maximum value for each historical monitoring point.
+
+```python
 df_monitors_max = (
     df_monitors.groupby(["atcf_id", "lt_name"]).max().reset_index().dropna()
 )
@@ -140,6 +139,10 @@ df_monitors_max
 ```
 
 ```python
+df_monitors_max["issue_time"].max().year
+```
+
+```python
 n_years = (
     df_monitors_max["issue_time"].max().year
     - df_monitors_max["issue_time"].min().year
@@ -148,6 +151,7 @@ n_years = (
 ```
 
 ```python
+# set RPs based on rough numbers approved by CERF
 target_rps = {
     "action": 3.7,
     "readiness": 3,
@@ -155,6 +159,8 @@ target_rps = {
 ```
 
 ```python
+# set target number of years to trigger for based on RP
+# note that int() takes the floor, so will be conservative
 target_trig_years = {
     lt_name: int((n_years + 1) / rp) for lt_name, rp in target_rps.items()
 }
@@ -169,14 +175,16 @@ target_trig_years
 ```
 
 ```python
+# iterate over all possible trigger combinations
+# keeping only the ones that have the correct return period
 rain_cols = [x for x in df_monitors_max.columns if "q" in x or x == "mean"]
 
 dicts = []
 
 for lt_name, lt_trig_years in target_trig_years.items():
     for wind_thresh in df_monitors_max["wind"].unique():
-        for rain_thresh in df_monitors_max[rain_col].unique():
-            for rain_col in rain_cols:
+        for rain_col in rain_cols:
+            for rain_thresh in df_monitors_max[rain_col].unique():
                 dff = df_monitors_max[
                     (df_monitors_max["wind"] >= wind_thresh)
                     & (df_monitors_max[rain_col] >= rain_thresh)
@@ -197,10 +205,7 @@ df_threshs = pd.DataFrame(dicts)
 ```
 
 ```python
-df_plot
-```
-
-```python
+# quick plot of distribution of trigger combos with correct return periods
 df_plot = df_threshs[df_threshs["rain_col"] == "mean"]
 
 for rain_col, rain_group in df_threshs.groupby("rain_col"):
@@ -215,12 +220,4 @@ for rain_col, rain_group in df_threshs.groupby("rain_col"):
             linewidth=0,
             marker=".",
         )
-```
-
-```python
-
-```
-
-```python
-df_plot.plot()
 ```
