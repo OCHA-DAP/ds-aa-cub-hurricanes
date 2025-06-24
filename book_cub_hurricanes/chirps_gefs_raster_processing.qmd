@@ -1,0 +1,551 @@
+# CHIRPS-GEFS Raster Processing Pipeline
+
+<!-- markdownlint-disable MD013 -->
+
+This chapter provides a detailed breakdown of the CHIRPS-GEFS raster processing pipeline, demonstrating each step of the workflow that processes precipitation forecast data into quantile statistics and stores them in a PostgreSQL database. We'll walk through a single iteration of the processing loop to understand how raw forecast data becomes actionable statistics.
+
+## Overview of the Processing Pipeline
+
+The CHIRPS-GEFS processing pipeline performs the following key steps:
+
+1. **Data Loading**: Load 16-day precipitation forecasts for a specific issue date
+2. **Spatial Clipping**: Clip global data to Cuba's administrative boundaries  
+3. **Temporal Aggregation**: Create 2-day rolling sums for enhanced precipitation analysis
+4. **Statistical Analysis**: Calculate quantiles and spatial means across the region
+5. **Database Storage**: Store processed statistics in PostgreSQL for analysis
+
+Let's examine each step in detail using a concrete example.
+
+## Setup and Configuration
+
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+```{python}
+import pandas as pd
+import xarray as xr
+import matplotlib.pyplot as plt
+import numpy as np
+import ocha_stratus as stratus
+from azure.core.exceptions import ResourceNotFoundError
+
+from src.datasources.chirps_gefs import ChirpsGefsConfig, ChirpsGefsLoader
+from src.datasources import codab
+from src.constants import *
+
+# Configure plotting
+plt.style.use("default")
+
+# Define table name for database operations
+TABLE_NAME = f'{PROJECT_PREFIX.replace("-", "_")}_chirps_gefs'
+```
+
+```{python}
+# Load Cuba administrative boundaries
+adm0 = codab.load_codab_from_blob()
+cuba_bounds = adm0.total_bounds
+
+print(f"Cuba Administrative Boundaries:")
+print(f"  Longitude: {cuba_bounds[0]:.2f}° to {cuba_bounds[2]:.2f}°")
+print(f"  Latitude: {cuba_bounds[1]:.2f}° to {cuba_bounds[3]:.2f}°")
+print(f"  Total area: {adm0.geometry.area.sum():.2f} square degrees")
+
+# Display the geometry
+adm0.plot(figsize=(10, 6), color='lightblue', edgecolor='navy')
+plt.title('Cuba Administrative Boundaries')
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.grid(True, alpha=0.3)
+plt.show()
+```
+
+```{python}
+# Initialize CHIRPS-GEFS configuration and loader
+config = ChirpsGefsConfig(geometry=adm0, region_name="databricks_run")
+loader = ChirpsGefsLoader(config)
+
+print(f"CHIRPS-GEFS Configuration:")
+print(f"  Region: {config.region_name}")
+print(f"  Leadtime days: {config.leadtime_days}")
+print(f"  Date range: {config.start_date} to {config.end_date}")
+```
+
+## Step 1: Data Loading for Single Issue Date
+
+Let's examine how the pipeline loads 16-day precipitation forecasts for a single issue date:
+
+```{python}
+# Select a specific issue date for demonstration
+issue_date = pd.Timestamp("2024-10-15")  # Example issue date
+print(f"Processing issue date: {issue_date.strftime('%Y-%m-%d')}")
+print(f"Loading {config.leadtime_days} days of forecasts...")
+
+# Load all leadtimes for this issue date (this is one iteration of the main loop)
+das_i = []
+valid_dates = []
+leadtimes_loaded = []
+
+for leadtime in range(config.leadtime_days):
+    valid_date = issue_date + pd.Timedelta(days=leadtime)
+    valid_dates.append(valid_date)
+    
+    try:
+        # Load individual raster for this leadtime
+        da_in = loader.load_raster(issue_date, valid_date)
+        da_in["valid_date"] = valid_date
+        das_i.append(da_in)
+        leadtimes_loaded.append(leadtime)
+        
+    except ResourceNotFoundError as e:
+        print(f"  Missing data for leadtime {leadtime} (valid: {valid_date.strftime('%Y-%m-%d')})")
+
+print(f"\n✅ Successfully loaded {len(das_i)} out of {config.leadtime_days} forecasts")
+print(f"   Leadtimes loaded: {leadtimes_loaded}")
+print(f"   Date range: {valid_dates[0].strftime('%Y-%m-%d')} to {valid_dates[-1].strftime('%Y-%m-%d')}")
+```
+
+```{python}
+# Examine the structure of a single loaded raster
+if das_i:
+    sample_raster = das_i[0]  # First leadtime
+    
+    print(f"Individual Raster Properties:")
+    print(f"  Shape: {sample_raster.shape}")
+    print(f"  Coordinates: {list(sample_raster.coords.keys())}")
+    print(f"  Data range: {sample_raster.min().values:.2f} to {sample_raster.max().values:.2f} mm/day")
+    print(f"  CRS: {sample_raster.rio.crs}")
+    print(f"  Resolution: {sample_raster.rio.resolution()}")
+    
+    # Visualize the first forecast day
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Plot the precipitation data
+    im = sample_raster.plot(
+        ax=ax,
+        cmap='Blues',
+        cbar_kwargs={'label': 'Precipitation (mm/day)', 'shrink': 0.8}
+    )
+    
+    # Overlay Cuba boundaries
+    adm0.boundary.plot(ax=ax, color='red', linewidth=2)
+    
+    plt.title(f'CHIRPS-GEFS Precipitation Forecast\n'
+              f'Issue: {issue_date.strftime("%Y-%m-%d")}, '
+              f'Valid: {valid_dates[0].strftime("%Y-%m-%d")} (1-day leadtime)')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+```
+
+## Step 2: Concatenation and Time Series Creation
+
+```{python}
+# Concatenate all leadtimes into a single time series dataset
+if das_i:
+    print("🔄 Concatenating forecasts into time series...")
+    
+    # This combines all 16 leadtimes into a single xarray Dataset
+    da_i = xr.concat(das_i, dim="valid_date")
+    
+    print(f"Time Series Dataset:")
+    print(f"  Shape: {da_i.shape}")
+    print(f"  Dimensions: {list(da_i.dims)}")
+    print(f"  Valid dates: {len(da_i.valid_date)} days")
+    print(f"  Spatial extent: {da_i.x.size} × {da_i.y.size} pixels")
+    
+    # Show the time series structure
+    print(f"\nValid Dates in Time Series:")
+    for i, vd in enumerate(da_i.valid_date.values):
+        vd_ts = pd.to_datetime(vd)
+        leadtime = (vd_ts - issue_date).days
+        print(f"  {i+1:2d}. {vd_ts.strftime('%Y-%m-%d')} (leadtime: {leadtime:2d} days)")
+```
+
+```{python}
+# Visualize the time series structure
+if das_i:
+    # Calculate daily mean precipitation across Cuba region
+    daily_means = da_i.mean(dim=['x', 'y'])
+    
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    # Plot time series
+    valid_dates_dt = pd.to_datetime(da_i.valid_date.values)
+    ax.plot(valid_dates_dt, daily_means.values, 'o-', linewidth=2, markersize=6)
+    
+    ax.set_title(f'16-Day Precipitation Forecast Time Series\n'
+                 f'Issue Date: {issue_date.strftime("%Y-%m-%d")}')
+    ax.set_xlabel('Valid Date')
+    ax.set_ylabel('Mean Precipitation (mm/day)')
+    ax.grid(True, alpha=0.3)
+    
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"Time Series Statistics:")
+    print(f"  Mean daily precipitation: {daily_means.mean().values:.2f} mm/day")
+    print(f"  Maximum daily precipitation: {daily_means.max().values:.2f} mm/day")
+    print(f"  Minimum daily precipitation: {daily_means.min().values:.2f} mm/day")
+```
+
+## Step 3: Spatial Clipping to Cuba
+
+```{python}
+# Apply precise spatial clipping to Cuba's boundaries
+if das_i:
+    print("✂️  Applying spatial clipping to Cuba boundaries...")
+
+    # Clip the time series data to Cuba's exact geometry
+    da_i_clip = da_i.rio.clip(adm0.geometry, all_touched=True)
+    # Show data size comparison
+    print(f"  Non-NaN pixels before clipping: {da_i.count().max().values:.0f}")
+    print(
+        f"  Non-NaN pixels after clipping: {da_i_clip.count().max().values:.0f}"
+    )
+
+    print(f"Spatial Clipping Results:")
+    print(f"  Original shape: {da_i.shape}")
+    print(f"  Clipped shape: {da_i_clip.shape}")
+
+    # Calculate reduction in data size
+    original_pixels = da_i.x.size * da_i.y.size
+    clipped_pixels = da_i_clip.count().max().values
+    reduction = (1 - clipped_pixels / original_pixels) * 100
+
+    print(f"  Original pixels: {original_pixels:,}")
+    print(f"  Valid pixels after clipping: {int(clipped_pixels):,}")
+    print(f"  Data reduction: {reduction:.1f}%")
+```
+
+```{python}
+# Visualize the clipping effect
+if das_i:
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Before clipping
+    da_i.isel(valid_date=0).plot(
+        ax=ax1,
+        cmap='Blues',
+        cbar_kwargs={'label': 'Precipitation (mm/day)'}
+    )
+    adm0.boundary.plot(ax=ax1, color='red', linewidth=2)
+    ax1.set_title('Before Clipping\n(Bounding Box)')
+    ax1.set_xlabel('Longitude')
+    ax1.set_ylabel('Latitude')
+    
+    # After clipping
+    da_i_clip.isel(valid_date=0).plot(
+        ax=ax2,
+        cmap='Blues',
+        cbar_kwargs={'label': 'Precipitation (mm/day)'}
+    )
+    adm0.boundary.plot(ax=ax2, color='red', linewidth=2)
+    ax2.set_title('After Clipping\n(Exact Cuba Boundary)')
+    ax2.set_xlabel('Longitude')
+    ax2.set_ylabel('Latitude')
+    
+    plt.tight_layout()
+    plt.show()
+```
+
+## Step 4: Temporal Aggregation - 2-Day Rolling Sums
+
+```{python}
+# Create 2-day rolling sums for enhanced precipitation analysis
+if das_i:
+    print("📊 Creating 2-day rolling sums...")
+    
+    # Calculate 2-day rolling precipitation sums
+    da_rolling2 = da_i_clip.rolling(valid_date=2).sum()
+    
+    print(f"Rolling Sum Analysis:")
+    print(f"  Original time series: {da_i_clip.valid_date.size} days")
+    print(f"  Rolling sum series: {da_rolling2.valid_date.size} days")
+    print(f"  First valid rolling sum: day 2 (combines days 1-2)")
+    
+    # Show the effect of rolling sums
+    clipped_daily_means = da_i_clip.mean(dim=['x', 'y'])
+    rolling_daily_means = da_rolling2.mean(dim=['x', 'y'])
+    
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    valid_dates_dt = pd.to_datetime(da_i_clip.valid_date.values)
+    rolling_dates_dt = pd.to_datetime(da_rolling2.valid_date.values)
+    
+    # Plot both series
+    ax.plot(valid_dates_dt, clipped_daily_means.values, 'o-', 
+            label='Daily Precipitation', linewidth=2, alpha=0.7)
+    ax.plot(rolling_dates_dt, rolling_daily_means.values, 's-', 
+            label='2-Day Rolling Sum', linewidth=2, alpha=0.9)
+    
+    ax.set_title(f'Daily vs 2-Day Rolling Sum Precipitation\n'
+                 f'Issue Date: {issue_date.strftime("%Y-%m-%d")}')
+    ax.set_xlabel('Valid Date')
+    ax.set_ylabel('Precipitation (mm/day or mm/2-day)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"\nRolling Sum Statistics:")
+    print(f"  Mean 2-day sum: {rolling_daily_means.mean().values:.2f} mm/2-day")
+    print(f"  Maximum 2-day sum: {rolling_daily_means.max().values:.2f} mm/2-day")
+```
+
+## Step 5: Quantile Analysis
+
+```{python}
+# Calculate quantiles across space for each time step
+if das_i:
+    print("📈 Calculating spatial quantiles...")
+    
+    # Define quantiles to calculate
+    quantiles = [0.5, 0.8, 0.9, 0.95, 0.99]
+    
+    # Calculate quantiles across space (x, y dimensions) for each time step
+    quantile_results = {}
+    
+    for quantile in quantiles:
+        print(f"  Calculating {quantile*100:.0f}th percentile...")
+        
+        # Calculate spatial quantiles for each day
+        da_quantile_threshs = da_rolling2.quantile(quantile, dim=["x", "y"])
+        quantile_results[quantile] = da_quantile_threshs
+        
+        print(f"    Shape: {da_quantile_threshs.shape}")
+        print(f"    Range: {da_quantile_threshs.min().values:.2f} to {da_quantile_threshs.max().values:.2f} mm/2-day")
+```
+
+```{python}
+# Visualize quantile progression over time
+if das_i and quantile_results:
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    colors = ['blue', 'green', 'orange', 'red', 'purple']
+    
+    for i, (quantile, da_quantile) in enumerate(quantile_results.items()):
+        valid_dates_q = pd.to_datetime(da_quantile.valid_date.values)
+        
+        ax.plot(valid_dates_q, da_quantile.values, 'o-', 
+                color=colors[i], label=f'{quantile*100:.0f}th percentile',
+                linewidth=2, alpha=0.8)
+    
+    ax.set_title(f'Spatial Quantiles of 2-Day Rolling Precipitation Sums\n'
+                 f'Issue Date: {issue_date.strftime("%Y-%m-%d")}')
+    ax.set_xlabel('Valid Date')
+    ax.set_ylabel('Precipitation (mm/2-day)')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(True, alpha=0.3)
+    
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+    
+    print("Quantile Interpretation:")
+    print("  50th percentile: Half of Cuba receives this amount or less")
+    print("  80th percentile: 80% of Cuba receives this amount or less") 
+    print("  99th percentile: Only 1% of Cuba receives more than this amount")
+```
+
+## Step 6: Spatial Mean Calculation
+
+```{python}
+# Calculate spatial means for each time step
+if das_i:
+    print("🌍 Calculating spatial means...")
+    
+    # Calculate mean precipitation across all pixels in Cuba for each day
+    da_means = da_rolling2.mean(dim=["x", "y"])
+    
+    print(f"Spatial Mean Results:")
+    print(f"  Time series length: {da_means.valid_date.size} days")
+    print(f"  Overall mean: {da_means.mean().values:.2f} mm/2-day")
+    print(f"  Standard deviation: {da_means.std().values:.2f} mm/2-day")
+    
+    # Compare means with quantiles
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    valid_dates_mean = pd.to_datetime(da_means.valid_date.values)
+    
+    # Plot spatial mean
+    ax.plot(valid_dates_mean, da_means.values, 'ko-', 
+            linewidth=3, markersize=8, label='Spatial Mean', alpha=0.9)
+    
+    # Add 50th percentile (median) for comparison
+    if 0.5 in quantile_results:
+        q50 = quantile_results[0.5]
+        ax.plot(pd.to_datetime(q50.valid_date.values), q50.values, 'b--', 
+                linewidth=2, label='50th Percentile (Median)', alpha=0.7)
+    
+    ax.set_title(f'Spatial Mean vs Median Precipitation\n'
+                 f'Issue Date: {issue_date.strftime("%Y-%m-%d")}')
+    ax.set_xlabel('Valid Date')
+    ax.set_ylabel('Precipitation (mm/2-day)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+```
+
+## Step 7: Data Preparation for Database Storage
+
+```{python}
+# Transform quantile data into database format
+if das_i and quantile_results:
+    print("🗄️  Preparing data for database storage...")
+    
+    # Demonstrate data transformation for quantiles
+    sample_quantile = 0.8  # 80th percentile
+    da_sample_quantile = quantile_results[sample_quantile]
+    
+    # Convert to DataFrame (this is what happens in the actual pipeline)
+    df_quantile_sample = (
+        da_sample_quantile.to_dataframe("value")
+        .reset_index()
+        .drop(columns="quantile")
+    )
+    df_quantile_sample["variable"] = f"q{sample_quantile*100:.0f}"
+    df_quantile_sample["issued_date"] = issue_date
+    
+    print(f"Sample Quantile DataFrame (80th percentile):")
+    print(f"  Shape: {df_quantile_sample.shape}")
+    print(f"  Columns: {list(df_quantile_sample.columns)}")
+    print("\nFirst 5 rows:")
+    display(df_quantile_sample.head())
+    
+    # Demonstrate data transformation for means
+    df_means_sample = (
+        da_means.to_dataframe("value")
+        .reset_index()
+        .drop(columns="spatial_ref")
+    )
+    df_means_sample["variable"] = "mean"
+    df_means_sample["issued_date"] = issue_date
+    
+    print(f"\nSample Means DataFrame:")
+    print(f"  Shape: {df_means_sample.shape}")
+    print(f"  Columns: {list(df_means_sample.columns)}")
+    print("\nFirst 5 rows:")
+    display(df_means_sample.head())
+```
+
+```{python}
+# Show the complete data structure that would be stored
+if das_i and quantile_results:
+    print("📋 Complete Database Records for One Issue Date:")
+    
+    # Count total records that would be created
+    total_records = 0
+    
+    # Quantile records
+    for quantile in quantiles:
+        da_q = quantile_results[quantile]
+        records_per_quantile = len(da_q.valid_date)
+        total_records += records_per_quantile
+        print(f"  {quantile*100:4.0f}th percentile: {records_per_quantile:2d} records")
+    
+    # Mean records
+    mean_records = len(da_means.valid_date)
+    total_records += mean_records
+    print(f"  Spatial means:      {mean_records:2d} records")
+    
+    print(f"\n  Total records: {total_records} for issue date {issue_date.strftime('%Y-%m-%d')}")
+    
+    # Show database schema
+    print(f"\nDatabase Schema (table: projects.{TABLE_NAME}):")
+    print("  ┌─────────────┬──────────┬─────────────────────────────────┐")
+    print("  │ Column      │ Type     │ Description                     │")
+    print("  ├─────────────┼──────────┼─────────────────────────────────┤")
+    print("  │ valid_date  │ Date     │ Date forecast is valid for      │")
+    print("  │ issued_date │ Date     │ Date forecast was issued        │")
+    print("  │ variable    │ Text     │ Statistic type (q50, q80, mean)│")
+    print("  │ value       │ Real     │ Precipitation value (mm/2-day)  │")
+    print("  └─────────────┴──────────┴─────────────────────────────────┘")
+```
+
+## Summary: Complete Processing Pipeline
+
+```{python}
+# Summary visualization showing the complete pipeline
+if das_i:
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # 1. Raw precipitation forecast (top-left)
+    sample_raster.plot(ax=axes[0,0], cmap='Blues', add_colorbar=False)
+    adm0.boundary.plot(ax=axes[0,0], color='red', linewidth=2)
+    axes[0,0].set_title('1. Raw CHIRPS-GEFS Forecast\n(Single Day)')
+    axes[0,0].set_xlabel('Longitude')
+    axes[0,0].set_ylabel('Latitude')
+    
+    # 2. Clipped time series (top-right)
+    da_i_clip.isel(valid_date=5).plot(ax=axes[0,1], cmap='Blues', add_colorbar=False)
+    adm0.boundary.plot(ax=axes[0,1], color='red', linewidth=2)
+    axes[0,1].set_title('2. Clipped to Cuba\n(Day 6 of 16)')
+    axes[0,1].set_xlabel('Longitude')
+    axes[0,1].set_ylabel('Latitude')
+    
+    # 3. Time series analysis (bottom-left)
+    valid_dates_dt = pd.to_datetime(da_means.valid_date.values)
+    axes[1,0].plot(valid_dates_dt, da_means.values, 'ko-', linewidth=2)
+    axes[1,0].set_title('3. Temporal Analysis\n(2-Day Rolling Means)')
+    axes[1,0].set_xlabel('Valid Date')
+    axes[1,0].set_ylabel('Precipitation (mm/2-day)')
+    axes[1,0].grid(True, alpha=0.3)
+    axes[1,0].tick_params(axis='x', rotation=45)
+    
+    # 4. Statistical distribution (bottom-right)
+    for i, (quantile, da_quantile) in enumerate(list(quantile_results.items())[:3]):
+        valid_dates_q = pd.to_datetime(da_quantile.valid_date.values)
+        axes[1,1].plot(valid_dates_q, da_quantile.values, 'o-', 
+                      label=f'{quantile*100:.0f}th percentile', linewidth=2)
+    axes[1,1].plot(valid_dates_dt, da_means.values, 'k-', 
+                   label='Mean', linewidth=3, alpha=0.8)
+    axes[1,1].set_title('4. Statistical Analysis\n(Quantiles + Mean)')
+    axes[1,1].set_xlabel('Valid Date')
+    axes[1,1].set_ylabel('Precipitation (mm/2-day)')
+    axes[1,1].legend()
+    axes[1,1].grid(True, alpha=0.3)
+    axes[1,1].tick_params(axis='x', rotation=45)
+    
+    plt.suptitle(f'CHIRPS-GEFS Processing Pipeline Overview\nIssue Date: {issue_date.strftime("%Y-%m-%d")}', 
+                 fontsize=16, y=0.98)
+    plt.tight_layout()
+    plt.show()
+```
+
+## Key Insights and Applications
+
+This processing pipeline transforms raw CHIRPS-GEFS precipitation forecasts into actionable statistics:
+
+### **Statistical Products Generated**
+- **Spatial Means**: Average precipitation across Cuba for each forecast day
+- **Spatial Quantiles**: Distribution of precipitation values (50th, 80th, 90th, 95th, 99th percentiles)
+- **Temporal Aggregation**: 2-day rolling sums to capture precipitation events
+
+### **Operational Applications**
+1. **Early Warning Systems**: 95th and 99th percentiles identify extreme precipitation events
+2. **Risk Assessment**: Quantiles show spatial distribution of precipitation risk
+3. **Trend Analysis**: Time series enable monitoring of forecast consistency
+4. **Threshold-Based Alerts**: Statistical values can trigger humanitarian response
+
+### **Database Integration**
+The processed statistics are stored in PostgreSQL with:
+- **Temporal indexing**: Fast queries by issue date and valid date
+- **Variable categorization**: Easy filtering by statistic type
+- **Unique constraints**: Prevent duplicate records
+- **Scalable design**: Supports years of forecast data
+
+This pipeline processes approximately **100+ statistical values per day** (6 statistics × ~15 valid dates), enabling comprehensive analysis of precipitation forecasts for disaster risk management in Cuba.
+
+<!-- markdownlint-enable MD013 -->
