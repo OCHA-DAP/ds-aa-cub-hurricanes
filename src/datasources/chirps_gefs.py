@@ -946,4 +946,6 @@ def load_processed_chirps_gefs(variable_name: str = None):
         query += f"""
         WHERE variable = '{variable_name}'
         """
-    return pd.read_sql(query, stratus.get_engine())
+    return pd.read_sql(
+        query, stratus.get_engine(), parse_dates=["valid_date", "issued_date"]
+    )
