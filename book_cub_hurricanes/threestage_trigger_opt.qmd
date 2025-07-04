@@ -135,6 +135,7 @@ df_stats_fcast = (
     .dropna()
     .drop(columns=["issue_time", "lt_name"])
 )
+
 ```
 
 ### Combine All Datasets
@@ -166,6 +167,132 @@ int_cols = [
 ]
 df_stats[int_cols] = df_stats[int_cols].fillna(0)
 df_stats[int_cols] = df_stats[int_cols].astype(int)
+```
+
+```{python}
+# | eval: false
+# | echo: false
+
+# Diagnostic script to identify NA sources in the data merging process
+
+print("=== DIAGNOSTIC ANALYSIS FOR NA VALUES ===\n")
+
+# 1. Check the shapes and key columns of each dataset
+print("1. Dataset shapes and key info:")
+print(f"df_impact shape: {df_impact.shape}")
+print(f"df_storms shape: {df_storms.shape}")
+print(f"df_stats_fcast shape: {df_stats_fcast.shape}")
+print(f"df_stats_obsv shape: {df_stats_obsv.shape}")
+print()
+
+# 2. Check the merge keys
+print("2. Merge key analysis:")
+print(f"Unique storms in df_impact: {df_impact['sid'].nunique()}")
+print(f"Unique storms in df_storms: {df_storms['sid'].nunique()}")
+print(
+    f"Unique storms in df_stats_fcast: {df_stats_fcast['atcf_id'].nunique()}"
+)
+print(f"Unique storms in df_stats_obsv: {df_stats_obsv['sid'].nunique()}")
+print()
+
+# 3. Check for key mismatches
+print("3. Key overlap analysis:")
+# After first merge (impact + storms)
+df_temp1 = df_impact.merge(df_storms, how="left")
+print(f"After impact+storms merge: {df_temp1.shape}")
+
+# Check which storms have forecast data
+storms_with_forecast = set(df_stats_fcast["atcf_id"].dropna())
+storms_in_temp1 = set(df_temp1["atcf_id"].dropna())
+print(f"Storms in temp1 with atcf_id: {len(storms_in_temp1)}")
+print(f"Storms with forecast data: {len(storms_with_forecast)}")
+print(f"Overlap: {len(storms_in_temp1.intersection(storms_with_forecast))}")
+print(
+    f"Missing forecast data for: {len(storms_in_temp1 - storms_with_forecast)} storms"
+)
+print()
+
+# 4. Check after forecast merge
+df_temp2 = df_temp1.merge(df_stats_fcast, how="left")
+print(f"After +forecast merge: {df_temp2.shape}")
+
+# Check which columns have NAs after forecast merge
+forecast_cols = df_stats_fcast.columns.tolist()
+forecast_nas = df_temp2[forecast_cols].isnull().sum()
+print("NAs in forecast columns after merge:")
+for col, na_count in forecast_nas.items():
+    if na_count > 0:
+        print(f"  {col}: {na_count} NAs")
+print()
+
+# 5. Check observed data merge
+storms_with_obsv = set(df_stats_obsv["sid"].dropna())
+print(f"Storms with observed data: {len(storms_with_obsv)}")
+print(
+    f"Overlap with temp data: {len(set(df_temp2['sid']).intersection(storms_with_obsv))}"
+)
+print(
+    f"Missing observed data for: {len(set(df_temp2['sid']) - storms_with_obsv)} storms"
+)
+print()
+
+# 6. Final merge analysis
+df_final = df_temp2.merge(
+    df_stats_obsv.rename(
+        columns={x: x.replace("roll2", "obsv") for x in df_stats_obsv}
+        | {"max_roll2_mean": "mean_obsv", "wind_speed_max": "wind_obsv"}
+    ),
+    how="left",
+)
+print(f"Final dataset shape: {df_final.shape}")
+
+# 7. Check which storms have complete data
+print("7. Data completeness analysis:")
+print(f"Storms with forecast wind data: {df_final['wind'].notna().sum()}")
+print(f"Storms with observed wind data: {df_final['wind_obsv'].notna().sum()}")
+print(
+    f"Storms with both wind data: {(df_final['wind'].notna() & df_final['wind_obsv'].notna()).sum()}"
+)
+print(f"Storms missing forecast wind: {df_final['wind'].isna().sum()}")
+print(f"Storms missing observed wind: {df_final['wind_obsv'].isna().sum()}")
+print()
+
+# 8. Show examples of problematic storms
+print("8. Examples of storms with missing data:")
+missing_forecast = df_final[df_final["wind"].isna()]
+if len(missing_forecast) > 0:
+    print("Storms missing forecast data:")
+    print(missing_forecast[["sid", "name", "atcf_id"]].head())
+    print()
+
+missing_obsv = df_final[df_final["wind_obsv"].isna()]
+if len(missing_obsv) > 0:
+    print("Storms missing observed data:")
+    print(missing_obsv[["sid", "name", "atcf_id"]].head())
+    print()
+
+# 9. Check data types and potential format issues
+print("9. Data type analysis:")
+print("ATCF ID formats in storms data:")
+print(df_storms["atcf_id"].head(10).tolist())
+print("ATCF ID formats in forecast data:")
+print(df_stats_fcast["atcf_id"].head(10).tolist())
+print()
+
+# 10. Summary recommendation
+print("10. RECOMMENDATIONS:")
+if df_final["wind"].isna().sum() > 0:
+    print(
+        "- Missing forecast data: Consider if these storms occurred outside forecast period"
+    )
+if df_final["wind_obsv"].isna().sum() > 0:
+    print(
+        "- Missing observed data: Check if observation data coverage matches storm periods"
+    )
+if len(storms_in_temp1 - storms_with_forecast) > 0:
+    print(
+        "- ATCF ID mismatch: Check if ATCF IDs are consistently formatted between datasets"
+    )
 ```
 
 ### Save Combined Dataset
@@ -208,8 +335,6 @@ impact_cols = [
 We specify the rainfall aggregation methods to test for forecast data. This includes the mean and specific quantiles (50th, 80th, and 95th percentiles) that represent different levels of rainfall intensity.
 
 ```{python}
-# fcast_rain_cols = ["mean"]
-# fcast_rain_cols = ["mean"] + [f"q{x}" for x in [50, 80, 90, 95, 99]]
 fcast_rain_cols = ["mean"] + [f"q{x}" for x in [50, 80, 95]]
 ```
 
@@ -320,9 +445,14 @@ count
 - We save the complete optimization results to cloud storage for further analysis and decision-making about trigger thresholds.
 
 ```{python}
-#| eval: false
+# | eval: false
+
 df_metrics = pd.concat(rows, axis=1).T
 df_metrics.sort_values("Total Affected", ascending=False)
+```
+
+```{python}
+# | eval: false
 
 blob_name = (
     f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_trigger_metrics.parquet"
@@ -333,6 +463,9 @@ stratus.upload_parquet_to_blob(df_metrics, blob_name)
 
 
 ```{python}
+# | eval: false
+# not really necessary until we decide if we want to keep optima code below.
+
 df_metrics = stratus.load_parquet_from_blob(blob_name)
 ```
 
@@ -459,12 +592,4 @@ for impact_col, row in results_df.set_index("impact_col").iterrows():
     display(df_disp.sort_values(impact_col, ascending=False))
 ```
 
-### Set Progress Bar Detail Level
 
-This variable controls the verbosity of progress bars during optimization. Setting it to 1 enables progress tracking for the main optimization loop.
-
-```{python}
-# | eval: false
-
-tqdm_level = 1
-```

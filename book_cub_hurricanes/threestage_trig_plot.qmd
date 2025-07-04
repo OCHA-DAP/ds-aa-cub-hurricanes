@@ -1,7 +1,8 @@
 
 
-## Optimization Plotting
-## Action/observational trigger plotting
+## Visualize Options (Forecast + Observational)
+
+## Intro
 <!-- markdownlint-disable MD013 -->
 Picking out combinations of action (forecast, limited to 3 days) and observational triggers. All trigger combination options have the same overall return period (3.7 years, which is 7 triggering years in the period 2000-2024).
 
@@ -34,33 +35,51 @@ from src.constants import *
 
 ## Load and process data
 
+### Load Optimization Results
+
+Load the trigger metrics dataset that was generated from the optimization process. This contains all valid trigger combinations that meet the 3.7-year return period requirement, along with their associated impact metrics.
+
 ```{python}
 blob_name = (
     f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_trigger_metrics.parquet"
 )
 df_metrics = stratus.load_parquet_from_blob(blob_name)
+
 ```
+
+### Load Combined Storm Statistics
+
+Load the comprehensive dataset containing both forecast and observed storm statistics, along with impact data. This will be used to analyze individual storms and create detailed visualizations.
 
 ```{python}
 blob_name = f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_stats.parquet"
 df_stats = stratus.load_parquet_from_blob(blob_name)
 ```
 
-### Determine theoretical maximum values
+
+Calculate the target number of years for CERF-related triggers, accounting for the fact that CERF funding only started in 2006. This adjusts the return period calculation to the available CERF timeframe.
 
 ```{python}
+### Calculate CERF Target Years
 # note that we have to pick a differet number of triggered years for CERF since it only started in 2006
 cerf_target_years = int((2024 - 2006 + 1 + 1) / 3.7)
 ```
 
+Examine the years when CERF funding was provided and their associated funding amounts. This shows that there were 6 CERF years historically, but we can only target up to 5 to maintain the desired return period.
+
 ```{python}
+### Analyze Historical CERF Years
 # we see that there were 6 CERF years, but we can only hope to target up to 5, because otherwise the RP is too low
 df_stats[df_stats["cerf"]].groupby("year")[
     "Amount in US$"
 ].sum().reset_index().sort_values("Amount in US$", ascending=False)
 ```
 
+Calculate the theoretical maximum CERF funding amount by selecting the top CERF years based on funding amount. This provides a benchmark for evaluating trigger performance.
+
 ```{python}
+### Calculate Maximum Possible CERF Amount
+
 max_cerf_amount = (
     df_stats[df_stats["cerf"]]
     .groupby("year")["Amount in US$"]
@@ -72,11 +91,17 @@ max_cerf_amount = (
 )
 ```
 
+Set the target number of years (7) for the main impact analysis, corresponding to the 3.7-year return period over the full analysis period from 2000-2024.
+
 ```{python}
+### Set Target Years for Impact Analysis
 target_years = 7
 ```
 
+Calculate the theoretical maximum total affected population by selecting the top 7 years (target years) with the highest affected populations. This benchmark helps evaluate how well different trigger combinations capture high-impact events.
+
 ```{python}
+### Calculate Maximum Possible Total Affected
 max_total_affected = (
     df_stats.groupby("year")["Total Affected"]
     .sum()
@@ -85,13 +110,13 @@ max_total_affected = (
     .iloc[:target_years]
     .sum()["Total Affected"]
 )
-```
 
-```{python}
 max_total_affected
 ```
 
-### Add metrics and filter redundant values
+### Remove redundant optimizations
+
+Add new metrics to analyze the balance between forecast and observational triggers. These metrics help identify trigger combinations that favor one approach over the other or achieve balance between them.
 
 ```{python}
 df_metrics["n_years_diff"] = (
@@ -103,7 +128,10 @@ df_metrics["n_years_total"] = (
 )
 ```
 
+Create a utility function to remove redundant threshold combinations. For any given impact outcome, this function keeps only the lowest threshold values, eliminating trigger combinations that require unnecessarily high thresholds to achieve the same results.
+
 ```{python}
+### Define Function to Remove Redundant Thresholds
 def drop_redundant_thresholds(df, min_cols, id_cols, drop_high=True):
     for min_col in min_cols:
         unique_cols = [x for x in min_cols if x != min_col] + id_cols
@@ -113,7 +141,11 @@ def drop_redundant_thresholds(df, min_cols, id_cols, drop_high=True):
     return df
 ```
 
+Define the different types of columns for organizing the data: threshold columns (wind and rain thresholds), rainfall aggregation method columns, and impact metric columns.
+
 ```{python}
+### Define Column Categories
+
 thresh_cols = [
     "fcast_wind",
     "fcast_rain_thresh",
@@ -129,17 +161,28 @@ impact_cols = [
 ]
 ```
 
+Apply the redundancy removal function to keep only the most efficient trigger combinations - those that achieve the same impact outcomes with the lowest possible thresholds.
+
 ```{python}
 df_metrics_lowest = drop_redundant_thresholds(
     df_metrics, thresh_cols, impact_cols + rain_agg_cols
 )
 ```
 
+
+
+Display the filtered dataset of non-redundant trigger combinations to see the reduced set of viable options.
+
 ```{python}
+### Display Filtered Results
 df_metrics_lowest
 ```
 
-## Plotting functions
+## Visualization functions
+
+### Define Main Scatter Plot Function
+
+Create a comprehensive plotting function for visualizing trigger combinations. This function creates scatter plots with various filtering options to explore different aspects of the trigger optimization results, including forecast preference, balanced approaches, and theoretical maximum lines.
 
 ```{python}
 def plot_thresh_scatter(
@@ -199,11 +242,17 @@ def plot_thresh_scatter(
     return fig, ax
 ```
 
+Calculate the maximum wind speed across both forecast and observed data to set appropriate plot limits.
+
 ```{python}
+### Get Maximum Wind Speed
 max_wind = df_stats[["wind", "wind_obsv"]].max().max()
 ```
 
+Create a utility function that applies a specific trigger combination to the storm dataset, adding flags to indicate which storms would be triggered by forecast conditions and which by observed conditions.
+
 ```{python}
+### Define Function to Get Triggered Storms
 def get_triggered_storms(index):
     trig = df_metrics_lowest.loc[index]
 
@@ -217,6 +266,9 @@ def get_triggered_storms(index):
 
     return df_stats
 ```
+
+
+Create a comprehensive plotting function that visualizes individual trigger combinations. This function creates dual plots (forecast vs observed) showing storm positions relative to trigger thresholds, with bubble sizes representing impact levels and colors indicating CERF funding status.
 
 ```{python}
 def plot_selected_threshs(index, impact_col="Total Affected"):
@@ -355,6 +407,9 @@ def plot_selected_threshs(index, impact_col="Total Affected"):
     return fig, axs
 ```
 
+
+Create utility functions to format and display storm data in a clear, color-coded format. These functions help categorize CERF funding status and apply appropriate styling to data tables.
+
 ```{python}
 def set_cerf_str(row):
     if row["cerf"]:
@@ -375,7 +430,14 @@ def color_df(val):
         return "background-color: darkorange"
     else:
         return ""
+        
+```        
 
+
+Create a comprehensive table display function that shows which storms would be triggered by a specific trigger combination. The function creates a styled table with color coding for CERF status and trigger conditions, along with impact metrics.
+
+```{python}
+### Define Detailed Storm Display Function
 
 def disp_selected_threshs(index, impact_col="Total Affected"):
     trig_color = "gold"
@@ -420,11 +482,9 @@ def disp_selected_threshs(index, impact_col="Total Affected"):
 
 ## Plot possible combinations
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Balanced
+Generate a scatter plot showing the relationship between total affected population and CERF funding amounts for different trigger combinations. The horizontal line at 2.8e7 helps identify high-CERF threshold combinations.
 
 The cluster (option 1 in slides) where the same number of years are triggered with forecast and observational.
-<!-- #endregion -->
 
 ```{python}
 fig, ax = plot_thresh_scatter(
@@ -433,11 +493,21 @@ fig, ax = plot_thresh_scatter(
 ax.axhline(2.8e7)
 ```
 
+## Constrain options
+
+### Filter to Balanced Trigger Combinations
+
+Extract trigger combinations where the forecast and observational approaches trigger the same number of years (difference of 0), representing balanced trigger strategies.
+
 ```{python}
 df_metrics_balanced = df_metrics_lowest[
     df_metrics_lowest["n_years_diff_abs"] == 0
 ]
 ```
+
+### Filter to High-CERF Balanced Combinations
+
+From the balanced combinations, select those with high CERF funding amounts (>=2.8e7) to identify the best balanced trigger options.
 
 ```{python}
 df_metrics_balanced_high = df_metrics_balanced[
@@ -445,23 +515,34 @@ df_metrics_balanced_high = df_metrics_balanced[
 ]
 ```
 
+Show the filtered set of balanced trigger combinations with high CERF funding potential.
+
 ```{python}
 df_metrics_balanced_high
 ```
+
+## Plot Selected Balanced Trigger Combination
+
+Create detailed plots showing how the selected balanced trigger combination (index 60832) would perform, displaying both forecast and observational trigger conditions.
 
 ```{python}
 plot_selected_threshs(60832)
 ```
 
+Show which specific storms would be triggered by this balanced combination, with detailed impact metrics and CERF funding information.
+
 ```{python}
 disp_selected_threshs(60832)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Best Total Affected
+## Best Total Affected
 
 Cluster (option 2 in slides) maximizing impact
-<!-- #endregion -->
+
+
+### Create Scatter Plot for High-Impact Analysis
+
+Generate a scatter plot with a vertical line at 2.7e7 to identify trigger combinations that maximize total affected population.
 
 ```{python}
 fig, ax = plot_thresh_scatter(
@@ -470,29 +551,45 @@ fig, ax = plot_thresh_scatter(
 ax.axvline(2.7e7)
 ```
 
+Select trigger combinations that achieve high total affected population (>=2.7e7) to identify options that maximize humanitarian impact.
+
 ```{python}
+### Filter for High-Impact Trigger Combinations
 df_metrics_high_impact = df_metrics_lowest[
     df_metrics_lowest["Total Affected"] >= 2.7e7
 ]
 ```
 
+Show the filtered set of trigger combinations that maximize total affected population.
+
 ```{python}
+### Display High-Impact Combinations
 df_metrics_high_impact
 ```
+
+### Visualize High-Impact Trigger Combination
+
+Create detailed plots for the selected high-impact trigger combination (index 321743) showing both forecast and observational trigger conditions.
 
 ```{python}
 plot_selected_threshs(321743)
 ```
 
+Show which specific storms would be triggered by this high-impact combination, with detailed impact metrics.
+
 ```{python}
+### Display Storm Details for High-Impact Combination
 disp_selected_threshs(321743)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Best CERF amount
+## Best CERF amount
 
 Cluster (option 3 in slides) maximizing CERF amount
 <!-- #endregion -->
+
+### Create Scatter Plot for High-CERF Analysis
+
+Generate a scatter plot with a horizontal line at 3.3e7 to identify trigger combinations that maximize CERF funding capture.
 
 ```{python}
 fig, ax = plot_thresh_scatter(
@@ -501,38 +598,55 @@ fig, ax = plot_thresh_scatter(
 ax.axhline(3.3e7)
 ```
 
+Select trigger combinations that achieve high CERF funding amounts (>=3.3e7) to identify options that maximize funding capture.
+
 ```{python}
+### Filter for High-CERF Trigger Combinations
 df_metrics_high_cerf = df_metrics_lowest[
     df_metrics_lowest["Amount in US$"] >= 3.3e7
 ]
 ```
 
+Show the filtered set of trigger combinations that maximize CERF funding capture.
+
 ```{python}
+### Display High-CERF Combinations
 df_metrics_high_cerf
 ```
+
+### Visualize High-CERF Trigger Combination
+
+Create detailed plots for the selected high-CERF trigger combination (index 91667) showing both forecast and observational trigger conditions.
 
 ```{python}
 plot_selected_threshs(91667)
 ```
 
+Show which specific storms would be triggered by this high-CERF combination, with detailed impact metrics and funding information.
+
 ```{python}
+### Display Storm Details for High-CERF Combination
 disp_selected_threshs(91667)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Two years diff
+## Two years diff
 
-Looking at that little cluster with a two-year difference. Doesn't look that remarkable, so left out of slides
-<!-- #endregion -->
+Looking at that little cluster with a two-year difference. Doesn't look that remarkable, **so left out of slides**
+
+Explore trigger combinations with a two-year difference between forecast and observational triggers, focusing on those with high CERF funding potential.
 
 ```{python}
+### Analyze Two-Year Difference Combinations
 fig, ax = plot_thresh_scatter(
     "Total Affected", "Amount in US$", "n_years_diff_abs"
 )
 ax.axhline(3.0e7)
 ```
 
+Select trigger combinations with exactly 2 years difference between forecast and observational triggers, and high CERF funding amounts.
+
 ```{python}
+### Filter for Two-Year Difference Combinations
 df_twoyears = df_metrics_lowest[
     (df_metrics_lowest["n_years_diff_abs"] == 2)
     & (df_metrics_lowest["Amount in US$"] >= 3.0e7)
@@ -551,11 +665,9 @@ plot_selected_threshs(312998)
 disp_selected_threshs(312998)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### One year diff
+## One year diff
 
 Small cluster with second-best total impact (option 4 in slides)
-<!-- #endregion -->
 
 ```{python}
 fig, ax = plot_thresh_scatter(
@@ -583,11 +695,9 @@ plot_selected_threshs(321972)
 disp_selected_threshs(321972)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Forecast preference
+## Forecast preference
 
 Looking at how we can tilt probability even more towards forecast - basically just variants of option 1
-<!-- #endregion -->
 
 ```{python}
 fig, ax = plot_thresh_scatter(
@@ -622,14 +732,12 @@ df_fcast_only
 ```
 
 ```{python}
-plot_selected_threshs(25477)
+plot_selected_threshs(25477)  # not sure if worth leaving in book.
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true -->
-### Simplified triggers
+## Simplified triggers (Phase 1)
 
 Keeping only options with same rainfall aggregation, and same windspeed across forecast and observational
-<!-- #endregion -->
 
 ```{python}
 df_simplified = df_metrics_lowest[
@@ -688,10 +796,6 @@ plot_thresh_scatter(
 ```
 
 ```{python}
-df_metrics_lowest[df_metrics_lowest[]]
-```
-
-```{python}
 df_simplified.sort_values(
     ["Amount in US$", "Total Affected"],
     ascending=False,
@@ -710,7 +814,7 @@ disp_selected_threshs(321844)
 df_metrics_lowest
 ```
 
-### "Reasonable" triggers
+## "Reasonable" triggers (Phase 2)
 
 Trigger combos that meet:
 
@@ -782,7 +886,7 @@ df_metrics_reasonable_bestcerf[
 ]
 ```
 
-#### Option 1b
+### Option 1b
 
 Maximizing CERF, taking closest to balanced (`n_years_diff == 1`), and lowest obsv wind threshold.
 
@@ -794,7 +898,7 @@ plot_selected_threshs(13136)
 disp_selected_threshs(13136)
 ```
 
-#### Option 4
+### Option 4
 
 Taking the maximum impact just ends up with option 4 again
 

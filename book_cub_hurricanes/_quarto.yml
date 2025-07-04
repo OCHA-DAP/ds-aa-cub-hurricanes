@@ -17,6 +17,7 @@ book:
     - combine_imerg_ibtracs.qmd
     - plot_optimization.qmd
     - era5_soil_moisture.qmd
+    - threestage_trig_plot.qmd
     - summary.qmd
     - references.qmd
 
