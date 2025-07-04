@@ -769,6 +769,15 @@ fig, ax = plot_thresh_scatter(
     # color="n_years_diff",
     # zorder_rev=False,
 )
+```
+
+```python
+fig, ax = plot_thresh_scatter(
+    df=df_metrics_reasonable,
+    zero_intercept=True,
+    # color="n_years_diff",
+    # zorder_rev=False,
+)
 ax.axhline(2.8e7)
 ax.axvline(2.55e7)
 ```

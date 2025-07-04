@@ -14,6 +14,12 @@ jupyter:
 ---
 
 # Three-stage trigger optimization
+<!-- markdownlint-disable MD013 -->
+Iterate over options to get trigger options that meet 3.7-yr RP. Variables iterated over:
+
+- wind speed threshold (while storm is in, or is forecast to be in, the ZMA)
+- rainfall aggregation (`mean`, or quantiles 50, 80, 90, 95)
+- rainfall threshold (two-day sum per pixel during the period that the storm is in, or is forecast to be in, the ZMA, ±1 day)
 
 ```python
 %load_ext jupyter_black
@@ -33,6 +39,8 @@ from src.datasources import ibtracs
 from src.datasources.ibtracs import knots2cat
 from src.constants import *
 ```
+
+## Load and combine data
 
 ```python
 df_storms = ibtracs.load_storms()
@@ -176,7 +184,6 @@ count = 0
 for fcast_wind_thresh in tqdm(
     df_stats["wind"].unique(), disable=tqdm_level < 1
 ):
-    # continue
     for obsv_wind_thresh in tqdm(
         df_stats["wind_obsv"].unique(), disable=tqdm_level < 2
     ):
@@ -193,14 +200,16 @@ for fcast_wind_thresh in tqdm(
                 for obsv_rain_col in obsv_rain_cols:
                     for obsv_rain_thresh in df_stats[obsv_rain_col].unique():
                         count += 1
-                        # continue
+                        # check years triggered with forecast
                         triggered_fcast = (
                             df_stats["wind"] >= fcast_wind_thresh
                         ) & (df_stats[fcast_rain_col] >= fcast_rain_thresh)
+                        # check years triggered with forecast
                         triggered_obsv = (
                             df_stats["wind_obsv"] >= obsv_wind_thresh
                         ) & (df_stats[obsv_rain_col] >= obsv_rain_thresh)
 
+                        # check years triggered with either
                         dff_triggered = df_stats[
                             triggered_fcast | triggered_obsv
                         ]
@@ -234,14 +243,6 @@ df_metrics.sort_values("Total Affected", ascending=False)
 ```
 
 ```python
-df_metrics.sort_values("cerf", ascending=False)
-```
-
-```python
-df_metrics[df_metrics["Total Affected"] == df_metrics["Total Affected"].max()]
-```
-
-```python
 blob_name = (
     f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_trigger_metrics.parquet"
 )
@@ -250,7 +251,7 @@ stratus.upload_parquet_to_blob(df_metrics, blob_name)
 
 ## Using `optima`
 
-Can ignore for now, didn't use
+Can ignore for now, didn't use, was just a way to try and speed things up. But I don't think the problem is well suited to this approach
 
 ```python
 # --- Storage for all results ---
