@@ -8,18 +8,21 @@ Iterate over options to get trigger options that meet 3.7-yr RP. Variables itera
 - rainfall aggregation (`mean`, or quantiles 50, 80, 90, 95)
 - rainfall threshold (two-day sum per pixel during the period that the storm is in, or is forecast to be in, the ZMA, ±1 day)
 
+
 ```{python}
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
 ```
 
+
 ```{python}
 import ocha_stratus as stratus
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-#import optuna
+
+# import optuna
 from tqdm.auto import tqdm
 
 from src.datasources import ibtracs
@@ -28,6 +31,10 @@ from src.constants import *
 ```
 
 ## Load and combine data
+
+### Load Storm Data
+
+We load historical storm data from the IBTrACS database, filtering for North Atlantic (NA) storms from 2000 onwards. We extract key identifiers including storm ID, ATCF ID, and name, and standardize the ATCF IDs to lowercase.
 
 ```{python}
 df_storms = ibtracs.load_storms()
@@ -38,6 +45,10 @@ df_storms = df_storms[
 ][cols]
 df_storms["atcf_id"] = df_storms["atcf_id"].str.lower()
 ```
+
+### Load Impact Data
+
+We load impact data from EM-DAT and CERF databases, which contain information about humanitarian impacts including affected populations, deaths, damage costs, and CERF funding. We create a CERF flag to identify storms that received CERF funding and apply a manual correction for Hurricane Ike's affected population.
 
 ```{python}
 blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2024.parquet"
@@ -55,6 +66,10 @@ df_impact = df_impact[cols]
 df_impact.loc[df_impact["sid"] == IKE, "Total Affected"] = 2.6e6
 ```
 
+### Load Observed Storm Statistics with Quantiles
+
+We load observed storm statistics that include rainfall quantiles (50th, 80th, 90th, 95th percentiles) for the Zone of Maximum Activity (ZMA). This dataset contains detailed rainfall patterns for each storm.
+
 ```{python}
 blob_name = (
     f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_imerg_quantiles.parquet"
@@ -63,11 +78,19 @@ blob_name = (
 df_stats_obsv = stratus.load_parquet_from_blob(blob_name)
 ```
 
+### Load Observed Storm Statistics (Mean Only)
+
+We also load a simplified version of the storm statistics that contains only mean rainfall values. This will be merged with the quantile data to provide a complete picture of rainfall patterns.
+
 ```{python}
 blob_name = f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats.parquet"
 
 df_stats_obsv_meanonly = stratus.load_parquet_from_blob(blob_name)
 ```
+
+### Clean Observed Statistics
+
+We clean the observed statistics by removing unnecessary columns that contain totals, above-threshold values, 3-day rolling averages, and landfall-specific data, as these are not needed for our optimization analysis.
 
 ```{python}
 drop_cols = [
@@ -78,11 +101,19 @@ drop_cols = [
 df_stats_obsv = df_stats_obsv.drop(columns=drop_cols)
 ```
 
+### Merge Observed Statistics
+
+We merge the quantile-based observed statistics with the mean-only dataset to get comprehensive rainfall data. We also remove validation columns that are not needed for the optimization process.
+
 ```{python}
 df_stats_obsv = df_stats_obsv.merge(
     df_stats_obsv_meanonly[["sid", "max_roll2_mean"]]
 ).drop(columns=[x for x in df_stats_obsv if "valid" in x])
 ```
+
+### Load Forecast Data
+
+We load forecast data from the National Hurricane Center (NHC) monitors that have been combined with CHIRPS-GEFS rainfall forecasts. This data provides forecast-based storm characteristics that can be used for early warning triggers.
 
 ```{python}
 blob_name = blob_name = (
@@ -90,6 +121,10 @@ blob_name = blob_name = (
 )
 df_monitors_fcast = stratus.load_parquet_from_blob(blob_name)
 ```
+
+### Process Forecast Statistics
+
+We process the forecast monitoring data by filtering for "action" level forecasts (the most severe category), then group by storm ID to get the maximum forecast values for each storm. We remove unnecessary time and category columns.
 
 ```{python}
 df_stats_fcast = (
@@ -101,6 +136,10 @@ df_stats_fcast = (
     .drop(columns=["issue_time", "lt_name"])
 )
 ```
+
+### Combine All Datasets
+
+We create a comprehensive dataset by merging impact data, storm metadata, forecast statistics, and observed statistics. We rename observed statistics columns to distinguish them from forecast data (adding "_obsv" suffix) and extract the year from storm IDs. Finally, we clean up data types by filling missing values and converting appropriate columns to integers.
 
 ```{python}
 df_stats = (
@@ -129,16 +168,30 @@ df_stats[int_cols] = df_stats[int_cols].fillna(0)
 df_stats[int_cols] = df_stats[int_cols].astype(int)
 ```
 
+### Save Combined Dataset
+
+We save the combined forecast and observed statistics dataset to cloud storage for future use and analysis.
+
 ```{python}
+# | eval: false
+
 blob_name = f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_stats.parquet"
 stratus.upload_parquet_to_blob(df_stats, blob_name)
 ```
 
 ## Optimization
 
+### Set Target Return Period
+
+We set our target to find trigger combinations that activate exactly 7 times over the historical period, corresponding to a 3.7-year return period (assuming roughly 26 years of data from 2000-2025).
+
 ```{python}
 target_years = 7
 ```
+
+### Define Impact Metrics
+
+We define the impact columns that will be used to evaluate the effectiveness of different trigger combinations. These include affected populations, deaths, economic damage, CERF funding amounts, and a binary CERF flag.
 
 ```{python}
 impact_cols = [
@@ -150,19 +203,48 @@ impact_cols = [
 ]
 ```
 
+### Define Forecast Rainfall Aggregation Methods
+
+We specify the rainfall aggregation methods to test for forecast data. This includes the mean and specific quantiles (50th, 80th, and 95th percentiles) that represent different levels of rainfall intensity.
+
 ```{python}
 # fcast_rain_cols = ["mean"]
 # fcast_rain_cols = ["mean"] + [f"q{x}" for x in [50, 80, 90, 95, 99]]
 fcast_rain_cols = ["mean"] + [f"q{x}" for x in [50, 80, 95]]
 ```
 
+### Define Observed Rainfall Aggregation Methods
+
+We create corresponding observed rainfall column names by adding the "_obsv" suffix to match the forecast column names.
+
 ```{python}
 obsv_rain_cols = [x + "_obsv" for x in fcast_rain_cols]
 ```
 
+### Display Forecast Rainfall Columns
+
+We display the forecast rainfall aggregation methods that will be tested in the optimization.
+
 ```{python}
 fcast_rain_cols
 ```
+
+### Comprehensive Trigger Optimization
+
+This is the main optimization loop that systematically tests all possible combinations of trigger parameters. We iterate through:
+
+1. **Wind speed thresholds** for both forecast and observed data
+2. **Rainfall aggregation methods** (mean, 50th, 80th, 95th percentiles)  
+3. **Rainfall thresholds** for each aggregation method
+
+For each combination, we:
+- Check if the forecast-based trigger would activate
+- Check if the observed-based trigger would activate  
+- Count storms that would trigger either forecast OR observed conditions
+- Only keep combinations that trigger exactly 7 times (target return period)
+- Calculate total impact metrics for those triggered storms
+
+The optimization includes an early stopping mechanism: if wind thresholds alone don't yield enough years, we skip further rainfall filtering since it would only reduce the count further.
 
 ```{python}
 rows = []
@@ -217,19 +299,37 @@ for fcast_wind_thresh in tqdm(
                             rows.append(row_out)
 ```
 
+### Display Total Iterations
+
+We display the total number of parameter combinations tested during the optimization process.
+
 ```{python}
 count
 ```
+
+### Compile Optimization Results
+
+We convert the collected results from the optimization loop into a pandas DataFrame for analysis. Each row represents a valid trigger combination that activates exactly 7 times.
 
 ```{python}
 df_metrics = pd.concat(rows, axis=1).T
 ```
 
+### Display Top Results by Total Affected
+
+We sort and display the optimization results by total affected population (descending) to identify the trigger combinations that would have captured the storms with the highest humanitarian impact.
+
 ```{python}
 df_metrics.sort_values("Total Affected", ascending=False)
 ```
 
+### Save Optimization Results
+
+We save the complete optimization results to cloud storage for further analysis and decision-making about trigger thresholds.
+
 ```{python}
+# | eval: false
+
 blob_name = (
     f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_trigger_metrics.parquet"
 )
@@ -239,6 +339,10 @@ stratus.upload_parquet_to_blob(df_metrics, blob_name)
 ## Using `optima` (Experimental)
 
 Can ignore for now, didn't use, was just a way to try and speed things up. But I don't think the problem is well suited to this approach
+
+### Experimental Optuna Implementation
+
+This section contains an experimental implementation using the Optuna optimization library. The approach attempts to use Bayesian optimization to find optimal trigger combinations more efficiently than brute force, but it wasn't used in the final analysis as the discrete nature of the problem makes it less suitable for this optimization approach.
 
 ```{python}
 #| eval: false
@@ -319,11 +423,19 @@ print("\n📊 Optimization results:")
 print(results_df)
 ```
 
+### Plot Optimization History
+
+This code visualizes the optimization progress over iterations, showing how the objective function value changes as Optuna explores different parameter combinations.
+
 ```{python}
 #| eval: false
 
 optuna.visualization.plot_optimization_history(study).show()
 ```
+
+### Display Results for Each Impact Column
+
+This code loops through the optimization results for each impact column and displays the storms that would have been triggered by the optimal parameter combination. It creates a trigger flag and sorts storms by their impact levels to show which storms would have been captured.
 
 ```{python}
 #| eval: false
@@ -347,8 +459,12 @@ for impact_col, row in results_df.set_index("impact_col").iterrows():
     display(df_disp.sort_values(impact_col, ascending=False))
 ```
 
+### Set Progress Bar Detail Level
+
+This variable controls the verbosity of progress bars during optimization. Setting it to 1 enables progress tracking for the main optimization loop.
+
 ```{python}
-#| eval: false
+# | eval: false
 
 tqdm_level = 1
 ```
