@@ -1,4 +1,8 @@
-#' this code taken from `ds-adhoc-cuba`
+#' this code taken from `ds-adhoc-cuba` repo where daily means were downloaded
+#' for a convex hull surrounding cuba. In this we do it directly on 
+#' the GAUL feature collection which is already an asset on GEE. It takes
+#' extremely long to run - this is probably due to the polygon complexity
+#' for cuba adm0.
 
 library(rgee)
 library(tidyverse)
@@ -8,8 +12,9 @@ library(here)
 library(sf)
 library(cumulus)
 
-
-ee_Initialize(project = "ee-zackarno")
+# user may need to follow `{rgee}` instructions to authenticate and initialize
+# properly if they haven't used `{rgee}` before
+ee_Initialize() 
 
 
 cat("loading Cuba boundary from FAO GAUL\n")
