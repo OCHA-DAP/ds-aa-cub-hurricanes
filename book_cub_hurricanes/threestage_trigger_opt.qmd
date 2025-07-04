@@ -116,7 +116,7 @@ df_stats_obsv = df_stats_obsv.merge(
 We load forecast data from the National Hurricane Center (NHC) monitors that have been combined with CHIRPS-GEFS rainfall forecasts. This data provides forecast-based storm characteristics that can be used for early warning triggers.
 
 ```{python}
-blob_name = blob_name = (
+blob_name =  (
     f"{PROJECT_PREFIX}/processed/nhc/monitors_nhc_chirpsgefs.parquet"
 )
 df_monitors_fcast = stratus.load_parquet_from_blob(blob_name)
@@ -199,7 +199,7 @@ impact_cols = [
     "Total Deaths",
     "Total Damage, Adjusted ('000 US$)",
     "Amount in US$",
-    "cerf",
+    "cerf"
 ]
 ```
 
@@ -247,8 +247,11 @@ For each combination, we:
 The optimization includes an early stopping mechanism: if wind thresholds alone don't yield enough years, we skip further rainfall filtering since it would only reduce the count further.
 
 ```{python}
-rows = []
+#| eval: false
 
+# once confirmed that this loop runs in aboout 15 minutes or so on my computer, I just set `eval: false` for future runs and book rendering. We will load the result later from the written parquet.
+rows = []
+tqdm_level = 1
 count = 0
 for fcast_wind_thresh in tqdm(
     df_stats["wind"].unique(), disable=tqdm_level < 1
@@ -304,36 +307,33 @@ for fcast_wind_thresh in tqdm(
 We display the total number of parameter combinations tested during the optimization process.
 
 ```{python}
+#| eval: false
 count
 ```
 
 ### Compile Optimization Results
 
-We convert the collected results from the optimization loop into a pandas DataFrame for analysis. Each row represents a valid trigger combination that activates exactly 7 times.
+ - We convert the collected results from the optimization loop into a pandas DataFrame for analysis. Each row represents a valid trigger combination that activates exactly 7 times
+
+- We sort and display the optimization results by total affected population (descending) to identify the trigger combinations that would have captured the storms with the highest humanitarian impact.
+
+- We save the complete optimization results to cloud storage for further analysis and decision-making about trigger thresholds.
 
 ```{python}
+#| eval: false
 df_metrics = pd.concat(rows, axis=1).T
-```
-
-### Display Top Results by Total Affected
-
-We sort and display the optimization results by total affected population (descending) to identify the trigger combinations that would have captured the storms with the highest humanitarian impact.
-
-```{python}
 df_metrics.sort_values("Total Affected", ascending=False)
-```
-
-### Save Optimization Results
-
-We save the complete optimization results to cloud storage for further analysis and decision-making about trigger thresholds.
-
-```{python}
-# | eval: false
 
 blob_name = (
     f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_trigger_metrics.parquet"
 )
 stratus.upload_parquet_to_blob(df_metrics, blob_name)
+```
+
+
+
+```{python}
+df_metrics = stratus.load_parquet_from_blob(blob_name)
 ```
 
 ## Using `optima` (Experimental)
