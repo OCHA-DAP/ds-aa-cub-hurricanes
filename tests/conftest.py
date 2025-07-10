@@ -2,12 +2,13 @@
 Test configuration and fixtures for monitoring tests.
 """
 
-import pytest
-import pandas as pd
-import geopandas as gpd
-from unittest.mock import Mock, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock
+
+import geopandas as gpd
 import numpy as np
+import pandas as pd
+import pytest
 
 from src.monitoring.monitoring_utils import (
     CubaHurricaneMonitor,

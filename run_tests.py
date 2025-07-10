@@ -4,9 +4,9 @@ Test runner script for the Cuba hurricane monitoring system.
 Provides convenient ways to run different types of tests.
 """
 
-import sys
-import subprocess
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 

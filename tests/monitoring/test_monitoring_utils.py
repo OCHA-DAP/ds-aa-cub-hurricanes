@@ -2,11 +2,12 @@
 Unit tests for CubaHurricaneMonitor utility methods.
 """
 
-import pytest
-import pandas as pd
-import geopandas as gpd
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
+
+import geopandas as gpd
+import pandas as pd
+import pytest
 
 from src.monitoring.monitoring_utils import CubaHurricaneMonitor
 

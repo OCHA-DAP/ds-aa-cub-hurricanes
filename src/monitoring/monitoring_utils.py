@@ -6,13 +6,14 @@ Each function has a single responsibility and is easy to test and understand.
 
 import re
 from abc import ABC, abstractmethod
-from typing import Literal, Dict, Optional
-import pandas as pd
+from typing import Dict, Literal, Optional
+
 import geopandas as gpd
+import ocha_stratus as stratus
+import pandas as pd
 
 from src.constants import D_THRESH, NUMERIC_NAME_REGEX, PROJECT_PREFIX, THRESHS
-from src.datasources import codab, nhc, imerg
-import ocha_stratus as stratus
+from src.datasources import codab, imerg, nhc
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)

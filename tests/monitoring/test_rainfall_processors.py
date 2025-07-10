@@ -2,10 +2,11 @@
 Unit tests for rainfall processors.
 """
 
-import pytest
-import pandas as pd
-from unittest.mock import patch
 from datetime import datetime, timezone
+from unittest.mock import patch
+
+import pandas as pd
+import pytest
 
 from src.monitoring.monitoring_utils import IMERGProcessor
 

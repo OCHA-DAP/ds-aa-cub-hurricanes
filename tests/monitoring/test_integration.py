@@ -3,9 +3,10 @@ Integration tests for the monitoring system.
 These tests require external dependencies and data sources.
 """
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
-from unittest.mock import patch, MagicMock
+import pytest
 
 from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
 
