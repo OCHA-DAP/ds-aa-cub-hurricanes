@@ -3,7 +3,7 @@ Integration tests for the monitoring system.
 These tests require external dependencies and data sources.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -124,8 +124,12 @@ class TestMonitoringIntegration:
         assert result.empty
 
     @pytest.mark.integration
-    def test_configuration_validation(self):
+    @patch("src.datasources.codab.load_codab_from_blob")
+    def test_configuration_validation(self, mock_codab, mock_codab_data):
         """Test that the monitoring system validates its configuration."""
+        # Mock the codab loading
+        mock_codab.return_value = mock_codab_data
+
         # Test default configuration
         monitor = create_cuba_hurricane_monitor()
         assert monitor.rainfall_processor is not None
@@ -174,9 +178,13 @@ class TestDataValidation:
             assert result["action_trigger"].dtype == "bool"
 
     @pytest.mark.slow
-    def test_performance_benchmarks(self):
+    @patch("src.datasources.codab.load_codab_from_blob")
+    def test_performance_benchmarks(self, mock_codab, mock_codab_data):
         """Test performance benchmarks for large datasets."""
         import time
+
+        # Mock the codab loading
+        mock_codab.return_value = mock_codab_data
 
         # This would be a placeholder for performance testing
         # In a real scenario, you'd test with larger datasets
@@ -192,3 +200,6 @@ class TestDataValidation:
         assert (
             processing_time < 5.0
         ), f"Initialization took too long: {processing_time}s"
+
+        # Basic verification that monitor was created
+        assert monitor is not None

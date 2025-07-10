@@ -112,16 +112,30 @@ class TestModuleIntegration:
         assert isinstance(result, pd.DataFrame)
         # May be empty if no storms pass the filtering criteria
 
-    @patch.object(CubaHurricaneMonitor, "update_monitoring")
     @patch("src.monitoring.monitoring_utils.create_cuba_hurricane_monitor")
-    def test_main_function(self, mock_create_monitor, mock_update):
+    def test_main_function(self, mock_create_monitor):
         """Test the main function."""
+        from unittest.mock import MagicMock
+
         from src.monitoring.monitoring_utils import main
 
-        mock_monitor = CubaHurricaneMonitor(rainfall_processor=None)
+        # Create a mock monitor instead of a real instance
+        mock_monitor = MagicMock(spec=CubaHurricaneMonitor)
         mock_create_monitor.return_value = mock_monitor
 
         main()
 
         mock_create_monitor.assert_called_once_with(rainfall_source="imerg")
-        assert mock_update.call_count == 2  # obsv and fcast
+        # Check that update_monitoring was called twice
+        assert mock_monitor.update_monitoring.call_count == 2
+
+        # Verify the specific calls
+        expected_calls = [
+            (("obsv",), {"clobber": False}),
+            (("fcast",), {"clobber": False}),
+        ]
+        actual_calls = [
+            (call.args, call.kwargs)
+            for call in mock_monitor.update_monitoring.call_args_list
+        ]
+        assert actual_calls == expected_calls
