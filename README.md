@@ -1,5 +1,10 @@
 # Cuba Anticipatory Action: Hurricanes
 
+[![CI](https://github.com/OCHA-DAP/ds-aa-cub-hurricanes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCHA-DAP/ds-aa-cub-hurricanes/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/OCHA-DAP/ds-aa-cub-hurricanes/graph/badge.svg)](https://codecov.io/gh/OCHA-DAP/ds-aa-cub-hurricanes)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+
 Analysis for Cuba Hurricanes Anticipatory Action framework.
 
 ## Developer Setup
@@ -61,3 +66,60 @@ You can run all hooks against all your files using
 ```
 pre-commit run --all-files
 ```
+
+## Testing
+
+This project uses pytest for testing with comprehensive unit and integration test coverage.
+
+### Running Tests
+
+Run all tests:
+```bash
+pytest tests/
+```
+
+Run with coverage:
+```bash
+pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
+```
+
+Run only unit tests:
+```bash
+pytest tests/ -m unit
+```
+
+Run only integration tests:
+```bash
+pytest tests/ -m integration
+```
+
+### Using the Makefile
+
+For convenience, you can use the provided Makefile commands:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Run linting
+make lint
+
+# Run formatting
+make format
+
+# Run all quality checks
+make quality
+```
+
+### Code Quality
+
+The project enforces code quality through:
+- **Black** for code formatting
+- **isort** for import sorting
+- **pytest** for testing with >65% coverage
+- **GitHub Actions CI** for automated quality checks
+
+All code is automatically checked for formatting, import sorting, and test coverage in the CI pipeline.

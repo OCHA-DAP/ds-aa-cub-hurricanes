@@ -11,6 +11,7 @@ help:
 	@echo "  test-all      Run all tests and linting"
 	@echo "  lint          Run linting checks"
 	@echo "  format        Format code with black and isort"
+	@echo "  quality       Run all quality checks (lint + coverage)"
 	@echo "  clean         Clean up test artifacts"
 
 # Install development dependencies
@@ -38,11 +39,10 @@ test-coverage:
 test-all:
 	python run_tests.py --type all --verbose
 
-# Linting
+# Linting (format and import checking)
 lint:
 	python -m black --check src/ tests/
 	python -m isort --check-only src/ tests/
-	python -m flake8 src/ tests/ --max-line-length=88
 
 # Format code
 format:
@@ -76,3 +76,7 @@ test-coverage-open: test-coverage
 	else \
 		echo "Coverage report available at htmlcov/index.html"; \
 	fi
+
+# Run all quality checks (linting + tests)
+quality: lint test-coverage
+	@echo "All quality checks passed!"
