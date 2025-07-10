@@ -1,0 +1,286 @@
+# Cuba Hurricane Monitoring
+
+This module provides a modular, class-based approach to monitoring NHC (National Hurricane Center) hurricane tracks for Cuba. It includes optional rainfall processing (IMERG) with a clean, extensible architecture that supports multiple data sources.
+
+## Features
+
+- **Clean Class-Based Design**: Uses `CubaHurricaneMonitor` class for organized functionality
+- **NHC Data Focus**: Processes both observational and forecast hurricane tracks
+- **Rainfall Integration**: Optional IMERG rainfall processing for enhanced monitoring
+- **Modular Architecture**: Pluggable rainfall processors for different data sources
+- **Backfilling Support**: Can reprocess historical data with `clobber` parameter
+- **Distance Threshold Analysis**: Identifies tracks that pass within specified distance of Cuba
+- **Duplicate Handling**: Removes duplicate track entries intelligently
+- **Atlantic Basin Focus**: Filters for Atlantic basin storms relevant to Cuba
+
+## Files
+
+- `monitoring_utils.py`: Main monitoring class with modular rainfall processing
+- This notebook: Usage examples and documentation
+
+## Quick Start
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Initialize monitor with IMERG rainfall processing
+monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# Alternative: Wind-only monitoring (no rainfall)
+# monitor = create_cuba_hurricane_monitor(rainfall_source=None)
+```
+
+```{python}
+ck = monitor.prepare_monitoring_data("fcast", clobber=True)
+ck_obsv = monitor.prepare_monitoring_data("obsv", clobber=False)
+```
+
+
+
+## Workflow to Update Data
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor with rainfall processing
+monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# Update monitoring data
+monitor.update_monitoring("obsv", clobber=False)
+monitor.update_monitoring("fcast", clobber=False)
+```
+
+### Advanced Usage
+```{python}
+from src.monitoring.monitoring_utils import CubaHurricaneMonitor, IMERGProcessor
+
+# Direct instantiation with custom rainfall processor
+rainfall_processor = IMERGProcessor()
+monitor = CubaHurricaneMonitor(rainfall_processor=rainfall_processor)
+
+# Wind-only monitoring (no rainfall)
+monitor_wind_only = CubaHurricaneMonitor(rainfall_processor=None)
+```
+
+
+
+## Usage Modes
+
+### Command Line Usage
+
+```{bash}
+#| eval: False
+
+# NORMAL OPERATIONS (clobber=False - default)
+# Run the main monitoring script with IMERG rainfall processing
+python -m src.monitoring.monitoring_utils
+
+# This is equivalent to:
+python -c "
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+monitor = create_cuba_hurricane_monitor(rainfall_source='imerg')
+monitor.update_monitoring('obsv', clobber=False)
+monitor.update_monitoring('fcast', clobber=False)
+"
+```
+
+## Interactive usage
+
+You can load and inspect data without fear of saving/overwriting
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor with IMERG rainfall processing
+monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# SAFE APPROACH - Separate processing from saving
+# Step 1: Process without saving
+df_prepared = monitor.prepare_monitoring_data("obsv", clobber=False)
+
+# Step 2: Inspect results
+print(f"Prepared {len(df_prepared)} records")
+print(df_prepared.head())
+```
+
+then you have separate methods for saving that data
+```{python}
+# Step 3: Save only when ready
+monitor.save_monitoring_data(df_prepared, "obsv")
+```
+
+but as stated earlier you can also do it all at once.
+```{python}
+# CONVENIENCE METHOD (still available)
+# This combines prepare + save in one call
+df_result = monitor.update_monitoring("fcast", clobber=False)
+```
+
+## Key Methods
+
+### `CubaHurricaneMonitor` Class
+
+- `__init__(rainfall_processor=None)`: Initializes with Cuba administrative boundaries and optional rainfall processor
+- `process_cuba_observational_tracks(clobber=False)`: Process observational NHC tracks for Cuba
+- `process_cuba_forecast_tracks(clobber=False)`: Process NHC forecast tracks for Cuba
+- `prepare_monitoring_data(monitoring_type, clobber=False)`: **NEW** - Process data without saving
+- `save_monitoring_data(df, monitoring_type)`: **NEW** - Save prepared data to storage
+- `update_monitoring(monitoring_type, clobber=False)`: Convenience method (prepare + save)
+
+### Factory Function
+
+- `create_cuba_hurricane_monitor(rainfall_source="imerg")`: Creates monitor with specified rainfall processor
+
+### Internal Helper Methods
+
+- `_create_cuba_monitor_id()`: Creates standardized monitoring IDs for Cuba
+- `_should_skip_existing()`: Checks if data already exists
+- `_remove_track_duplicates()`: Handles duplicate track entries
+- `_load_existing_monitoring()`: Loads existing monitoring data
+- `_save_monitoring_data()`: Saves monitoring data to blob storage
+
+## Understanding Backfilling (`clobber` Parameter)
+
+### What is Backfilling?
+
+Backfilling is the process of reprocessing historical data, typically when:
+1. **Code improvements are made** - You want to apply new logic to existing data
+2. **Data corruption occurs** - Some stored data becomes corrupted and needs regeneration
+3. **Schema changes happen** - Output format changes require reprocessing
+4. **Bug fixes are applied** - Previously processed data contains errors that need correction
+
+### How the `clobber` Parameter Works
+
+The `clobber` parameter controls whether existing monitoring data should be:
+- **`clobber=False` (Default)**: Skip data that already exists, only process new data
+- **`clobber=True` (Backfill Mode)**: Replace all existing data with freshly processed data
+
+### Normal Operation (`clobber=False`)
+
+```{python}
+# | eval: false
+
+monitor.update_monitoring("obsv", clobber=False)
+```
+
+**Process:**
+1. Load existing monitoring data from blob storage
+2. For each storm track, check if monitoring point already exists using `monitor_id`
+3. **Skip** processing if `monitor_id` already exists in stored data
+4. Only process new/missing monitoring points
+5. **Append** new data to existing data
+6. Save combined dataset
+
+**When to use:** Regular daily/hourly updates to add new storm data
+
+### Backfill Mode (`clobber=True`)
+
+```{python}
+# | eval: false
+
+monitor.update_monitoring("obsv", clobber=True)
+```
+
+**Process:**
+1. Load ALL available NHC data (both historical and recent)
+2. Process **every** storm track, regardless of whether it was processed before
+3. **Ignore** existing monitoring data completely
+4. **Replace** entire monitoring dataset with newly processed data
+5. Save complete regenerated dataset
+
+**When to use:**
+- After bug fixes to reprocess all historical data
+- When output schema changes
+- To apply new analysis logic to historical storms
+- After data corruption issues
+
+
+### Performance Considerations
+
+- **Normal Mode**: Fast, only processes new data
+- **Backfill Mode**: Slow, processes all historical data (could be hundreds of storms)
+- **Data Volume**: Backfill processes entire NHC historical dataset vs. just recent data
+
+### Safety Note
+
+⚠️ **Warning**: `clobber=True` will **completely replace** existing monitoring data. 
+Make sure you have backups if the existing data is valuable, as this operation cannot be undone.
+
+
+### Key Benefits
+
+1. **Safe Experimentation**: Process data without fear of overwriting files
+2. **Easy Debugging**: Inspect intermediate results before saving
+3. **Better Testing**: Test processing logic separately from I/O operations
+4. **Flexible Workflows**: Reuse processing logic in different contexts
+
+### Development Workflow Examples
+
+#### Safe Backfill Development
+
+Code chunk below shows how you can inspect backfill operations before overwriting
+```{python}
+#| eval: false
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# During development - process without saving
+df_new = monitor.prepare_monitoring_data("obsv", clobber=True)
+
+# Debug and inspect
+print(f"Would generate {len(df_new)} records")
+print(df_new.describe())
+
+# Only save when ready
+if input("Save data? (y/n): ").lower() == 'y':
+    monitor.save_monitoring_data(df_new, "obsv")
+```
+
+## Data Output
+
+Both observational and forecast processing generate DataFrames with these columns:
+
+### Observational Data
+- `monitor_id`: Unique identifier for the monitoring point
+- `atcf_id`: ATCF storm identifier
+- `name`: Storm name
+- `issue_time`: Time of the data point
+- `min_dist`: Minimum distance to Cuba (km)
+- `closest_intensity`: Storm intensity at closest approach
+- `passes_distance_threshold`: Boolean indicating if storm passes within threshold
+- `rain_2_days_max`: Maximum 2-day rainfall at closest approach (if rainfall processing enabled)
+
+### Forecast Data
+- `monitor_id`: Unique identifier for the monitoring point
+- `atcf_id`: ATCF storm identifier
+- `name`: Storm name
+- `issue_time`: Forecast issuance time
+- `time_to_closest`: Lead time to closest approach
+- `min_dist`: Minimum distance to Cuba (km)
+- `max_intensity`: Maximum forecast intensity
+- `passes_distance_threshold`: Boolean indicating if storm passes within threshold
+- `rain_2_days_max`: Maximum 2-day rainfall forecast (if rainfall processing enabled)
+
+## Configuration
+
+The system uses constants from `src.constants`:
+- `D_THRESH`: Distance threshold for relevant storms
+- `NUMERIC_NAME_REGEX`: Pattern for identifying numeric storm names
+
+## Dependencies
+
+- `pandas`: Data manipulation
+- `geopandas`: Geospatial operations
+- `src.datasources.nhc`: NHC data loading
+- `src.datasources.imerg`: IMERG rainfall data (optional)
+- `src.datasources.codab`: Cuba boundary data
+- `src.utils.blob`: Blob storage operations
+- `src.utils.logging`: Logging utilities
+
+
+

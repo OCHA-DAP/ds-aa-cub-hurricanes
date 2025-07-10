@@ -48,3 +48,18 @@ def open_imerg_raster_dates(dates, disable_progress_bar: bool = True):
     if len(error_dates) > 0:
         print(f"Error dates: {error_dates}")
     return da
+
+
+def load_imerg_recent(recent: bool = False):
+    query = """
+    SELECT valid_date, mean
+    FROM public.imerg
+    WHERE pcode = 'HT'
+    """
+    df = pd.read_sql(
+        query, stratus.get_engine(stage="prod"), parse_dates=["valid_date"]
+    )
+    df = df.rename(columns={"valid_date": "date"})
+    if recent:
+        df = df[df["date"] >= "2024-06-01"]
+    return df
