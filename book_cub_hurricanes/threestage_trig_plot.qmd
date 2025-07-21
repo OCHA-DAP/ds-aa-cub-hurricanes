@@ -1,5 +1,3 @@
-
-
 ## Visualize Options (Forecast + Observational)
 
 ## Intro
@@ -18,7 +16,6 @@ And we are looking to optimize for (maximizing):
 - Sum of `Amount in US$` from CERF for the triggered storms
 
 ```{python}
-%load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
 ```
@@ -29,6 +26,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from src.datasources import ibtracs
 from src.datasources.ibtracs import knots2cat
 from src.constants import *
 ```
@@ -531,9 +529,6 @@ plot_selected_threshs(60832)
 
 Show which specific storms would be triggered by this balanced combination, with detailed impact metrics and CERF funding information.
 
-```{python}
-disp_selected_threshs(60832)
-```
 
 ## Best Total Affected
 
@@ -918,4 +913,336 @@ plot_selected_threshs(321972)
 
 ```{python}
 disp_selected_threshs(321972)
+```
+
+## Chosen Trigger With Readiness
+
+As of July 2025 option 1b was chosen by the WG. Therefore, let's look at this option again, this time with the readiness window built in.
+
+```{python}
+blob_name = f"{PROJECT_PREFIX}/processed/nhc/monitors_nhc_chirpsgefs.parquet"
+df_monitors_fcast = stratus.load_parquet_from_blob(blob_name)
+
+df_stats_fcast_readiness = (
+    df_monitors_fcast[df_monitors_fcast["lt_name"] == "readiness"]
+    .groupby("atcf_id")
+    .max()
+    .reset_index()
+    .dropna()
+    .drop(columns=["issue_time", "lt_name"])
+)
+blob_name = f"{PROJECT_PREFIX}/processed/impact/emdat_cerf_upto2024.parquet"
+df_impact = stratus.load_parquet_from_blob(blob_name)
+
+df_storms = ibtracs.load_storms()
+cols = ["sid", "atcf_id"]
+df_storm_lookup = df_storms[cols].copy()
+
+df_storm_lookup["atcf_id"] = df_storm_lookup["atcf_id"].str.lower()
+
+df_stats_fcast_readiness_labelled = df_stats_fcast_readiness.merge(
+    df_storm_lookup
+)
+
+
+df_stats_fcast_readiness_labelled["Readiness"] = (
+    df_stats_fcast_readiness_labelled.apply(
+        lambda row: (
+            "Trig."
+            if (
+                # use actual readiness trigger (same as action)
+                row["wind"]
+                >= THRESHS["readiness"]["s"]
+            )
+            else "No trig."
+        ),
+        axis=1,
+    )
+)
+```
+
+```{python}
+# Function to get trigger results with readiness analysis
+def get_action_obsv_trig_results(index, impact_col="Total Affected"):
+    """
+    Returns a dataframe with trigger results including readiness column
+    """
+    df_disp = get_triggered_storms(index).copy()
+
+    df_disp["CERF"] = df_disp.apply(set_cerf_str, axis=1)
+    df_disp["Storm"] = (
+        df_disp["name"].str.capitalize() + " " + df_disp["year"].astype(str)
+    )
+    df_disp["Action"] = df_disp["fcast_trig"].apply(
+        lambda x: "Trig." if x else "No trig."
+    )
+    df_disp["Obsv."] = df_disp["obsv_trig"].apply(
+        lambda x: "Trig." if x else "No trig."
+    )
+ 
+    cols = ["sid","Storm", "Action", "Obsv.", "CERF", impact_col]
+    
+    return df_disp[cols].sort_values(impact_col, ascending=False)
+
+
+
+df_metrics
+# Get results for option 1b (index 13136 from earlier analysis)
+df_1b_with_readiness = get_action_obsv_trig_results(13136).merge(df_stats_fcast_readiness_labelled)
+
+
+```
+
+
+
+```{python}
+# Optional: Create a styled display of the results
+def display_styled_results(df_results, impact_col="Total Affected"):
+    """
+    Display the results with styling if needed
+    """
+    def color_df_extended(val):
+        if val == "Yes":
+            return "background-color: crimson"
+        elif val == "No":
+            return "background-color: dodgerblue"
+        elif val == "Trig.":
+            return "background-color: darkorange"
+        else:
+            return ""
+    
+    cols_for_display = ["Readiness","Action", "Obsv.", "CERF", impact_col]
+    
+    return (
+        df_results.set_index("Storm")[cols_for_display]
+        .style.bar(
+            subset=impact_col,
+            color="mediumpurple",
+            props="width: 150px;",
+        )
+        .map(color_df_extended)
+        .set_table_styles(
+            {
+                impact_col: [
+                    {"selector": "th", "props": [("text-align", "left")]},
+                    {"selector": "td", "props": [("text-align", "left")]},
+                ]
+            }
+        )
+        .format({"Total Affected": "{:,}"})
+    )
+
+# Display styled version if desired
+display_styled_results(df_1b_with_readiness)
+```
+
+### Calculate joint return period for the three-stage trigger system
+```{python}
+def calculate_joint_return_period(df_results):
+    """
+    Calculate the return period when any of the three triggers (Action, Obsv., Readiness) fires
+    """
+    # Create boolean columns for each trigger type
+    df_calc = df_results.copy()
+    df_calc["action_bool"] = df_calc["Action"] == "Trig."
+    df_calc["obsv_bool"] = df_calc["Obsv."] == "Trig."
+    df_calc["readiness_bool"] = df_calc["Readiness"] == "Trig."
+
+    # Create combined trigger: TRUE if ANY of the three triggers fire
+    df_calc["any_trig"] = (
+        df_calc["action_bool"]
+        | df_calc["obsv_bool"]
+        | df_calc["readiness_bool"]
+    )
+
+    # Extract year from Storm column (assuming format "Name YYYY")
+    df_calc["year"] = df_calc["Storm"].str.extract(r"(\d{4})").astype(int)
+
+    # Get distinct years where any trigger fired
+    triggered_years = df_calc[df_calc["any_trig"]]["year"].unique()
+    n_triggered_years = len(triggered_years)
+
+    # Calculate return period using Weibull formula
+    # Total period: 2000-2024 = 25 years
+    total_years = 25
+    return_period = (total_years + 1) / n_triggered_years
+
+    # print(f"Triggered years: {sorted(triggered_years)}")
+    print(f"Number of triggered years: {n_triggered_years}")
+    print(f"Total analysis period: {total_years} years (2000-2024)")
+    print(f"Joint return period: {return_period:.2f} years")
+
+    return {
+        # "triggered_years": triggered_years,
+        "n_triggered_years": n_triggered_years,
+        "return_period": return_period,
+        "df_with_any_trig": df_calc,
+    }
+
+
+# Calculate joint return period for Option 1b
+joint_rp_results = calculate_joint_return_period(df_1b_with_readiness)
+```
+
+```{python}
+# Show detailed breakdown by trigger type
+def analyze_trigger_breakdown(joint_results):
+    """
+    Analyze which storms are triggered by which combination of triggers
+    """
+    df_analysis = joint_results["df_with_any_trig"]
+
+    # Create trigger combination categories - use a more systematic approach
+    df_analysis["trigger_combo"] = "No trigger"  # Default value
+
+    # First handle all triggered cases (any_trig == True)
+    triggered_mask = df_analysis["any_trig"]
+
+    # Use nested conditions to ensure mutually exclusive categories
+    df_analysis.loc[
+        triggered_mask
+        & df_analysis["action_bool"]
+        & df_analysis["obsv_bool"]
+        & df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "All three"
+    df_analysis.loc[
+        triggered_mask
+        & df_analysis["action_bool"]
+        & df_analysis["obsv_bool"]
+        & ~df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Action + Obsv"
+    df_analysis.loc[
+        triggered_mask
+        & df_analysis["action_bool"]
+        & ~df_analysis["obsv_bool"]
+        & df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Action + Readiness"
+    df_analysis.loc[
+        triggered_mask
+        & ~df_analysis["action_bool"]
+        & df_analysis["obsv_bool"]
+        & df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Obsv + Readiness"
+    df_analysis.loc[
+        triggered_mask
+        & df_analysis["action_bool"]
+        & ~df_analysis["obsv_bool"]
+        & ~df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Action only"
+    df_analysis.loc[
+        triggered_mask
+        & ~df_analysis["action_bool"]
+        & df_analysis["obsv_bool"]
+        & ~df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Obsv only"
+    df_analysis.loc[
+        triggered_mask
+        & ~df_analysis["action_bool"]
+        & ~df_analysis["obsv_bool"]
+        & df_analysis["readiness_bool"],
+        "trigger_combo",
+    ] = "Readiness only"
+
+    # Aggregate to year level to see which years had which trigger combinations
+    year_summary = (
+        df_analysis.groupby("year")
+        .agg(
+            {
+                "action_bool": "any",  # True if ANY storm in that year triggered Action
+                "obsv_bool": "any",  # True if ANY storm in that year triggered Obsv
+                "readiness_bool": "any",  # True if ANY storm in that year triggered Readiness
+                "any_trig": "any",  # True if ANY storm in that year triggered anything
+                "Total Affected": "sum",  # Sum total affected for the year
+            }
+        )
+        .reset_index()
+    )
+
+    # Create year-level trigger combination categories
+    year_summary["year_trigger_combo"] = "No trigger"
+    triggered_years_mask = year_summary["any_trig"]
+
+    year_summary.loc[
+        triggered_years_mask
+        & year_summary["action_bool"]
+        & year_summary["obsv_bool"]
+        & year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "All three"
+    year_summary.loc[
+        triggered_years_mask
+        & year_summary["action_bool"]
+        & year_summary["obsv_bool"]
+        & ~year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Action + Obsv"
+    year_summary.loc[
+        triggered_years_mask
+        & year_summary["action_bool"]
+        & ~year_summary["obsv_bool"]
+        & year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Action + Readiness"
+    year_summary.loc[
+        triggered_years_mask
+        & ~year_summary["action_bool"]
+        & year_summary["obsv_bool"]
+        & year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Obsv + Readiness"
+    year_summary.loc[
+        triggered_years_mask
+        & year_summary["action_bool"]
+        & ~year_summary["obsv_bool"]
+        & ~year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Action only"
+    year_summary.loc[
+        triggered_years_mask
+        & ~year_summary["action_bool"]
+        & year_summary["obsv_bool"]
+        & ~year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Obsv only"
+    year_summary.loc[
+        triggered_years_mask
+        & ~year_summary["action_bool"]
+        & ~year_summary["obsv_bool"]
+        & year_summary["readiness_bool"],
+        "year_trigger_combo",
+    ] = "Readiness only"
+
+    # Show year-level breakdown
+    year_trigger_summary = (
+        year_summary.groupby("year_trigger_combo")
+        .agg({"year": lambda x: sorted(x.tolist()), "Total Affected": "sum"})
+        .round(0)
+    )
+
+    year_trigger_summary.columns = ["Years", "Total Affected"]
+    year_trigger_summary["Number of Years"] = year_trigger_summary[
+        "Years"
+    ].apply(len)
+
+    print("\nYear-Level Trigger Combination Breakdown:")
+    print("=" * 50)
+    for combo, row in year_trigger_summary.iterrows():
+        print(
+            f"{combo}: {row['Number of Years']} years, {row['Total Affected']:,.0f} total affected"
+        )
+        if len(row["Years"]) > 0:
+            print(f"  Years: {row['Years']}")
+
+    return year_trigger_summary
+
+
+# Analyze the trigger breakdown
+trigger_breakdown = analyze_trigger_breakdown(joint_rp_results)
+trigger_breakdown
 ```

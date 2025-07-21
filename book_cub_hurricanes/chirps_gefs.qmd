@@ -169,6 +169,7 @@ if "precipitation" in ds_timeseries.data_vars:
 ```
 
 ::: {.callout-note}
+
 **Note**: If you get an `AttributeError` about `load_raster_time_series` not being found, restart your Jupyter kernel or reload the module:
 
 ```python
@@ -178,6 +179,7 @@ importlib.reload(chirps_gefs)
 from src.datasources.chirps_gefs import ChirpsGefsLoader
 loader = ChirpsGefsLoader(config)
 ```
+
 :::
 
 ### Step 4: Analyze Your Time Series Data
