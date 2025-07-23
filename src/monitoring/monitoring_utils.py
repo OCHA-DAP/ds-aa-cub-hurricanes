@@ -160,6 +160,26 @@ class IMERGRasterProcessor:
 
             # Load raster data for the date range
             da = imerg.open_imerg_raster_dates(dates)
+
+            # Check if we got data for all requested dates
+            loaded_dates = set(pd.to_datetime(da.date.values).date)
+            requested_dates = set(pd.to_datetime(dates).date)
+            missing_dates = requested_dates - loaded_dates
+
+            if missing_dates:
+                missing_dates_str = ", ".join(
+                    str(d) for d in sorted(missing_dates)
+                )
+                raise ValueError(
+                    f"Missing IMERG raster data for {len(missing_dates)} "
+                    f"dates: {missing_dates_str}. This may indicate Azure "
+                    f"blob storage access issues or missing data files."
+                )
+
+            logger.info(
+                f"Successfully loaded IMERG data for {len(loaded_dates)} dates"
+            )
+
             da_clip = da.rio.clip(self.adm0.geometry)
 
             # Calculate 2-day rolling sum
@@ -172,17 +192,22 @@ class IMERGRasterProcessor:
                     # Get data for this date
                     da_roll2 = da_rolling2.sel(date=date)
 
-                    # Calculate quantile threshold
-                    roll2_q_thresh = da_roll2.quantile(
-                        self.quantile, dim=["x", "y"]
-                    )
+                    # the first raster will be NaN from the
+                    # rolling - its okay as it's a buffer day.
+                    if da_roll2.isnull().all():
+                        roll2_max = 0.0
+                    else:
+                        # Calculate quantile threshold
+                        roll2_q_thresh = da_roll2.quantile(
+                            self.quantile, dim=["x", "y"]
+                        )
 
-                    # Get max rainfall above quantile threshold
-                    roll2_max = (
-                        float(roll2_q_thresh.max())
-                        if not roll2_q_thresh.isnull().all()
-                        else 0
-                    )
+                        # Get max rainfall above quantile threshold
+                        roll2_max = (
+                            float(roll2_q_thresh.max())
+                            if not roll2_q_thresh.isnull().all()
+                            else 0.0
+                        )
 
                     records.append(
                         {
@@ -774,8 +799,8 @@ class CubaHurricaneMonitor:
                     # Add placeholder rainfall columns
                     result.update(
                         {
-                            "closest_p": 0,
-                            "obsv_p": 0,
+                            "closest_p": 0.0,
+                            "obsv_p": 0.0,
                             "rainfall_relevant": False,
                             "rainfall_source": "none",
                             "quantile_used": None,
