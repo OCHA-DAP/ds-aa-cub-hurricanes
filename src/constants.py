@@ -28,11 +28,11 @@ RAFAEL = "2024309N13283"
 
 D_THRESH = 230
 
-# direct from hti
+# THRESH REVOSED
 THRESHS = {
-    "readiness": {"s": 105, "lt_days": 5},
-    "action": {"s": 105, "lt_days": 3},
-    "obsv": {"p": 62, "s": 120},
+    "readiness": {"s": 120, "lt_days": 5},
+    "action": {"s": 120, "lt_days": 3},
+    "obsv": {"p": 98, "s": 100},
 }
 
 MIN_EMAIL_DISTANCE = 1000
