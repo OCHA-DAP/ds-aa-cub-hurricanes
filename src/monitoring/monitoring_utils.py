@@ -19,6 +19,8 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+# This no longer used in pipeline, but can be if we wish to use IMERG
+# database.
 class RainfallProcessor(ABC):
     """Abstract base class for rainfall data processing."""
 
@@ -234,9 +236,14 @@ class IMERGRasterProcessor:
 class CubaHurricaneMonitor:
     """Cuba-specific hurricane monitoring with optional rainfall."""
 
-    def __init__(self, rainfall_processor: Optional[RainfallProcessor] = None):
+    def __init__(
+        self,
+        rainfall_processor: Optional[RainfallProcessor] = None,
+        rainfall_source: Optional[str] = None,
+    ):
         self.adm0 = codab.load_codab_from_blob().to_crs(3857)
         self.rainfall_processor = rainfall_processor
+        self.rainfall_source = rainfall_source
 
     # ============================================================================
     # UTILITY METHODS - Single responsibility, highly reusable
@@ -489,56 +496,6 @@ class CubaHurricaneMonitor:
             logger.warning(f"Error processing forecast for {atcf_id}: {e}")
             return None
 
-    def _process_single_observation(
-        self, atcf_id: str, group: pd.DataFrame, issue_time: pd.Timestamp
-    ) -> Optional[Dict]:
-        """Process a single observational track into monitoring record."""
-        try:
-            # Filter to data available at issue time
-            group_recent = self._filter_by_time(
-                group, "lastUpdate", issue_time
-            )
-            if group_recent.empty:
-                return None
-
-            # Interpolate track
-            df_interp = self._interpolate_track(
-                group_recent,
-                "lastUpdate",
-                ["latitude", "longitude", "intensity"],
-            )
-
-            # Create GeoDataFrame with distance
-            gdf = self._create_track_geodataframe(df_interp)
-
-            # Calculate closest approach
-            closest_stats = self._get_closest_approach_stats(gdf)
-            if closest_stats["closest_row"] is None:
-                return None
-
-            closest_row = closest_stats["closest_row"]
-
-            # Calculate observational trigger (no leadtime filtering)
-            obsv_stats = self._get_wind_trigger_stats(
-                gdf, "obsv", wind_col="intensity", use_leadtime=False
-            )
-
-            # Build result
-            return {
-                "monitor_id": self._create_monitor_id(
-                    atcf_id, "obsv", issue_time
-                ),
-                "atcf_id": atcf_id,
-                "name": group_recent["name"].iloc[-1],
-                "issue_time": issue_time,
-                "min_dist": closest_stats["min_dist"],
-                "closest_s": closest_row["intensity"],
-                **obsv_stats,
-            }
-        except Exception as e:
-            logger.warning(f"Error processing observation for {atcf_id}: {e}")
-            return None
-
     def _process_single_observation_with_rainfall(
         self,
         atcf_id: str,
@@ -729,7 +686,7 @@ class CubaHurricaneMonitor:
             return None
 
     # ============================================================================
-    # PUBLIC INTERFACE - Clean, simple API
+    # PUBLIC INTERFACE
     # ============================================================================
 
     def process_forecast_tracks(self, clobber: bool = False) -> pd.DataFrame:
@@ -764,119 +721,6 @@ class CubaHurricaneMonitor:
 
         return pd.DataFrame(monitoring_records)
 
-    def process_observational_tracks(
-        self, clobber: bool = False
-    ) -> pd.DataFrame:
-        """Process NHC observational tracks into monitoring records."""
-        logger.info("Loading NHC observational tracks for Atlantic basin.")
-        obsv_tracks = nhc.load_recent_glb_obsv()
-        obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
-        obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
-        obsv_tracks = obsv_tracks.sort_values("lastUpdate")
-
-        df_existing = self._load_existing_monitoring("obsv")
-        monitoring_records = []
-
-        # Check if rainfall processor is available
-        if self.rainfall_processor is None:
-            logger.info("No rainfall processor provided. Using wind-only.")
-            # Use the original wind-only processing for each track
-            for atcf_id, group in obsv_tracks.groupby("atcf_id"):
-                group = self._remove_track_duplicates(group, "lastUpdate")
-
-                # Create synthetic issue times every 6 hours during lifecycle
-                if group.empty:
-                    continue
-
-                issue_times = pd.date_range(
-                    start=group["lastUpdate"].min(),
-                    end=group["lastUpdate"].max(),
-                    freq="6h",
-                )
-
-                for issue_time in issue_times:
-                    monitor_id = self._create_monitor_id(
-                        atcf_id, "obsv", issue_time
-                    )
-
-                    if self._should_skip_existing(
-                        monitor_id, df_existing, clobber
-                    ):
-                        continue
-
-                    result = self._process_single_observation(
-                        atcf_id, group, issue_time
-                    )
-
-                    if result:
-                        monitoring_records.append(result)
-        else:
-            # Use rainfall-enhanced processing
-            obsv_rain = self.rainfall_processor.load_recent_data()
-
-            for atcf_id, group in obsv_tracks.groupby("atcf_id"):
-                group = self._remove_track_duplicates(group, "lastUpdate")
-
-                # Interpolate track data
-                try:
-                    df_interp = self._interpolate_track(
-                        group,
-                        "lastUpdate",
-                        ["latitude", "longitude", "intensity", "pressure"],
-                    )
-                except ValueError as e:
-                    logger.warning(
-                        f"Skipping {atcf_id} due to interpolation error: {e}"
-                    )
-                    continue
-
-                # Create GeoDataFrame with distance
-                gdf = self._create_track_geodataframe(df_interp)
-
-                # Process each rainfall issue time
-                issue_times = self.rainfall_processor.get_issue_times(
-                    obsv_rain
-                )
-                for issue_time in issue_times:
-                    monitor_id = self._create_monitor_id(
-                        atcf_id, "obsv", issue_time
-                    )
-
-                    if self._should_skip_existing(
-                        monitor_id, df_existing, clobber
-                    ):
-                        continue
-
-                    rain_recent = self.rainfall_processor.filter_data_by_time(
-                        obsv_rain, issue_time
-                    )
-                    gdf_recent = gdf[gdf["lastUpdate"] <= issue_time]
-
-                    if gdf_recent.empty:
-                        logger.debug(
-                            f"Skipping {monitor_id} as storm not active yet."
-                        )
-                        continue
-
-                    # Check if storm is still active
-                    track_max = gdf_recent["lastUpdate"].max()
-                    if not self.rainfall_processor.is_storm_still_active(
-                        rain_recent, track_max
-                    ):
-                        logger.debug(
-                            f"Skipping {monitor_id} as storm no longer active."
-                        )
-                        continue
-
-                    result = self._process_single_observation_with_rainfall(
-                        atcf_id, group, gdf_recent, rain_recent, issue_time
-                    )
-
-                    if result:
-                        monitoring_records.append(result)
-
-        return pd.DataFrame(monitoring_records)
-
     def process_observational_tracks_with_raster(
         self, clobber: bool = False, quantile: float = 0.95
     ) -> pd.DataFrame:
@@ -894,7 +738,7 @@ class CubaHurricaneMonitor:
         df_existing = self._load_existing_monitoring("obsv")
 
         # Step 1: Process ALL storms with wind-only approach
-        logger.info("Processing all storms with wind-only approach...")
+        logger.info("Processing all storms wind first:")
         wind_monitoring_records = []
 
         for atcf_id, group in obsv_tracks.groupby("atcf_id"):
@@ -1107,34 +951,6 @@ class CubaHurricaneMonitor:
 
         return df_final
 
-    def prepare_monitoring_data(
-        self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
-    ) -> pd.DataFrame:
-        """Prepare monitoring data without saving."""
-        if monitoring_type == "obsv":
-            df_new = self.process_observational_tracks(clobber)
-            data_type = "observational"
-        else:
-            df_new = self.process_forecast_tracks(clobber)
-            data_type = "forecast"
-
-        if df_new.empty:
-            logger.info(f"No new {data_type} data found.")
-            if clobber:
-                return pd.DataFrame()
-            else:
-                return self._load_existing_monitoring(monitoring_type)
-
-        logger.info(f"Found {len(df_new)} new {data_type} points.")
-
-        if clobber:
-            df_combined = df_new
-        else:
-            df_existing = self._load_existing_monitoring(monitoring_type)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-
-        return df_combined.sort_values(["issue_time", "atcf_id"])
-
     def prepare_monitoring_data_with_raster(
         self,
         monitoring_type: Literal["fcast", "obsv"],
@@ -1190,9 +1006,213 @@ class CubaHurricaneMonitor:
         self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
     ) -> pd.DataFrame:
         """Convenience method that prepares and saves data."""
-        df_combined = self.prepare_monitoring_data(monitoring_type, clobber)
+        # Use raster-based processing for observational data if configured
+        if monitoring_type == "obsv" and self.rainfall_source == "raster":
+            df_combined = self.prepare_monitoring_data_with_raster(
+                monitoring_type, clobber
+            )
+        else:
+            df_combined = self.prepare_monitoring_data(
+                monitoring_type, clobber
+            )
+
         self.save_monitoring_data(df_combined, monitoring_type)
         return df_combined
+
+    # ============================================================================
+    # OLD METHODS
+    # ============================================================================
+
+    def _process_single_observation(
+        self, atcf_id: str, group: pd.DataFrame, issue_time: pd.Timestamp
+    ) -> Optional[Dict]:
+        """Process a single observational track into monitoring record."""
+        try:
+            # Filter to data available at issue time
+            group_recent = self._filter_by_time(
+                group, "lastUpdate", issue_time
+            )
+            if group_recent.empty:
+                return None
+
+            # Interpolate track
+            df_interp = self._interpolate_track(
+                group_recent,
+                "lastUpdate",
+                ["latitude", "longitude", "intensity"],
+            )
+
+            # Create GeoDataFrame with distance
+            gdf = self._create_track_geodataframe(df_interp)
+
+            # Calculate closest approach
+            closest_stats = self._get_closest_approach_stats(gdf)
+            if closest_stats["closest_row"] is None:
+                return None
+
+            closest_row = closest_stats["closest_row"]
+
+            # Calculate observational trigger (no leadtime filtering)
+            obsv_stats = self._get_wind_trigger_stats(
+                gdf, "obsv", wind_col="intensity", use_leadtime=False
+            )
+
+            # Build result
+            return {
+                "monitor_id": self._create_monitor_id(
+                    atcf_id, "obsv", issue_time
+                ),
+                "atcf_id": atcf_id,
+                "name": group_recent["name"].iloc[-1],
+                "issue_time": issue_time,
+                "min_dist": closest_stats["min_dist"],
+                "closest_s": closest_row["intensity"],
+                **obsv_stats,
+            }
+        except Exception as e:
+            logger.warning(f"Error processing observation for {atcf_id}: {e}")
+            return None
+
+    def process_observational_tracks(
+        self, clobber: bool = False
+    ) -> pd.DataFrame:
+        """Process NHC observational tracks into monitoring records."""
+        logger.info("Loading NHC observational tracks for Atlantic basin.")
+        obsv_tracks = nhc.load_recent_glb_obsv()
+        obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
+        obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
+        obsv_tracks = obsv_tracks.sort_values("lastUpdate")
+
+        df_existing = self._load_existing_monitoring("obsv")
+        monitoring_records = []
+
+        # Check if rainfall processor is available
+        if self.rainfall_processor is None:
+            logger.info("No rainfall processor provided. Using wind-only.")
+            # Use the original wind-only processing for each track
+            for atcf_id, group in obsv_tracks.groupby("atcf_id"):
+                group = self._remove_track_duplicates(group, "lastUpdate")
+
+                # Create synthetic issue times every 6 hours during lifecycle
+                if group.empty:
+                    continue
+
+                issue_times = pd.date_range(
+                    start=group["lastUpdate"].min(),
+                    end=group["lastUpdate"].max(),
+                    freq="6h",
+                )
+
+                for issue_time in issue_times:
+                    monitor_id = self._create_monitor_id(
+                        atcf_id, "obsv", issue_time
+                    )
+
+                    if self._should_skip_existing(
+                        monitor_id, df_existing, clobber
+                    ):
+                        continue
+
+                    result = self._process_single_observation(
+                        atcf_id, group, issue_time
+                    )
+
+                    if result:
+                        monitoring_records.append(result)
+        else:
+            # Use rainfall-enhanced processing
+            obsv_rain = self.rainfall_processor.load_recent_data()
+
+            for atcf_id, group in obsv_tracks.groupby("atcf_id"):
+                group = self._remove_track_duplicates(group, "lastUpdate")
+
+                # Interpolate track data
+                try:
+                    df_interp = self._interpolate_track(
+                        group,
+                        "lastUpdate",
+                        ["latitude", "longitude", "intensity", "pressure"],
+                    )
+                except ValueError as e:
+                    logger.warning(
+                        f"Skipping {atcf_id} due to interpolation error: {e}"
+                    )
+                    continue
+
+                # Create GeoDataFrame with distance
+                gdf = self._create_track_geodataframe(df_interp)
+
+                # Process each rainfall issue time
+                issue_times = self.rainfall_processor.get_issue_times(
+                    obsv_rain
+                )
+                for issue_time in issue_times:
+                    monitor_id = self._create_monitor_id(
+                        atcf_id, "obsv", issue_time
+                    )
+
+                    if self._should_skip_existing(
+                        monitor_id, df_existing, clobber
+                    ):
+                        continue
+
+                    rain_recent = self.rainfall_processor.filter_data_by_time(
+                        obsv_rain, issue_time
+                    )
+                    gdf_recent = gdf[gdf["lastUpdate"] <= issue_time]
+
+                    if gdf_recent.empty:
+                        logger.debug(
+                            f"Skipping {monitor_id} as storm not active yet."
+                        )
+                        continue
+
+                    # Check if storm is still active
+                    track_max = gdf_recent["lastUpdate"].max()
+                    if not self.rainfall_processor.is_storm_still_active(
+                        rain_recent, track_max
+                    ):
+                        logger.debug(
+                            f"Skipping {monitor_id} as storm no longer active."
+                        )
+                        continue
+
+                    result = self._process_single_observation_with_rainfall(
+                        atcf_id, group, gdf_recent, rain_recent, issue_time
+                    )
+
+                    if result:
+                        monitoring_records.append(result)
+
+        return pd.DataFrame(monitoring_records)
+
+    def prepare_monitoring_data(
+        self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
+    ) -> pd.DataFrame:
+        """Prepare monitoring data without saving."""
+        if monitoring_type == "obsv":
+            df_new = self.process_observational_tracks(clobber)
+            data_type = "observational"
+        else:
+            df_new = self.process_forecast_tracks(clobber)
+            data_type = "forecast"
+
+        if df_new.empty:
+            logger.info(f"No new {data_type} data found.")
+            if clobber:
+                return pd.DataFrame()
+            else:
+                return self._load_existing_monitoring(monitoring_type)
+
+        logger.info(f"Found {len(df_new)} new {data_type} points.")
+
+        if clobber:
+            df_combined = df_new
+        else:
+            df_existing = self._load_existing_monitoring(monitoring_type)
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+
+        return df_combined.sort_values(["issue_time", "atcf_id"])
 
 
 def create_cuba_hurricane_monitor(
@@ -1218,7 +1238,9 @@ def create_cuba_hurricane_monitor(
     else:
         raise ValueError(f"Unsupported rainfall source: {rainfall_source}")
 
-    return CubaHurricaneMonitor(rainfall_processor=rainfall_processor)
+    return CubaHurricaneMonitor(
+        rainfall_processor=rainfall_processor, rainfall_source=rainfall_source
+    )
 
 
 def main():
