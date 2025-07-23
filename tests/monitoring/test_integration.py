@@ -130,9 +130,11 @@ class TestMonitoringIntegration:
         # Mock the codab loading
         mock_codab.return_value = mock_codab_data
 
-        # Test default configuration
+        # Test default configuration (raster-based)
         monitor = create_cuba_hurricane_monitor()
-        assert monitor.rainfall_processor is not None
+        # Raster doesn't use processor
+        assert monitor.rainfall_processor is None
+        assert monitor.rainfall_source == "raster"
 
         # Test without rainfall
         monitor_no_rain = create_cuba_hurricane_monitor(rainfall_source=None)

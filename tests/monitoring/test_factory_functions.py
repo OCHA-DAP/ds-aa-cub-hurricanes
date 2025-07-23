@@ -48,16 +48,18 @@ class TestFactoryFunctions:
             create_cuba_hurricane_monitor(rainfall_source="invalid")
 
     @patch("src.monitoring.monitoring_utils.codab.load_codab_from_blob")
-    def test_create_cuba_hurricane_monitor_default_imerg(
+    def test_create_cuba_hurricane_monitor_default_raster(
         self, mock_codab, mock_codab_data
     ):
-        """Test creating monitor with default IMERG processor."""
+        """Test creating monitor with default raster processor."""
         mock_codab.return_value = mock_codab_data
 
-        monitor = create_cuba_hurricane_monitor()  # Default should be IMERG
+        monitor = create_cuba_hurricane_monitor()  # Default should be raster
 
         assert isinstance(monitor, CubaHurricaneMonitor)
-        assert isinstance(monitor.rainfall_processor, IMERGProcessor)
+        # Raster processing doesn't use a processor
+        assert monitor.rainfall_processor is None
+        assert monitor.rainfall_source == "raster"
 
 
 @pytest.mark.integration
@@ -125,17 +127,13 @@ class TestModuleIntegration:
 
         main()
 
-        mock_create_monitor.assert_called_once_with(rainfall_source="imerg")
-        # Check that update_monitoring was called twice
-        assert mock_monitor.update_monitoring.call_count == 2
+        mock_create_monitor.assert_called_once_with(rainfall_source="raster")
 
-        # Verify the specific calls
-        expected_calls = [
-            (("obsv",), {"clobber": False}),
-            (("fcast",), {"clobber": False}),
-        ]
-        actual_calls = [
-            (call.args, call.kwargs)
-            for call in mock_monitor.update_monitoring.call_args_list
-        ]
-        assert actual_calls == expected_calls
+        # Check that the correct methods were called
+        mock_monitor.process_observational_tracks_with_raster.assert_called_once_with(
+            clobber=False
+        )
+        mock_monitor.process_forecast_tracks.assert_called_once_with(
+            clobber=False
+        )
+        assert mock_monitor.save_monitoring_data.call_count == 2

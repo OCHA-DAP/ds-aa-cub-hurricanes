@@ -227,17 +227,17 @@ class TestCubaHurricaneMonitorUtilities:
 
     def test_check_wind_threshold(self, cuba_monitor_no_rainfall):
         """Test wind threshold checking."""
-        # Action threshold is 105 knots (from constants)
+        # Action threshold is 120 knots (from constants)
         assert (
-            cuba_monitor_no_rainfall._check_wind_threshold(110, "action")
+            cuba_monitor_no_rainfall._check_wind_threshold(125, "action")
             is True
         )
         assert (
-            cuba_monitor_no_rainfall._check_wind_threshold(105, "action")
+            cuba_monitor_no_rainfall._check_wind_threshold(120, "action")
             is True
         )
         assert (
-            cuba_monitor_no_rainfall._check_wind_threshold(100, "action")
+            cuba_monitor_no_rainfall._check_wind_threshold(119, "action")
             is False
         )
 
