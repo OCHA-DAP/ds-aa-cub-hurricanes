@@ -1,3 +1,7 @@
+---
+jupyter: ds-aa-cub-hurricanes
+---
+
 ## Visualize Options (Forecast + Observational)
 
 ## Intro
@@ -1246,3 +1250,6 @@ def analyze_trigger_breakdown(joint_results):
 trigger_breakdown = analyze_trigger_breakdown(joint_rp_results)
 trigger_breakdown
 ```
+
+
+```{python}

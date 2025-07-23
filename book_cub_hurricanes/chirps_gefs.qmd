@@ -1,3 +1,7 @@
+---
+jupyter: ds-aa-cub-hurricanes
+---
+
 ## CHIRPS GEFS Precipitation Forecasts
 
 <!-- markdownlint-disable MD013 -->
