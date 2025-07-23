@@ -1,4 +1,4 @@
-name: Ingest Forecast Monitoring Data
+name: Ingest Observational Data
 
 on:
   workflow_dispatch:
