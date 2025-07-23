@@ -159,8 +159,16 @@ class IMERGRasterProcessor:
             logger.info(f"Loading IMERG raster data for {len(dates)} dates")
 
             # Load raster data for the date range
-            da = imerg.open_imerg_raster_dates(dates)
-            da_clip = da.rio.clip(self.adm0.geometry)
+            try:
+                da = imerg.open_imerg_raster_dates(dates)
+                da_clip = da.rio.clip(self.adm0.geometry)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load IMERG raster data: {e}. "
+                    f"This may be due to data availability issues in the "
+                    f"current environment (e.g., GitHub Actions)."
+                )
+                return pd.DataFrame()
 
             # Calculate 2-day rolling sum
             da_rolling2 = da_clip.rolling(date=2).sum()
@@ -941,7 +949,12 @@ class CubaHurricaneMonitor:
 
             df_final = df_merged.reset_index()
         else:
-            logger.info("No storms qualified for rainfall analysis")
+            logger.info(
+                "No storms qualified for rainfall analysis. "
+                "This could be due to: (1) no storms meeting wind/distance "
+                "criteria, or (2) rainfall data unavailable in current "
+                "environment. Using wind-only processing for all storms."
+            )
             df_final = df_wind_base
 
         logger.info(
@@ -950,6 +963,13 @@ class CubaHurricaneMonitor:
         )
         rainfall_enhanced = (df_final["rainfall_source"] != "none").sum()
         logger.info(f"Records with rainfall data: {rainfall_enhanced}")
+        
+        if rainfall_enhanced == 0:
+            logger.info(
+                "All records processed with wind-only approach. "
+                "In GitHub Actions environment, IMERG raster data may not "
+                "be available due to authentication or access limitations."
+            )
 
         return df_final
 

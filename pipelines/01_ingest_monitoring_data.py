@@ -16,25 +16,6 @@ def update_monitoring_data():
     # lets just see of fcast runs on gha while setting up 'obsv' better
 
     # monitor.update_monitoring("fcast", clobber=False)
-    
-    # Add some diagnostic logging
-    logger.info("=== DIAGNOSTIC: Checking existing data ===")
-    try:
-        existing_data = monitor._load_existing_monitoring("obsv")
-        logger.info(f"Found existing obsv data: {len(existing_data)} records")
-        if not existing_data.empty:
-            logger.info(f"Existing data storms: {existing_data['atcf_id'].nunique()}")
-            logger.info(f"Existing data date range: {existing_data['issue_time'].min()} to {existing_data['issue_time'].max()}")
-            
-            # Check if Rafael has rainfall data
-            if 'al182024' in existing_data['atcf_id'].values:
-                rafael_data = existing_data[existing_data['atcf_id'] == 'al182024']
-                rainfall_records = rafael_data[rafael_data['rainfall_source'] != 'none']
-                logger.info(f"Rafael in existing data: {len(rafael_data)} records, {len(rainfall_records)} with rainfall")
-    except Exception as e:
-        logger.info(f"No existing data found: {e}")
-    
-    logger.info("=== Starting update_monitoring ===")
     monitor.update_monitoring("obsv", clobber=False)
 
 
