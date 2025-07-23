@@ -113,6 +113,124 @@ class IMERGProcessor(RainfallProcessor):
         return rain_max - track_max <= pd.Timedelta(days=tolerance_days)
 
 
+class IMERGRasterProcessor:
+    """
+    IMERG raster-based rainfall processor optimized for observational
+    monitoring. Only processes raster data for storms that meet wind/distance
+    criteria.
+    """
+
+    def __init__(self, quantile: float = 0.95):
+        """
+        Initialize IMERG raster processor.
+
+        Args:
+            quantile: Quantile threshold for rainfall aggregation (default
+                0.95)
+        """
+        self.quantile = quantile
+        self.adm0 = codab.load_codab_from_blob()
+
+    def calculate_rainfall_for_storm_period(
+        self, start_date: pd.Timestamp, end_date: pd.Timestamp
+    ) -> pd.DataFrame:
+        """
+        Calculate quantile-based rainfall aggregations for a storm period.
+
+        Args:
+            start_date: Start date for rainfall analysis
+            end_date: End date for rainfall analysis
+
+        Returns:
+            DataFrame with date and rainfall metrics
+        """
+        try:
+            # Create date range for the storm period
+            dates = pd.date_range(start_date.date(), end_date.date())
+
+            if len(dates) == 0:
+                logger.warning(f"No dates in range {start_date} to {end_date}")
+                return pd.DataFrame()
+
+            logger.info(f"Loading IMERG raster data for {len(dates)} dates")
+
+            # Load raster data for the date range
+            da = imerg.open_imerg_raster_dates(dates)
+            da_clip = da.rio.clip(self.adm0.geometry)
+
+            # Calculate 2-day rolling sum
+            da_rolling2 = da_clip.rolling(date=2).sum()
+
+            # Calculate quantile-based metrics for each date
+            records = []
+            for date in dates:
+                try:
+                    # Get data for this date
+                    da_roll2 = da_rolling2.sel(date=date)
+
+                    # Calculate quantile threshold
+                    roll2_q_thresh = da_roll2.quantile(
+                        self.quantile, dim=["x", "y"]
+                    )
+
+                    # Get max rainfall above quantile threshold
+                    roll2_max = (
+                        float(roll2_q_thresh.max())
+                        if not roll2_q_thresh.isnull().all()
+                        else 0
+                    )
+
+                    records.append(
+                        {
+                            "date": pd.Timestamp(date),
+                            "roll2_sum": roll2_max,
+                        }
+                    )
+
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing raster data for {date}: {e}"
+                    )
+                    # Add empty record to maintain date continuity
+                    records.append(
+                        {
+                            "date": pd.Timestamp(date),
+                            "roll2_sum": 0,
+                        }
+                    )
+
+            return pd.DataFrame(records)
+
+        except Exception as e:
+            logger.error(
+                f"Error loading raster data for period "
+                f"{start_date} to {end_date}: {e}"
+            )
+            return pd.DataFrame()
+
+    def get_max_rainfall_for_period(
+        self, start_date: pd.Timestamp, end_date: pd.Timestamp
+    ) -> float:
+        """
+        Get maximum quantile-based rainfall for a specific period.
+
+        Args:
+            start_date: Start date for analysis
+            end_date: End date for analysis
+
+        Returns:
+            Maximum rainfall value for the period
+        """
+        df_rain = self.calculate_rainfall_for_storm_period(
+            start_date, end_date
+        )
+
+        if df_rain.empty:
+            return 0
+
+        return df_rain["roll2_sum"].max()
+
+
 class CubaHurricaneMonitor:
     """Cuba-specific hurricane monitoring with optional rainfall."""
 
@@ -509,6 +627,107 @@ class CubaHurricaneMonitor:
             logger.warning(f"Error processing observation for {atcf_id}: {e}")
             return None
 
+    def _calculate_rainfall_for_monitoring_record(
+        self,
+        atcf_id: str,
+        group: pd.DataFrame,
+        gdf_recent: gpd.GeoDataFrame,
+        gdf_dist_recent: gpd.GeoDataFrame,
+        storm_rainfall_df: pd.DataFrame,
+        analysis_start: pd.Timestamp,
+        analysis_end: pd.Timestamp,
+        issue_time: pd.Timestamp,
+        quantile: float,
+    ) -> Optional[Dict]:
+        """Calculate rainfall data for a single monitoring record."""
+        try:
+            # Calculate closest approach statistics
+            closest_stats = self._get_closest_approach_stats(gdf_recent)
+            if closest_stats["closest_row"] is None:
+                return None
+
+            landfall_row = closest_stats["closest_row"]
+
+            # Calculate wind statistics for distance-filtered track
+            max_s = gdf_dist_recent["intensity"].max()
+
+            # Check if storm is still active
+            track_max_time = gdf_recent["lastUpdate"].max()
+            tolerance_days = 1
+            time_since_track_end = (
+                analysis_end.date() - pd.to_datetime(track_max_time).date()
+            )
+            rainfall_relevant = time_since_track_end <= pd.Timedelta(
+                days=tolerance_days
+            )
+
+            if not rainfall_relevant:
+                logger.debug(
+                    f"Skipping {atcf_id} at {issue_time} - storm no longer "
+                    f"active. Track ended {time_since_track_end.days} days "
+                    f"ago."
+                )
+                return None
+
+            # Helper function to get max rainfall for a period from DataFrame
+            def get_max_rainfall_for_period(start_date, end_date):
+                if storm_rainfall_df.empty:
+                    return 0
+                # Ensure timezone-naive comparison
+                start_date = (
+                    pd.to_datetime(start_date).tz_localize(None)
+                    if pd.to_datetime(start_date).tz
+                    else pd.to_datetime(start_date)
+                )
+                end_date = (
+                    pd.to_datetime(end_date).tz_localize(None)
+                    if pd.to_datetime(end_date).tz
+                    else pd.to_datetime(end_date)
+                )
+                filtered_df = storm_rainfall_df[
+                    (storm_rainfall_df["date"] >= start_date)
+                    & (storm_rainfall_df["date"] <= end_date)
+                ]
+                return (
+                    filtered_df["roll2_sum"].max()
+                    if not filtered_df.empty
+                    else 0
+                )
+
+            # Calculate rainfall for landfall period (closest approach)
+            landfall_date = pd.to_datetime(landfall_row["lastUpdate"])
+            # Remove timezone for comparison with rainfall data
+            landfall_date = landfall_date.tz_localize(None)
+            landfall_start = landfall_date - pd.Timedelta(days=1)
+            landfall_end = landfall_date + pd.Timedelta(days=1)
+
+            closest_p = get_max_rainfall_for_period(
+                landfall_start, landfall_end
+            )
+
+            # Calculate rainfall for full storm period
+            max_p = get_max_rainfall_for_period(analysis_start, analysis_end)
+
+            # Check if trigger criteria are met
+            obsv_trigger = (max_p >= THRESHS["obsv"]["p"]) & (
+                max_s >= THRESHS["obsv"]["s"]
+            )
+
+            return {
+                "closest_p": closest_p,
+                "obsv_p": max_p,
+                "obsv_trigger": obsv_trigger,
+                "rainfall_relevant": rainfall_relevant,
+                "rainfall_source": "raster_quantile",
+                "quantile_used": quantile,
+                "analysis_start": analysis_start,
+                "analysis_end": analysis_end,
+            }
+
+        except Exception as e:
+            logger.warning(f"Error calculating rainfall for {atcf_id}: {e}")
+            return None
+
     # ============================================================================
     # PUBLIC INTERFACE - Clean, simple API
     # ============================================================================
@@ -572,7 +791,7 @@ class CubaHurricaneMonitor:
                 issue_times = pd.date_range(
                     start=group["lastUpdate"].min(),
                     end=group["lastUpdate"].max(),
-                    freq="6H",
+                    freq="6h",
                 )
 
                 for issue_time in issue_times:
@@ -658,12 +877,275 @@ class CubaHurricaneMonitor:
 
         return pd.DataFrame(monitoring_records)
 
+    def process_observational_tracks_with_raster(
+        self, clobber: bool = False, quantile: float = 0.95
+    ) -> pd.DataFrame:
+        """
+        Process NHC observational tracks with raster-based rainfall analysis.
+        Returns complete dataset with ALL storms and their wind-based
+        attributes, with rainfall data added only for qualifying storms.
+        """
+        logger.info("Loading NHC observational tracks for Atlantic basin.")
+        obsv_tracks = nhc.load_recent_glb_obsv()
+        obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
+        obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
+        obsv_tracks = obsv_tracks.sort_values("lastUpdate")
+
+        df_existing = self._load_existing_monitoring("obsv")
+
+        # Step 1: Process ALL storms with wind-only approach
+        logger.info("Processing all storms with wind-only approach...")
+        wind_monitoring_records = []
+
+        for atcf_id, group in obsv_tracks.groupby("atcf_id"):
+            group = self._remove_track_duplicates(group, "lastUpdate")
+
+            # Create synthetic issue times every 6 hours during lifecycle
+            if group.empty:
+                continue
+
+            issue_times = pd.date_range(
+                start=group["lastUpdate"].min(),
+                end=group["lastUpdate"].max(),
+                freq="6h",
+            )
+
+            for issue_time in issue_times:
+                monitor_id = self._create_monitor_id(
+                    atcf_id, "obsv", issue_time
+                )
+
+                if self._should_skip_existing(
+                    monitor_id, df_existing, clobber
+                ):
+                    continue
+
+                result = self._process_single_observation(
+                    atcf_id, group, issue_time
+                )
+
+                if result:
+                    # Add placeholder rainfall columns
+                    result.update(
+                        {
+                            "closest_p": 0,
+                            "obsv_p": 0,
+                            "rainfall_relevant": False,
+                            "rainfall_source": "none",
+                            "quantile_used": None,
+                            "analysis_start": None,
+                            "analysis_end": None,
+                        }
+                    )
+                    # Update trigger to be wind-only
+                    wind_trigger = result["obsv_s"] >= THRESHS["obsv"]["s"]
+                    result["obsv_trigger"] = wind_trigger
+                    wind_monitoring_records.append(result)
+
+        df_wind_base = pd.DataFrame(wind_monitoring_records)
+
+        if df_wind_base.empty:
+            logger.info("No observational tracks found.")
+            return df_wind_base
+
+        logger.info(
+            f"Base dataset: {len(df_wind_base)} monitoring records from "
+            f"{df_wind_base['atcf_id'].nunique()} storms"
+        )
+
+        # Step 2: Process qualifying storms with rainfall data
+        logger.info("Adding rainfall data for qualifying storms...")
+        raster_processor = IMERGRasterProcessor(quantile=quantile)
+        rainfall_updates = []
+
+        for atcf_id, group in obsv_tracks.groupby("atcf_id"):
+            logger.info(f"Checking rainfall qualification for storm {atcf_id}")
+
+            group = self._remove_track_duplicates(group, "lastUpdate")
+
+            # Interpolate track data
+            try:
+                df_interp = self._interpolate_track(
+                    group,
+                    "lastUpdate",
+                    ["latitude", "longitude", "intensity", "pressure"],
+                )
+            except ValueError as e:
+                logger.warning(
+                    f"Skipping rainfall for {atcf_id} due to "
+                    f"interpolation error: {e}"
+                )
+                continue
+
+            # Create GeoDataFrame with distance
+            gdf = self._create_track_geodataframe(df_interp)
+
+            # Pre-filter by distance threshold
+            gdf_dist = gdf[gdf["distance"] < D_THRESH]
+
+            if gdf_dist.empty:
+                logger.info(
+                    f"Storm {atcf_id} did not pass distance threshold "
+                    f"{D_THRESH} km. Keeping wind-only data."
+                )
+                continue
+
+            # Check if storm meets minimum wind threshold
+            max_wind = gdf_dist["intensity"].max()
+            if max_wind < THRESHS["obsv"]["s"]:
+                logger.info(
+                    f"Storm {atcf_id} max wind {max_wind} kt below threshold "
+                    f"{THRESHS['obsv']['s']} kt. Keeping wind-only data."
+                )
+                continue
+
+            logger.info(
+                f"Storm {atcf_id} qualifies for rainfall analysis: "
+                f"max_wind={max_wind} kt, "
+                f"min_dist={gdf_dist['distance'].min():.1f} km"
+            )
+
+            # Define storm period for rainfall analysis
+            storm_start = gdf_dist["lastUpdate"].min()
+            storm_end = gdf_dist["lastUpdate"].max()
+
+            # Extend period by 1 day on each side
+            analysis_start = storm_start - pd.Timedelta(days=1)
+            analysis_end = storm_end + pd.Timedelta(days=1)
+
+            # Pre-calculate rainfall data once for the entire storm period
+            logger.info(
+                f"Loading rainfall data for {atcf_id} from "
+                f"{analysis_start.date()} to {analysis_end.date()}"
+            )
+            storm_rainfall_df = (
+                raster_processor.calculate_rainfall_for_storm_period(
+                    analysis_start, analysis_end
+                )
+            )
+
+            if storm_rainfall_df.empty:
+                logger.warning(
+                    f"No rainfall data available for {atcf_id}. "
+                    f"Keeping wind-only data."
+                )
+                continue
+
+            # Generate rainfall updates for matching monitoring records
+            storm_records = df_wind_base[df_wind_base["atcf_id"] == atcf_id]
+
+            for _, record in storm_records.iterrows():
+                issue_time = record["issue_time"]
+                monitor_id = record["monitor_id"]
+
+                # Filter track data to issue time
+                gdf_recent = gdf[gdf["lastUpdate"] <= issue_time]
+                gdf_dist_recent = gdf_recent[gdf_recent["distance"] < D_THRESH]
+
+                if gdf_dist_recent.empty:
+                    logger.debug(
+                        f"Skipping rainfall for {monitor_id} - no track "
+                        f"points within distance threshold at issue time."
+                    )
+                    continue
+
+                rainfall_data = self._calculate_rainfall_for_monitoring_record(
+                    atcf_id,
+                    group,
+                    gdf_recent,
+                    gdf_dist_recent,
+                    storm_rainfall_df,
+                    analysis_start,
+                    analysis_end,
+                    issue_time,
+                    quantile,
+                )
+
+                if rainfall_data:
+                    rainfall_data["monitor_id"] = monitor_id
+                    rainfall_updates.append(rainfall_data)
+
+        # Step 3: Merge rainfall data into base dataset
+        if rainfall_updates:
+            df_rainfall_updates = pd.DataFrame(rainfall_updates)
+            logger.info(
+                f"Adding rainfall data to {len(df_rainfall_updates)} "
+                f"monitoring records"
+            )
+
+            # Merge rainfall data
+            df_merged = df_wind_base.set_index("monitor_id")
+            df_updates = df_rainfall_updates.set_index("monitor_id")
+
+            # Update the rainfall columns
+            rainfall_cols = [
+                "closest_p",
+                "obsv_p",
+                "rainfall_relevant",
+                "rainfall_source",
+                "quantile_used",
+                "analysis_start",
+                "analysis_end",
+                "obsv_trigger",
+            ]
+
+            for col in rainfall_cols:
+                if col in df_updates.columns:
+                    df_merged.loc[df_updates.index, col] = df_updates[col]
+
+            df_final = df_merged.reset_index()
+        else:
+            logger.info("No storms qualified for rainfall analysis")
+            df_final = df_wind_base
+
+        logger.info(
+            f"Final dataset: {len(df_final)} monitoring records from "
+            f"{df_final['atcf_id'].nunique()} storms"
+        )
+        rainfall_enhanced = (df_final["rainfall_source"] != "none").sum()
+        logger.info(f"Records with rainfall data: {rainfall_enhanced}")
+
+        return df_final
+
     def prepare_monitoring_data(
         self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
     ) -> pd.DataFrame:
         """Prepare monitoring data without saving."""
         if monitoring_type == "obsv":
             df_new = self.process_observational_tracks(clobber)
+            data_type = "observational"
+        else:
+            df_new = self.process_forecast_tracks(clobber)
+            data_type = "forecast"
+
+        if df_new.empty:
+            logger.info(f"No new {data_type} data found.")
+            if clobber:
+                return pd.DataFrame()
+            else:
+                return self._load_existing_monitoring(monitoring_type)
+
+        logger.info(f"Found {len(df_new)} new {data_type} points.")
+
+        if clobber:
+            df_combined = df_new
+        else:
+            df_existing = self._load_existing_monitoring(monitoring_type)
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+
+        return df_combined.sort_values(["issue_time", "atcf_id"])
+
+    def prepare_monitoring_data_with_raster(
+        self,
+        monitoring_type: Literal["fcast", "obsv"],
+        clobber: bool = False,
+        quantile: float = 0.95,
+    ) -> pd.DataFrame:
+        """Prepare monitoring data using raster-based rainfall processing."""
+        if monitoring_type == "obsv":
+            df_new = self.process_observational_tracks_with_raster(
+                clobber, quantile
+            )
             data_type = "observational"
         else:
             df_new = self.process_forecast_tracks(clobber)
@@ -714,18 +1196,23 @@ class CubaHurricaneMonitor:
 
 
 def create_cuba_hurricane_monitor(
-    rainfall_source: Optional[str] = "imerg",
+    rainfall_source: Optional[str] = "raster",
 ) -> CubaHurricaneMonitor:
     """Factory function to create CubaHurricaneMonitor with rainfall processor.
 
     Args:
-        rainfall_source: Type of rainfall processor ('imerg', None for wind)
+        rainfall_source: Type of rainfall processor
+            ('imerg' for DB-based, 'raster' for raster-based, None for
+            wind-only)
 
     Returns:
         Configured CubaHurricaneMonitor instance
     """
     if rainfall_source == "imerg":
         rainfall_processor = IMERGProcessor()
+    elif rainfall_source == "raster":
+        # For raster processing, we'll handle it directly in the monitor
+        rainfall_processor = None
     elif rainfall_source is None:
         rainfall_processor = None
     else:
@@ -736,12 +1223,19 @@ def create_cuba_hurricane_monitor(
 
 def main():
     """Main function to run Cuba hurricane monitoring updates."""
-    # Create monitor with IMERG rainfall processing
-    monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+    # Create monitor with raster-based rainfall processing for observations
+    monitor = create_cuba_hurricane_monitor(rainfall_source="raster")
 
     # Update both observational and forecast monitoring
-    monitor.update_monitoring("obsv", clobber=False)
-    monitor.update_monitoring("fcast", clobber=False)
+    # Use raster-based processing for observations
+    logger.info("Starting observational monitoring with raster rainfall data")
+    df_obsv = monitor.process_observational_tracks_with_raster(clobber=False)
+    monitor.save_monitoring_data(df_obsv, "obsv")
+
+    # Use wind-only processing for forecasts
+    logger.info("Starting forecast monitoring")
+    df_fcast = monitor.process_forecast_tracks(clobber=False)
+    monitor.save_monitoring_data(df_fcast, "fcast")
 
 
 if __name__ == "__main__":
