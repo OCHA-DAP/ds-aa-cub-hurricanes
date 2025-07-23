@@ -21,6 +21,8 @@ logger = get_logger(__name__)
 
 # This no longer used in pipeline, but can be if we wish to use IMERG
 # database.
+
+
 class RainfallProcessor(ABC):
     """Abstract base class for rainfall data processing."""
 
@@ -122,13 +124,13 @@ class IMERGRasterProcessor:
     criteria.
     """
 
-    def __init__(self, quantile: float = 0.95):
+    def __init__(self, quantile: float = 0.8):
         """
         Initialize IMERG raster processor.
 
         Args:
             quantile: Quantile threshold for rainfall aggregation (default
-                0.95)
+                0.8)
         """
         self.quantile = quantile
         self.adm0 = codab.load_codab_from_blob()
