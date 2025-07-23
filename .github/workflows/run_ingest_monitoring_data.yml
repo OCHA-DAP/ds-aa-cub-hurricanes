@@ -1,4 +1,4 @@
-name: Ingest Monitoring Data
+name: Ingest Forecast Monitoring Data
 
 on:
   workflow_dispatch:
@@ -28,4 +28,4 @@ jobs:
 
     - name: Run script
       run: |
-        python pipelines/01_ingest_monitoring_data.py
+        python pipelines/01_update_fcast_data.py

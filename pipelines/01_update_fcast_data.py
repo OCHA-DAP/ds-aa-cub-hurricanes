@@ -13,8 +13,6 @@ def update_monitoring_data():
 
     # Update both observational and forecast monitoring
 
-    # lets just see of fcast runs on gha while setting up 'obsv' better
-
     monitor.update_monitoring("fcast", clobber=False)
     monitor.update_monitoring("obsv", clobber=False)
 
