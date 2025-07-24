@@ -758,6 +758,12 @@ class CubaHurricaneMonitor:
         """
         logger.info("Loading NHC observational tracks for Atlantic basin.")
         obsv_tracks = nhc.load_recent_glb_obsv()
+
+        # Handle empty DataFrame case
+        if obsv_tracks.empty:
+            logger.info("No track data available, returning empty DataFrame.")
+            return pd.DataFrame()
+
         obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
         obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
         obsv_tracks = obsv_tracks.sort_values("lastUpdate")
@@ -1106,6 +1112,12 @@ class CubaHurricaneMonitor:
         """Process NHC observational tracks into monitoring records."""
         logger.info("Loading NHC observational tracks for Atlantic basin.")
         obsv_tracks = nhc.load_recent_glb_obsv()
+
+        # Handle empty DataFrame case
+        if obsv_tracks.empty:
+            logger.info("No track data available, returning empty DataFrame.")
+            return pd.DataFrame()
+
         obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
         obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
         obsv_tracks = obsv_tracks.sort_values("lastUpdate")
