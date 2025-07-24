@@ -54,7 +54,7 @@ def load_imerg_recent(recent: bool = False):
     query = """
     SELECT valid_date, mean
     FROM public.imerg
-    WHERE pcode = 'HT'
+    WHERE pcode = 'CU'
     """
     df = pd.read_sql(
         query, stratus.get_engine(stage="prod"), parse_dates=["valid_date"]
