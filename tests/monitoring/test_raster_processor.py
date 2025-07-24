@@ -2,17 +2,18 @@
 Tests for the IMERGRasterProcessor class and raster-based functionality.
 """
 
+from unittest.mock import MagicMock, patch
+
+import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock, patch
 import xarray as xr
-import numpy as np
-import geopandas as gpd
 from shapely.geometry import Polygon
 
 from src.monitoring.monitoring_utils import (
-    IMERGRasterProcessor,
     CubaHurricaneMonitor,
+    IMERGRasterProcessor,
 )
 
 

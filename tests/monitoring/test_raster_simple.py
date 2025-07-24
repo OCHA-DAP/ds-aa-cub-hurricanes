@@ -2,15 +2,16 @@
 Simplified tests for the raster processor functionality.
 """
 
+from unittest.mock import patch
+
+import geopandas as gpd
 import pandas as pd
 import pytest
-from unittest.mock import patch
-import geopandas as gpd
 from shapely.geometry import Polygon
 
 from src.monitoring.monitoring_utils import (
-    IMERGRasterProcessor,
     CubaHurricaneMonitor,
+    IMERGRasterProcessor,
     create_cuba_hurricane_monitor,
 )
 

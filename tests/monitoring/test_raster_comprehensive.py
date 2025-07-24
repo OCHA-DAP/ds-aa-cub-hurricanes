@@ -2,10 +2,11 @@
 Additional comprehensive tests for raster-based processing workflows.
 """
 
+from unittest.mock import MagicMock, patch
+
+import geopandas as gpd
 import pandas as pd
 import pytest
-from unittest.mock import patch, MagicMock
-import geopandas as gpd
 from shapely.geometry import Point
 
 from src.monitoring.monitoring_utils import (
