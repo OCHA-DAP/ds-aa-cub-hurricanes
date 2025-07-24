@@ -2,6 +2,8 @@ name: Ingest Observational Data
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '15 17 * * *' # Start at 5:15 PM UTC daily
 
 jobs:
   run-script:
@@ -13,6 +15,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: forecast-monitor
 
     - name: Set up Python
       uses: actions/setup-python@v5
