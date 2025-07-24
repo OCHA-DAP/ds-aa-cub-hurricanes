@@ -30,4 +30,4 @@ jobs:
 
     - name: Run script
       run: |
-        python pipelines/01_update_fcast_data.py
+        python pipelines/02_update_obsv_data.py
