@@ -1145,3 +1145,18 @@ def process_chirps_gefs_for_region(
     """
     manager = ChirpsGefsManager(geometry, region_name, **config_kwargs)
     return manager.run_full_pipeline(download_recent_only=recent_only)
+
+
+
+def load_processed_chirps_gefs(variable_name: str = None):
+    query = f"""
+    SELECT *
+    FROM projects.{PROJECT_PREFIX.replace('-', '_')}_chirps_gefs
+    """
+    if variable_name is not None:
+        query += f"""
+        WHERE variable = '{variable_name}'
+        """
+    return pd.read_sql(
+        query, stratus.get_engine(), parse_dates=["valid_date", "issued_date"]
+    )

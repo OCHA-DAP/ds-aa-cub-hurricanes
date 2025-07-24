@@ -29,26 +29,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from src.datasources import ibtracs
+from src.datasources.ibtracs import knots2cat
 from src.constants import *
 ```
 
 ## Load and merge data
 
 ```python
-# temporarily load IBTrACS locally since DB is down
-filename = "temp/ibtracs.NA.list.v04r01.csv"
-df_ibtracs = pd.read_csv(filename, skiprows=[1])
+df_storms = ibtracs.load_storms()
+cols = ["sid", "atcf_id", "name"]
+df_storms = df_storms[
+    (df_storms["sid"].str[:4].astype(int) >= 2000)
+    & (df_storms["genesis_basin"] == "NA")
+][cols]
+df_storms["atcf_id"] = df_storms["atcf_id"].str.lower()
 ```
 
 ```python
-df_storms = (
-    df_ibtracs.groupby("SID")[["NAME", "USA_ATCF_ID"]].last().reset_index()
-)
-df_storms = df_storms.rename(
-    columns={"SID": "sid", "NAME": "name", "USA_ATCF_ID": "atcf_id"}
-)
-df_storms = df_storms[df_storms["sid"].str[:4].astype(int) >= 2000]
-df_storms["atcf_id"] = df_storms["atcf_id"].str.lower()
+df_storms
 ```
 
 ```python
@@ -133,19 +132,11 @@ df_stats
 ## Comparing options
 
 ```python
-def knots2cat(knots):
-    category = 0
-    if knots >= 137:
-        category = 5
-    elif knots >= 113:
-        category = 4
-    elif knots >= 96:
-        category = 3
-    elif knots >= 83:
-        category = 2
-    elif knots >= 64:
-        category = 1
-    return category
+f"{6**2 * 70**6:,}"
+```
+
+```python
+f"{6**2 * 70**4:,}"
 ```
 
 ```python
@@ -160,6 +151,14 @@ df_stats["cerf_num"] = df_stats["cerf"].apply(lambda x: 1 if x == True else 0)
 df_stats[df_stats["Total Affected"] > 0].corr(numeric_only=True)[
     "Total Affected"
 ]
+```
+
+```python
+df_stats["Total Affected sq"] = df_stats["Total Affected"] ** 2
+```
+
+```python
+df_stats.corr(numeric_only=True)["Total Affected sq"]
 ```
 
 Above checks correlation with impact to get rough idea of what rainfall aggregation could be good. Maybe the median?
@@ -185,7 +184,7 @@ cat2knots = {5: 137, 4: 113, 3: 96, 2: 83, 1: 64}
 
 ```python
 # iterate over categories to get the appropriate rainfall threshold for each one
-rain_col = "q50"
+rain_col = "q80"
 
 rain_threshs = {}
 for cat in [1, 2, 3, 4]:
@@ -309,18 +308,24 @@ def plot_threshs(rain_thresh, wind_cat_thresh, rain_col):
         color="grey",
     )
     ax.annotate(
-        "\nTriggered    \nstorms    ",
-        (xmax, ymax),
-        ha="right",
+        "\n    Triggered    \n    storms    ",
+        (wind_thresh, ymax),
+        ha="left",
         va="top",
         color=trig_color,
         fontstyle="italic",
     )
 
-    ax.set_ylabel(rain_col)
+    if rain_col == "q50":
+        ylabel = (
+            "Two-day rainfall, median over whole country (mm) [CHIRPS-GEFS]"
+        )
+    else:
+        ylabel = rain_col
+    ax.set_ylabel(ylabel)
     ax.set_xlabel("\nMax. wind speed while in 250 km buffer (knots) [NHC]")
     ax.set_title(
-        "Cuba triggered storms (since 2000)\n"
+        "Cuba triggered storms based on forecasts (since 2000)\n"
         f"Cat. {cat} and {rain_thresh:.0f} mm rainfall trigger"
     )
 
@@ -339,7 +344,7 @@ plot_threshs(rain_threshs[cat], cat, rain_col)
 
 ```python
 cat = 2
-plot_threshs(rain_threshs[cat], cat, rain_col)
+fig, ax = plot_threshs(rain_threshs[cat], cat, rain_col)
 ```
 
 ```python

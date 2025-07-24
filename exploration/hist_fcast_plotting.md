@@ -182,6 +182,8 @@ def plot_sid_leadtime(sid):
         & (gdf_obsv_sid["lon"] <= gdf_issuetime["lon"].max() + 1)
     ]
 
+    first_fcast_time = gdf_nhc[gdf_nhc["sid"] == sid]["issue_time"].min()
+
     leadtime = landfall_time - issue_time
     leadtime_str = format_timedelta(leadtime)
 
@@ -236,7 +238,8 @@ def plot_sid_leadtime(sid):
     ax.set_title(
         f'{gdf_issuetime.iloc[0]["name_season"]}: forecast issued {issue_time}\n'
         f"Landfall at {landfall_time}\n"
-        f"Leadtime to landfall: {leadtime_str}"
+        f"Leadtime to landfall: {leadtime_str}\n"
+        f"(First ever forecast issued at {first_fcast_time})"
     )
 
     ax.legend(title="Track and\nwind speed (knots)")
@@ -257,23 +260,11 @@ plot_sid_leadtime(IRMA)
 ```
 
 ```python
-# just checking when first ever track forecast was
-# and yup, we would've triggered with this first one
-gdf_nhc[gdf_nhc["sid"] == OSCAR]["issue_time"].min()
-```
-
-```python
 plot_sid_leadtime(OSCAR)
 ```
 
 ```python
 plot_sid_leadtime(IAN)
-```
-
-```python
-# same thing - we could've triggered on the first forecast
-# so hard to beat that leadtime
-gdf_nhc[gdf_nhc["sid"] == RAFAEL]["issue_time"].min()
 ```
 
 ```python
