@@ -1,3 +1,7 @@
+---
+jupyter: ds-aa-cub-hurricanes
+---
+
 ## CHIRPS GEFS Precipitation Forecasts
 
 <!-- markdownlint-disable MD013 -->
@@ -211,6 +215,7 @@ The default `{"x": -1, "y": -1}` prevents dask performance warnings by using ful
 ```
 
 ::: {.callout-note}
+
 **Note**: If you get an `AttributeError` about `load_raster_time_series` not being found, restart your Jupyter kernel or reload the module:
 
 ```python
@@ -220,6 +225,7 @@ importlib.reload(chirps_gefs)
 from src.datasources.chirps_gefs import ChirpsGefsLoader
 loader = ChirpsGefsLoader(config)
 ```
+
 :::
 
 ### Step 4: Using Your Test Script Configuration

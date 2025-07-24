@@ -1,22 +1,23 @@
-import pandas as pd
-import geopandas as gpd
 import datetime
-import xarray as xr
-import rioxarray as rxr
 from pathlib import Path
+
+import geopandas as gpd
 import ocha_stratus as stratus
+import pandas as pd
+import rioxarray as rxr
+import xarray as xr
+
+from src.constants import *
+from src.datasources import codab
 
 # Import our CHIRPS GEFS module components
 from src.datasources.chirps_gefs import (
-    ChirpsGefsManager,
     ChirpsGefsConfig,
     ChirpsGefsDownloader,
     ChirpsGefsLoader,
+    ChirpsGefsManager,
     ChirpsGefsProcessor,
 )
-from src.datasources import codab
-from src.constants import *
-
 
 cuba_gdf = codab.load_codab_from_blob()
 cuba_gdf = cuba_gdf[cuba_gdf["ADM0_PCODE"] == "CU"]

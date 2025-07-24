@@ -1,7 +1,8 @@
 project:
   type: book
 
-jupyter: ds-aa-cub-hurricanes
+jupyter:
+  kernel: ds-aa-cub-hurricanes
 
 book:
   title: "Anticipatory Action - Cuba Hurricanes"

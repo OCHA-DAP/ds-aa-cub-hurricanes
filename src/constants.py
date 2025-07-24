@@ -25,3 +25,16 @@ IRMA = "2017242N16333"
 IAN = "2022266N12294"
 OSCAR = "2024293N21294"
 RAFAEL = "2024309N13283"
+
+D_THRESH = 230
+
+# THRESH REVOSED
+THRESHS = {
+    "readiness": {"s": 120, "lt_days": 5},
+    "action": {"s": 120, "lt_days": 3},
+    "obsv": {"p": 98, "s": 100},
+}
+
+MIN_EMAIL_DISTANCE = 1000
+
+NUMERIC_NAME_REGEX = r"\b(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen|Nineteen|Twenty)\b"  # noqa: E501
