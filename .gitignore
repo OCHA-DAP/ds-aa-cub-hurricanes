@@ -8,8 +8,14 @@ __pycache__
 .python-version
 
 *.egg-info/
+*.csv
 
 */venv/*
 
 temp
 .Rproj.user
+
+*.png
+
+book_cub_hurricanes/_book/*
+book_cub_hurricanes/_freeze/*

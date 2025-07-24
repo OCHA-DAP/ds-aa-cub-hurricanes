@@ -1,0 +1,4 @@
+- source: project
+  netlify:
+    - id: 59840bf0-c91e-43f0-9ae7-17305cbd2e63
+      url: 'https://ds-aa-cuba-hurricanes-analysis.netlify.app'

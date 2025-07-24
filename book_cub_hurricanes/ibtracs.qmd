@@ -1,0 +1,110 @@
+## IBTrACS
+<!-- markdownlint-disable MD013 -->
+
+Load IBTrACS (@knapp2010ibtracs) from Postgres, and plot just to check the right stuff has been loaded.
+
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+```{python}
+from src.datasources import ibtracs, zma
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import LineString
+from matplotlib import pyplot as plt
+```
+
+```{python}
+gdf_zma = zma.load_zma()
+```
+
+```{python}
+total_bounds = gdf_zma.total_bounds
+```
+
+```{python}
+total_bounds
+```
+
+```{python}
+df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
+```
+
+```{python}
+df_all
+```
+
+```{python}
+df_all.dtypes
+```
+
+```{python}
+def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    """
+    Convert a DataFrame of points to a GeoDataFrame of LineStrings,
+    grouped by 'sid'.
+
+    Parameters:
+        df: DataFrame with 'sid', 'latitude', 'longitude' columns
+
+    Returns:
+        GeoDataFrame with one LineString per 'sid'
+    """
+    # Ensure sorted order if needed (e.g., by time)
+    
+    df = df.sort_values(["sid"])  # optionally add 'time' or similar
+
+    # Group and build LineStrings
+    lines = (
+        df.groupby("sid")
+        .filter(lambda group: len(group) > 1)  # Keep only groups with more than one point
+        .groupby("sid")
+        .apply(
+            lambda group: LineString(
+                zip(group["longitude"], group["latitude"])
+            )
+        )
+        .reset_index(name="geometry")
+    )
+
+    return gpd.GeoDataFrame(lines, geometry="geometry", crs="EPSG:4326")
+```
+
+```{python}
+gdf_lines = df_to_track_lines(df_all)
+```
+
+```{python}
+gdf_lines
+```
+
+```{python}
+fig, ax = plt.subplots()
+max_lines = 100
+plotted_lines = 0
+for sid, row in gdf_lines.iterrows():
+    plotted_lines += 1
+    if plotted_lines > max_lines:
+        break
+    x, y = row.geometry.xy
+    ax.plot(x, y, label=str(row["sid"]))  # matplotlib auto-assigns color
+
+gdf_zma.boundary.plot(ax=ax, color="k")
+```
+Looks like all the tracks are inside the ZMA, so should be good
+
+```{python}
+# | eval: false
+# | include: false
+
+fig, ax = plt.subplots()
+gdf_zma.boundary.plot(ax=ax, color="k")
+for sid, row in gdf_lines.iterrows():
+    x, y = row.geometry.xy
+    ax.plot(x, y, label=str(row["sid"]))  # matplotlib auto-assigns color
+
+    ax.legend(title="sid", loc="upper right")
+```
