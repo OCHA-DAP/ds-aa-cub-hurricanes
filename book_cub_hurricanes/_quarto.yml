@@ -16,7 +16,8 @@ book:
     - combine_imerg_ibtracs.qmd
     - plot_optimization.qmd
     - era5_soil_moisture.qmd
-    # - chirps_gefs.qmd
+    - threestage_trig_plot.qmd
+    - chirps_gefs.qmd
     - chirps_gefs_raster_processing.qmd
     - summary.qmd
     - references.qmd
