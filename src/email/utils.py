@@ -32,11 +32,11 @@ if EMAIL_DISCLAIMER == "True":
 else:
     EMAIL_DISCLAIMER = False
 
-TEST_ATCF_ID = "TEST_ATCF_ID"
-TEST_MONITOR_ID = "TEST_MONITOR_ID"
-TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
-TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
-TEST_STORM_NAME = "TEST_STORM_NAME"
+TEST_ATCF_ID = "al182024"  # Hurricane Rafael
+TEST_MONITOR_ID = "al182024_obsv_2024-11-06T21:00:00"  # Rafael observation ID
+TEST_FCAST_MONITOR_ID = "al182024_fcast_2024-11-04T21:00:00"  # Rafael forecast
+TEST_OBSV_MONITOR_ID = "al182024_obsv_2024-11-06T21:00:00"  # Rafael obsv
+TEST_STORM_NAME = "Rafael"
 
 TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"

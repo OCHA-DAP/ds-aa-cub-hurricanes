@@ -17,7 +17,7 @@ from src.constants import (
     PROJECT_PREFIX,
     THRESHS,
 )
-from src.datasources import codab, nhc
+from src.datasources import codab, nhc, zma
 from src.email.utils import (
     TEST_FCAST_MONITOR_ID,
     TEST_OBSV_MONITOR_ID,
@@ -98,13 +98,13 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
 
     stats = stratus.load_csv_from_blob(blob_name)
     if fcast_obsv == "fcast":
-        rain_plot_var = "readiness_p"
+        rain_plot_var = None  # No precipitation variables for forecast
         s_plot_var = "readiness_s"
         rain_col = "max_roll2_sum_rain"
         rain_source_str = "CHIRPS"
         rain_ymax = 100
         s_thresh = THRESHS["readiness"]["s"]
-        rain_thresh = THRESHS["readiness"]["p"]
+        rain_thresh = None  # No rain threshold for forecast
         fcast_obsv_es = "pronósticos"
         no_pass_text = "no está previsto que pase"
     else:
@@ -127,7 +127,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     stats["marker_size"] = stats["affected_population"] / 6e2
     stats["marker_size"] = stats["marker_size"].fillna(1)
     stats["color"] = stats["sid"].apply(sid_color)
-    current_p = monitoring_point[rain_plot_var]
+    current_p = monitoring_point[rain_plot_var] if rain_plot_var else None
     current_s = monitoring_point[s_plot_var]
     issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
 
@@ -206,7 +206,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         fontweight="bold",
     )
     ax.annotate(
-        "\n\nAllocations CERF en rouge   ",
+        "\n\nAsignaciones CERF en rojo   ",
         (155, rain_ymax),
         ha="right",
         va="top",
@@ -266,7 +266,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
 
 def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     adm = codab.load_codab_from_blob(admin_level=0)
-    trig_zone = codab.load_buffer()
+    trig_zone = zma.load_zma()
     lts = {
         "action": {
             "color": "darkorange",
@@ -277,7 +277,6 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             "lt_max": pd.Timedelta(days=3),
             "lt_min": pd.Timedelta(days=-1),
             "threshs": {
-                "roll2_rain_dist": THRESHS["action"]["p"],
                 "wind_dist": THRESHS["action"]["s"],
                 "dist_min": D_THRESH,
             },
@@ -286,12 +285,11 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             "color": "dodgerblue",
             "plot_color": "grey",
             "dash": "dot",
-            "label": "Mobilisation",
+            "label": "Movilización",
             "zorder": 1,
             "lt_max": pd.Timedelta(days=5),
             "lt_min": pd.Timedelta(days=2),
             "threshs": {
-                "roll2_rain_dist": THRESHS["readiness"]["p"],
                 "wind_dist": THRESHS["readiness"]["s"],
                 "dist_min": D_THRESH,
             },
@@ -300,7 +298,7 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             "color": "dodgerblue",
             "plot_color": "black",
             "dash": "dot",
-            "label": "Observationnel",
+            "label": "Observacional",
             "zorder": 1,
             "lt_max": pd.Timedelta(days=0),
             "lt_min": pd.Timedelta(days=0),
@@ -320,7 +318,7 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     cyclone_name = monitoring_point["name"]
     atcf_id = monitoring_point["atcf_id"]
     if atcf_id == "TEST_ATCF_ID":
-        atcf_id = "al022024"
+        atcf_id = "al182024"  # Use Hurricane Rafael for Cuba tests
     issue_time = monitoring_point["issue_time"]
     issue_time_cuba = issue_time.astimezone(cuba_tz)
 
@@ -349,8 +347,9 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     )
 
     tracks_f["lt"] = tracks_f["validTime"] - tracks_f["issuance"]
-    rain_plot_var = "readiness_p" if fcast_obsv == "fcast" else "obsv_p"
-    rain_level = monitoring_point[rain_plot_var]
+    # No precipitation variables for forecast monitoring
+    rain_plot_var = None if fcast_obsv == "fcast" else "obsv_p"
+    rain_level = monitoring_point[rain_plot_var] if rain_plot_var else None
     fig = go.Figure()
 
     # adm0 outline
@@ -420,7 +419,7 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         )
 
         # rainfall
-        if lt_name in ["readiness", "obsv"]:
+        if lt_name in ["readiness", "obsv"] and rain_level is not None:
             # rain_level = dff["roll2_rain_dist"].max()
             if pd.isnull(rain_level):
                 rain_level_str = ""
