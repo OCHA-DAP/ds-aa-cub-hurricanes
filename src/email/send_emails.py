@@ -6,7 +6,6 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from typing import Literal
 
-import pandas as pd
 import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
@@ -46,12 +45,7 @@ def prepare_email_data(
     # No need for DataFrame check - test IDs are unique
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
-    # Convert to scalar datetime - handle pandas Series by getting scalar value
-    issue_time_raw = monitoring_point["issue_time"]
-    if hasattr(issue_time_raw, "to_pydatetime"):
-        issue_time = issue_time_raw.to_pydatetime()
-    else:
-        issue_time = pd.to_datetime(issue_time_raw).to_pydatetime()
+    issue_time = monitoring_point["issue_time"]
     issue_time_cuba = issue_time.astimezone(cuba_tz)
     pub_time = issue_time_cuba.strftime("%Hh%M")
     pub_date = issue_time_cuba.strftime("%-d %b %Y")
