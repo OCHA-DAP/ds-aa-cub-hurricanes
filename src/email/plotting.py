@@ -12,7 +12,7 @@ from src.constants import (
     CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
-    FRENCH_MONTHS,
+    SPANISH_MONTHS,
     LON_ZOOM_RANGE,
     PROJECT_PREFIX,
     THRESHS,
@@ -36,11 +36,11 @@ def get_plot_blob_name(monitor_id, plot_type: Literal["map", "scatter"]):
     )
 
 
-def convert_datetime_to_fr_str(x: pd.Timestamp) -> str:
-    fr_str = x.strftime("%Hh%M, %-d %b")
-    for en_mo, fr_mo in FRENCH_MONTHS.items():
-        fr_str = fr_str.replace(en_mo, fr_mo)
-    return fr_str
+def convert_datetime_to_es_str(x: pd.Timestamp) -> str:
+    es_str = x.strftime("%Hh%M, %-d %b")
+    for en_mo, es_mo in SPANISH_MONTHS.items():
+        es_str = es_str.replace(en_mo, es_mo)
+    return es_str
 
 
 def update_plots(
@@ -128,10 +128,10 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     stats["color"] = stats["sid"].apply(sid_color)
     current_p = monitoring_point[rain_plot_var]
     current_s = monitoring_point[s_plot_var]
-    issue_time_str_fr = convert_datetime_to_fr_str(issue_time_hti)
+    issue_time_str_es = convert_datetime_to_es_str(issue_time_hti)
 
     date_str = (
-        f"Prévision "
+        f"Pronóstico "
         f'{monitoring_point["issue_time"].strftime("%Hh%M %d %b UTC")}'
     )
 

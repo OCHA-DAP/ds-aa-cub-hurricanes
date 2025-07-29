@@ -1,3 +1,5 @@
+import numpy as np
+
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
 
@@ -50,19 +52,19 @@ CERF_SIDS = [
     "2012296N14283",  # Sandy
 ]
 
-FRENCH_MONTHS = {
-    "Jan": "jan.",
-    "Feb": "fév.",
-    "Mar": "mars",
-    "Apr": "avr.",
-    "May": "mai",
-    "Jun": "juin",
-    "Jul": "juil.",
-    "Aug": "août",
-    "Sep": "sept.",
+SPANISH_MONTHS = {
+    "Jan": "ene.",
+    "Feb": "feb.",
+    "Mar": "mar.",
+    "Apr": "abr.",
+    "May": "may.",
+    "Jun": "jun.",
+    "Jul": "jul.",
+    "Aug": "ago.",
+    "Sep": "sep.",
     "Oct": "oct.",
     "Nov": "nov.",
-    "Dec": "déc.",
+    "Dec": "dic.",
 }
 
 CHD_GREEN = "#1bb580"

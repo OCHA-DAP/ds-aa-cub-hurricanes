@@ -10,7 +10,7 @@ import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
-from src.constants import FRENCH_MONTHS
+from src.constants import SPANISH_MONTHS
 from src.email.plotting import get_plot_blob_name
 from src.email.utils import (
     EMAIL_ADDRESS,
@@ -45,22 +45,22 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     issue_time_hti = issue_time.astimezone(haiti_tz)
     pub_time = issue_time_hti.strftime("%Hh%M")
     pub_date = issue_time_hti.strftime("%-d %b %Y")
-    for en_mo, fr_mo in FRENCH_MONTHS.items():
-        pub_date = pub_date.replace(en_mo, fr_mo)
-    fcast_obsv_fr = "observation" if fcast_obsv == "obsv" else "prévision"
-    activation_subject = "(PAS D'ACTIVATION)"
+    for en_mo, es_mo in SPANISH_MONTHS.items():
+        pub_date = pub_date.replace(en_mo, es_mo)
+    fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
+    activation_subject = "(SIN ACTIVACIÓN)"
     if fcast_obsv == "fcast":
         readiness = (
-            "ACTIVÉ" if monitoring_point["readiness_trigger"] else "NON ACTIVÉ"
+            "ACTIVADO" if monitoring_point["readiness_trigger"] else "NO ACTIVADO"
         )
         action = (
-            "ACTIVÉ" if monitoring_point["action_trigger"] else "NON ACTIVÉ"
+            "ACTIVADO" if monitoring_point["action_trigger"] else "NO ACTIVADO"
         )
         obsv = ""
     else:
         readiness = ""
         action = ""
-        obsv = "ACTIVÉ" if monitoring_point["obsv_trigger"] else "NON ACTIVÉ"
+        obsv = "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
 
     distribution_list = get_distribution_list()
     valid_distribution_list = distribution_list[
@@ -77,7 +77,7 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     to_list = valid_distribution_list[valid_distribution_list["info"] == "to"]
     cc_list = valid_distribution_list[valid_distribution_list["info"] == "cc"]
 
-    test_subject = "TEST : " if TEST_STORM else ""
+    test_subject = "PRUEBA : " if TEST_STORM else ""
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -86,11 +86,11 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     msg = EmailMessage()
     msg.set_charset("utf-8")
     msg["Subject"] = (
-        f"{test_subject}Action anticipatoire Haïti – information sur "
-        f"prévision {cyclone_name} {pub_time}, {pub_date} {activation_subject}"
+        f"{test_subject}Acción anticipatoria Cuba – información sobre "
+        f"pronóstico {cyclone_name} {pub_time}, {pub_date} {activation_subject}"
     )
     msg["From"] = Address(
-        "Centre de données humanitaires OCHA",
+        "Centro de Datos Humanitarios OCHA",
         EMAIL_ADDRESS.split("@")[0],
         EMAIL_ADDRESS.split("@")[1],
     )
@@ -116,7 +116,7 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         name=cyclone_name,
         pub_time=pub_time,
         pub_date=pub_date,
-        fcast_obsv=fcast_obsv_fr,
+        fcast_obsv=fcast_obsv_es,
         readiness=readiness,
         action=action,
         obsv=obsv,
@@ -178,15 +178,15 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     issue_time_hti = issue_time.astimezone(haiti_tz)
     pub_time = issue_time_hti.strftime("%Hh%M")
     pub_date = issue_time_hti.strftime("%-d %b %Y")
-    for en_mo, fr_mo in FRENCH_MONTHS.items():
-        pub_date = pub_date.replace(en_mo, fr_mo)
+    for en_mo, es_mo in SPANISH_MONTHS.items():
+        pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":
-        trigger_name_fr = "mobilisation"
+        trigger_name_es = "preparación"
     elif trigger_name == "action":
-        trigger_name_fr = "action"
+        trigger_name_es = "acción"
     else:
-        trigger_name_fr = "observationnel"
-    fcast_obsv_fr = "observation" if fcast_obsv == "obsv" else "prévision"
+        trigger_name_es = "observacional"
+    fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
 
     distribution_list = get_distribution_list()
     valid_distribution_list = distribution_list[
@@ -207,7 +207,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         valid_distribution_list["trigger"] == "cc"
     ]
 
-    test_subject = "TEST : " if TEST_STORM else ""
+    test_subject = "PRUEBA : " if TEST_STORM else ""
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -216,12 +216,12 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     msg = EmailMessage()
     msg.set_charset("utf-8")
     msg["Subject"] = (
-        f"{test_subject}Action anticipatoire Haïti – "
-        f"déclencheur {trigger_name_fr} atteint pour "
+        f"{test_subject}Acción anticipatoria Cuba – "
+        f"activador {trigger_name_es} alcanzado para "
         f"{cyclone_name}"
     )
     msg["From"] = Address(
-        "Centre de données humanitaires OCHA",
+        "Centro de Datos Humanitarios OCHA",
         EMAIL_ADDRESS.split("@")[0],
         EMAIL_ADDRESS.split("@")[1],
     )
@@ -249,7 +249,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         name=cyclone_name,
         pub_time=pub_time,
         pub_date=pub_date,
-        fcast_obsv=fcast_obsv_fr,
+        fcast_obsv=fcast_obsv_es,
         test_email=TEST_STORM,
         email_disclaimer=EMAIL_DISCLAIMER,
         chd_banner_cid=chd_banner_cid[1:-1],
