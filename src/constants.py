@@ -30,11 +30,10 @@ RAFAEL = "2024309N13283"
 
 D_THRESH = 230
 
-# THRESH REVOSED
 THRESHS = {
-    "readiness": {"s": 120, "p": 75, "lt_days": 5},
-    "action": {"s": 120, "p": 85, "lt_days": 3},
-    "obsv": {"p": 98, "s": 100},
+    "readiness": {"s": 120, "lt_days": 5},
+    "action": {"s": 120, "lt_days": 3},
+    "obsv": {"p": 98, "s": 100},  # NEED TO UPDATE FOR PROD
 }
 
 MIN_EMAIL_DISTANCE = 1000
