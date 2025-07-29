@@ -22,7 +22,7 @@ from src.email.utils import (
     TEST_FCAST_MONITOR_ID,
     TEST_OBSV_MONITOR_ID,
     TEST_STORM,
-    add_test_row_to_monitoring,
+    load_monitoring_data,
 )
 from src.monitoring import monitoring_utils
 import ocha_stratus as stratus
@@ -75,6 +75,7 @@ def preview_info_email(
     monitor_id: str,
     fcast_obsv: Literal["fcast", "obsv"],
     save_to_file: bool = True,
+    with_tests: bool = True,
 ):
     """
     Preview an info email without sending it.
@@ -88,15 +89,28 @@ def preview_info_email(
         Whether it's a forecast or observation email
     save_to_file : bool
         If True, saves HTML to a file you can open in a browser
+    with_tests : bool
+        If True, includes test data when using test monitor IDs.
+        If False, uses only regular data (no test rows added).
 
     Returns:
     --------
     dict: Contains 'html', 'text', 'subject', and other email details
     """
-    # Use the shared email content creation function
-    email_content = create_info_email_content(
-        monitor_id, fcast_obsv, for_preview=True
-    )
+    # Override the default preview behavior based on with_tests parameter
+    if with_tests and monitor_id in [
+        TEST_FCAST_MONITOR_ID,
+        TEST_OBSV_MONITOR_ID,
+    ]:
+        # Use standard preview logic (will include test data)
+        email_content = create_info_email_content(
+            monitor_id, fcast_obsv, for_preview=True, with_tests=True
+        )
+    else:
+        # Force specific with_tests behavior
+        email_content = create_info_email_content(
+            monitor_id, fcast_obsv, for_preview=True, with_tests=with_tests
+        )
 
     # Get the HTML and replace placeholder CIDs with base64 data URLs for browser viewing
     html_str = email_content["html"]
@@ -189,7 +203,10 @@ def preview_info_email(
 
 
 def preview_trigger_email(
-    monitor_id: str, trigger_name: str, save_to_file: bool = True
+    monitor_id: str,
+    trigger_name: str,
+    save_to_file: bool = True,
+    with_tests: bool = True,
 ):
     """
     Preview a trigger email without sending it.
@@ -202,23 +219,23 @@ def preview_trigger_email(
         The trigger type ("readiness", "action", or "obsv")
     save_to_file : bool
         If True, saves HTML to a file you can open in a browser
+    with_tests : bool
+        If True, includes test data when using test monitor IDs.
+        If False, uses only regular data (no test rows added).
 
     Returns:
     --------
     dict: Contains 'html', 'text', 'subject', and other email details
     """
     fcast_obsv = "fcast" if trigger_name in ["readiness", "action"] else "obsv"
-    # Create monitor instance to access data
-    monitor = monitoring_utils.create_cuba_hurricane_monitor()
-    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
 
-    # Only add test rows if we're actually using the generic test constants AND TEST_STORM is True
-    if (
-        TEST_STORM
+    # Force test data availability based on with_tests parameter and monitor ID
+    force_tests = (
+        with_tests
         and monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]
         and monitor_id.startswith("TEST_")
-    ):
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+    )
+    df_monitoring = load_monitoring_data(fcast_obsv, with_tests=force_tests)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]

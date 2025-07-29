@@ -19,13 +19,9 @@ from src.constants import (
 )
 from src.datasources import codab, nhc, zma
 from src.email.utils import (
-    TEST_FCAST_MONITOR_ID,
-    TEST_OBSV_MONITOR_ID,
-    TEST_STORM,
-    add_test_row_to_monitoring,
+    load_monitoring_data,
     open_static_image,
 )
-from src.monitoring import monitoring_utils
 import ocha_stratus as stratus
 
 
@@ -50,10 +46,7 @@ def update_plots(
 ):
     if clobber is None:
         clobber = []
-    monitor = monitoring_utils.CubaHurricaneMonitor()
-    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-    if TEST_STORM:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+    df_monitoring = load_monitoring_data(fcast_obsv)
     existing_plot_blobs = stratus.list_container_blobs(
         name_starts_with=f"{PROJECT_PREFIX}/plots/{fcast_obsv}/"
     )
@@ -83,11 +76,7 @@ def create_plot(
 
 
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    monitor = monitoring_utils.CubaHurricaneMonitor()
-    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-    # Add test rows when using test monitor IDs
-    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+    df_monitoring = load_monitoring_data(fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
@@ -310,11 +299,7 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             },
         },
     }
-    monitor = monitoring_utils.CubaHurricaneMonitor()
-    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-    # Add test rows when using test monitor IDs
-    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+    df_monitoring = load_monitoring_data(fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]

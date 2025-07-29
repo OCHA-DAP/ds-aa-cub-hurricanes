@@ -1,30 +1,18 @@
 import traceback
 
-import pandas as pd
-
-from src.constants import MIN_EMAIL_DISTANCE, PROJECT_PREFIX
+from src.constants import MIN_EMAIL_DISTANCE
 from src.email.send_emails import send_info_email, send_trigger_email
 from src.email.utils import (
-    TEST_ATCF_ID,
     TEST_STORM,
-    add_test_row_to_monitoring,
-    load_email_record,
+    load_monitoring_data,
+    load_email_record_with_test_filtering,
+    save_email_record,
 )
-from src.monitoring import monitoring_utils
-import ocha_stratus as stratus
 
 
 def update_obsv_info_emails(verbose: bool = False):
-    df_monitoring = monitoring_utils.load_existing_monitoring_points("obsv")
-    df_existing_email_record = load_email_record()
-    if TEST_STORM:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, "obsv")
-        df_existing_email_record = df_existing_email_record[
-            ~(
-                (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
-                & (df_existing_email_record["email_type"] == "info")
-            )
-        ]
+    df_monitoring = load_monitoring_data("obsv")
+    df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
     dicts = []
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
@@ -62,25 +50,12 @@ def update_obsv_info_emails(verbose: bool = False):
             print(f"could not send info email for {monitor_id}: {e}")
             traceback.print_exc()
 
-    df_new_email_record = pd.DataFrame(dicts)
-    df_combined_email_record = pd.concat(
-        [df_existing_email_record, df_new_email_record], ignore_index=True
-    )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
+    save_email_record(df_existing_email_record, dicts)
 
 
 def update_fcast_info_emails(verbose: bool = False):
-    df_monitoring = monitoring_utils.load_existing_monitoring_points("fcast")
-    df_existing_email_record = load_email_record()
-    if TEST_STORM:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, "fcast")
-        df_existing_email_record = df_existing_email_record[
-            ~(
-                (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
-                & (df_existing_email_record["email_type"] == "info")
-            )
-        ]
+    df_monitoring = load_monitoring_data("fcast")
+    df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
     dicts = []
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
@@ -114,25 +89,12 @@ def update_fcast_info_emails(verbose: bool = False):
                 print(f"could not send info email for {monitor_id}: {e}")
                 traceback.print_exc()
 
-    df_new_email_record = pd.DataFrame(dicts)
-    df_combined_email_record = pd.concat(
-        [df_existing_email_record, df_new_email_record], ignore_index=True
-    )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
+    save_email_record(df_existing_email_record, dicts)
 
 
 def update_obsv_trigger_emails():
-    df_monitoring = monitoring_utils.load_existing_monitoring_points("obsv")
-    df_existing_email_record = load_email_record()
-    if TEST_STORM:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, "obsv")
-        df_existing_email_record = df_existing_email_record[
-            ~(
-                (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
-                & (df_existing_email_record["email_type"] == "obsv")
-            )
-        ]
+    df_monitoring = load_monitoring_data("obsv")
+    df_existing_email_record = load_email_record_with_test_filtering(["obsv"])
     dicts = []
     for atcf_id, group in df_monitoring.groupby("atcf_id"):
         if (
@@ -172,12 +134,7 @@ def update_obsv_trigger_emails():
                         )
                         traceback.print_exc()
 
-    df_new_email_record = pd.DataFrame(dicts)
-    df_combined_email_record = pd.concat(
-        [df_existing_email_record, df_new_email_record], ignore_index=True
-    )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
+    save_email_record(df_existing_email_record, dicts)
 
 
 def update_fcast_trigger_emails():
@@ -185,20 +142,10 @@ def update_fcast_trigger_emails():
     sent a trigger email for any of them. If we need to send any emails,
     send them.
     """
-    df_monitoring = monitoring_utils.load_existing_monitoring_points("fcast")
-    df_existing_email_record = load_email_record()
-    if TEST_STORM:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, "fcast")
-        df_existing_email_record = df_existing_email_record[
-            ~(
-                (df_existing_email_record["atcf_id"] == "TEST_ATCF_ID")
-                & (
-                    df_existing_email_record["email_type"].isin(
-                        ["readiness", "action"]
-                    )
-                )
-            )
-        ]
+    df_monitoring = load_monitoring_data("fcast")
+    df_existing_email_record = load_email_record_with_test_filtering(
+        ["readiness", "action"]
+    )
     dicts = []
     for atcf_id, group in df_monitoring.groupby("atcf_id"):
         for trigger_name in ["readiness", "action"]:
@@ -241,9 +188,4 @@ def update_fcast_trigger_emails():
                             )
                             traceback.print_exc()
 
-    df_new_email_record = pd.DataFrame(dicts)
-    df_combined_email_record = pd.concat(
-        [df_existing_email_record, df_new_email_record], ignore_index=True
-    )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
+    save_email_record(df_existing_email_record, dicts)

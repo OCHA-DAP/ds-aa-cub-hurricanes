@@ -119,6 +119,68 @@ def load_email_record() -> pd.DataFrame:
     return stratus.load_csv_from_blob(blob_name)
 
 
+def load_monitoring_data(
+    fcast_obsv: Literal["fcast", "obsv"], with_tests: bool = True
+) -> pd.DataFrame:
+    """Load monitoring data with optional test row injection.
+
+    Args:
+        fcast_obsv: Whether to load forecast or observation data
+        with_tests: Whether to add test rows when TEST_STORM is enabled
+
+    Returns:
+        DataFrame with monitoring data, optionally including test rows
+    """
+    from src.monitoring import monitoring_utils
+
+    monitor = monitoring_utils.create_cuba_hurricane_monitor()
+    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
+
+    if with_tests and TEST_STORM:
+        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+
+    return df_monitoring
+
+
+def load_email_record_with_test_filtering(
+    email_types: list = None,
+) -> pd.DataFrame:
+    """Load email record with optional test data filtering.
+
+    Args:
+        email_types: List of email types to filter out for test data
+
+    Returns:
+        DataFrame with email records, filtered if TEST_STORM is enabled
+    """
+    df_existing_email_record = load_email_record()
+
+    if TEST_STORM and email_types:
+        df_existing_email_record = df_existing_email_record[
+            ~(
+                (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
+                & (df_existing_email_record["email_type"].isin(email_types))
+            )
+        ]
+
+    return df_existing_email_record
+
+
+def save_email_record(df_existing: pd.DataFrame, new_records: list) -> None:
+    """Combine existing email records with new ones and save to blob.
+
+    Args:
+        df_existing: Existing email record DataFrame
+        new_records: List of dictionaries representing new email records
+    """
+    df_new_email_record = pd.DataFrame(new_records)
+    df_combined_email_record = pd.concat(
+        [df_existing, df_new_email_record], ignore_index=True
+    )
+    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+    stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
+
+
 def is_valid_email(email):
     # Define a regex pattern for validating an email
     email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"

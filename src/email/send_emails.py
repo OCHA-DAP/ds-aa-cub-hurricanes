@@ -25,22 +25,21 @@ from src.email.utils import (
     TEST_FCAST_MONITOR_ID,
     TEST_OBSV_MONITOR_ID,
     TEST_STORM,
-    add_test_row_to_monitoring,
     get_distribution_list,
     is_valid_email,
+    load_monitoring_data,
 )
-from src.monitoring import monitoring_utils
 import ocha_stratus as stratus
 
 
-def prepare_email_data(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    """Prepare all the data needed for an email (shared between send and preview)."""
-    monitor = monitoring_utils.create_cuba_hurricane_monitor()
-    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-
-    # Add test row only if TEST_STORM is enabled and we're using test IDs
-    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+def prepare_email_data(
+    monitor_id: str,
+    fcast_obsv: Literal["fcast", "obsv"],
+    with_tests: bool = True,
+):
+    """Prepare data needed for email (shared between send/preview)."""
+    # Load monitoring data with conditional test injection
+    df_monitoring = load_monitoring_data(fcast_obsv, with_tests=with_tests)
 
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
 
@@ -94,9 +93,26 @@ def create_info_email_content(
     monitor_id: str,
     fcast_obsv: Literal["fcast", "obsv"],
     for_preview: bool = False,
+    with_tests: bool = None,
 ):
     """Create the HTML and text content for an info email."""
-    email_data = prepare_email_data(monitor_id, fcast_obsv)
+    # Determine with_tests behavior
+    if with_tests is not None:
+        # Explicit override provided
+        use_tests = with_tests
+    elif for_preview and monitor_id in [
+        TEST_FCAST_MONITOR_ID,
+        TEST_OBSV_MONITOR_ID,
+    ]:
+        # Preview with test monitor IDs defaults to including test data
+        use_tests = True
+    else:
+        # Default behavior (respects TEST_STORM internally)
+        use_tests = True
+
+    email_data = prepare_email_data(
+        monitor_id, fcast_obsv, with_tests=use_tests
+    )
 
     if not for_preview:
         distribution_list = get_distribution_list()
@@ -249,11 +265,7 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
 def send_trigger_email(monitor_id: str, trigger_name: str):
     """Send trigger email to distribution list."""
     fcast_obsv = "fcast" if trigger_name in ["readiness", "action"] else "obsv"
-    df_monitoring = monitoring_utils.load_existing_monitoring_points(
-        fcast_obsv
-    )
-    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
-        df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+    df_monitoring = load_monitoring_data(fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
