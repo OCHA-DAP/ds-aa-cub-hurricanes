@@ -1,3 +1,5 @@
+import numpy as np
+
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
 
@@ -28,13 +30,67 @@ RAFAEL = "2024309N13283"
 
 D_THRESH = 230
 
-# THRESH REVOSED
 THRESHS = {
     "readiness": {"s": 120, "lt_days": 5},
     "action": {"s": 120, "lt_days": 3},
-    "obsv": {"p": 98, "s": 100},
+    "obsv": {"p": 98, "s": 100},  # NEED TO UPDATE FOR PROD
 }
 
 MIN_EMAIL_DISTANCE = 1000
 
 NUMERIC_NAME_REGEX = r"\b(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen|Seventeen|Eighteen|Nineteen|Twenty)\b"  # noqa: E501
+
+# Temporary constants ported from haiti repo - will change to fit
+
+CERF_SIDS = [
+    "2016273N13300",  # Matthew
+    "2008245N17323",  # Ike
+    "2008238N13293",  # Gustav
+    "2008241N19303",  # Hanna
+    "2008229N18293",  # Fay
+    "2012296N14283",  # Sandy
+]
+
+SPANISH_MONTHS = {
+    "Jan": "ene.",
+    "Feb": "feb.",
+    "Mar": "mar.",
+    "Apr": "abr.",
+    "May": "may.",
+    "Jun": "jun.",
+    "Jul": "jul.",
+    "Aug": "ago.",
+    "Sep": "sep.",
+    "Oct": "oct.",
+    "Nov": "nov.",
+    "Dec": "dic.",
+}
+
+CHD_GREEN = "#1bb580"
+
+# Longitude zoom range for map plotting
+
+LON_ZOOM_RANGE = np.array(
+    [
+        0.0007,
+        0.0014,
+        0.003,
+        0.006,
+        0.012,
+        0.024,
+        0.048,
+        0.096,
+        0.192,
+        0.3712,
+        0.768,
+        1.536,
+        3.072,
+        6.144,
+        11.8784,
+        23.7568,
+        47.5136,
+        98.304,
+        190.0544,
+        360.0,
+    ]
+)

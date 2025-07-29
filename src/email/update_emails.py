@@ -1,0 +1,191 @@
+import traceback
+
+from src.constants import MIN_EMAIL_DISTANCE
+from src.email.send_emails import send_info_email, send_trigger_email
+from src.email.utils import (
+    TEST_STORM,
+    load_monitoring_data,
+    load_email_record_with_test_filtering,
+    save_email_record,
+)
+
+
+def update_obsv_info_emails(verbose: bool = False):
+    df_monitoring = load_monitoring_data("obsv")
+    df_existing_email_record = load_email_record_with_test_filtering(["info"])
+
+    dicts = []
+    for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
+        if row["min_dist"] > MIN_EMAIL_DISTANCE:
+            if verbose:
+                print(
+                    f"min_dist is {row['min_dist']}, "
+                    f"skipping info email for {monitor_id}"
+                )
+            continue
+        if (
+            monitor_id
+            in df_existing_email_record[
+                df_existing_email_record["email_type"] == "info"
+            ]["monitor_id"].unique()
+        ):
+            if verbose:
+                print(f"already sent info email for {monitor_id}")
+            continue
+        if not row["rainfall_relevant"]:
+            if verbose:
+                print(f"rainfall not relevant for {monitor_id}")
+            continue
+        try:
+            print(f"sending info email for {monitor_id}")
+            send_info_email(monitor_id=monitor_id, fcast_obsv="obsv")
+            dicts.append(
+                {
+                    "monitor_id": monitor_id,
+                    "atcf_id": row["atcf_id"],
+                    "email_type": "info",
+                }
+            )
+        except Exception as e:
+            print(f"could not send info email for {monitor_id}: {e}")
+            traceback.print_exc()
+
+    save_email_record(df_existing_email_record, dicts)
+
+
+def update_fcast_info_emails(verbose: bool = False):
+    df_monitoring = load_monitoring_data("fcast")
+    df_existing_email_record = load_email_record_with_test_filtering(["info"])
+
+    dicts = []
+    for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
+        if row["min_dist"] > MIN_EMAIL_DISTANCE:
+            if verbose:
+                print(
+                    f"min_dist is {row['min_dist']}, "
+                    f"skipping info email for {monitor_id}"
+                )
+            continue
+        if (
+            monitor_id
+            in df_existing_email_record[
+                df_existing_email_record["email_type"] == "info"
+            ]["monitor_id"].unique()
+        ):
+            if verbose:
+                print(f"already sent info email for {monitor_id}")
+        else:
+            try:
+                print(f"sending info email for {monitor_id}")
+                send_info_email(monitor_id=monitor_id, fcast_obsv="fcast")
+                dicts.append(
+                    {
+                        "monitor_id": monitor_id,
+                        "atcf_id": row["atcf_id"],
+                        "email_type": "info",
+                    }
+                )
+            except Exception as e:
+                print(f"could not send info email for {monitor_id}: {e}")
+                traceback.print_exc()
+
+    save_email_record(df_existing_email_record, dicts)
+
+
+def update_obsv_trigger_emails():
+    df_monitoring = load_monitoring_data("obsv")
+    df_existing_email_record = load_email_record_with_test_filtering(["obsv"])
+    dicts = []
+    for atcf_id, group in df_monitoring.groupby("atcf_id"):
+        if (
+            atcf_id
+            in df_existing_email_record[
+                df_existing_email_record["email_type"] == "obsv"
+            ]["atcf_id"].unique()
+        ):
+            print(f"already sent obsv email for {atcf_id}")
+        elif (
+            atcf_id
+            in df_existing_email_record[
+                df_existing_email_record["email_type"] == "action"
+            ]["atcf_id"].unique()
+            and not TEST_STORM
+        ):
+            print(f"already sent action email for {atcf_id}")
+        else:
+            for monitor_id, row in group.set_index("monitor_id").iterrows():
+                if row["obsv_trigger"]:
+                    try:
+                        print(f"sending obsv email for {monitor_id}")
+                        send_trigger_email(
+                            monitor_id=monitor_id, trigger_name="obsv"
+                        )
+                        dicts.append(
+                            {
+                                "monitor_id": monitor_id,
+                                "atcf_id": atcf_id,
+                                "email_type": "obsv",
+                            }
+                        )
+                    except Exception as e:
+                        print(
+                            f"could not send trigger email for {monitor_id}: "
+                            f"{e}"
+                        )
+                        traceback.print_exc()
+
+    save_email_record(df_existing_email_record, dicts)
+
+
+def update_fcast_trigger_emails():
+    """Cycle through all historical monitoring points to see if we should have
+    sent a trigger email for any of them. If we need to send any emails,
+    send them.
+    """
+    df_monitoring = load_monitoring_data("fcast")
+    df_existing_email_record = load_email_record_with_test_filtering(
+        ["readiness", "action"]
+    )
+    dicts = []
+    for atcf_id, group in df_monitoring.groupby("atcf_id"):
+        for trigger_name in ["readiness", "action"]:
+            if (
+                atcf_id
+                in df_existing_email_record[
+                    df_existing_email_record["email_type"] == trigger_name
+                ]["atcf_id"].unique()
+            ):
+                print(f"already sent {trigger_name} email for {atcf_id}")
+            else:
+                for (
+                    monitor_id,
+                    row,
+                ) in group.set_index("monitor_id").iterrows():
+                    if (
+                        row[f"{trigger_name}_trigger"]
+                        and not row["past_cutoff"]
+                    ):
+                        try:
+                            print(
+                                f"sending {trigger_name} email for "
+                                f"{monitor_id}"
+                            )
+                            send_trigger_email(
+                                monitor_id=monitor_id,
+                                trigger_name=trigger_name,
+                            )
+                            dicts.append(
+                                {
+                                    "monitor_id": monitor_id,
+                                    "atcf_id": atcf_id,
+                                    "email_type": trigger_name,
+                                }
+                            )
+                        except Exception as e:
+                            print(
+                                f"could not send trigger email for "
+                                f"{monitor_id}: {e}"
+                            )
+                            traceback.print_exc()
+
+    save_email_record(df_existing_email_record, dicts)
