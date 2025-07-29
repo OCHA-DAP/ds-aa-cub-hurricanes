@@ -51,7 +51,9 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     activation_subject = "(SIN ACTIVACIÓN)"
     if fcast_obsv == "fcast":
         readiness = (
-            "ACTIVADO" if monitoring_point["readiness_trigger"] else "NO ACTIVADO"
+            "ACTIVADO"
+            if monitoring_point["readiness_trigger"]
+            else "NO ACTIVADO"
         )
         action = (
             "ACTIVADO" if monitoring_point["action_trigger"] else "NO ACTIVADO"
@@ -60,7 +62,9 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     else:
         readiness = ""
         action = ""
-        obsv = "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
+        obsv = (
+            "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
+        )
 
     distribution_list = get_distribution_list()
     valid_distribution_list = distribution_list[
