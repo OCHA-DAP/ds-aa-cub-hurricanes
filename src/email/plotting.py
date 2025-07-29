@@ -85,12 +85,8 @@ def create_plot(
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     monitor = monitoring_utils.CubaHurricaneMonitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-    # Only add test rows if we're actually using the generic test constants AND TEST_STORM is True
-    if (
-        TEST_STORM
-        and monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]
-        and monitor_id.startswith("TEST_")
-    ):
+    # Add test rows when using test monitor IDs
+    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")
@@ -316,12 +312,8 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     }
     monitor = monitoring_utils.CubaHurricaneMonitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
-    # Only add test rows if we're actually using the generic test constants AND TEST_STORM is True
-    if (
-        TEST_STORM
-        and monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]
-        and monitor_id.startswith("TEST_")
-    ):
+    # Add test rows when using test monitor IDs
+    if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
     cuba_tz = pytz.timezone("America/Havana")

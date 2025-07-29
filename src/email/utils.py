@@ -32,11 +32,11 @@ if EMAIL_DISCLAIMER == "True":
 else:
     EMAIL_DISCLAIMER = False
 
-TEST_ATCF_ID = "al182024"  # Hurricane Rafael
-TEST_MONITOR_ID = "al182024_obsv_2024-11-06T21:00:00"  # Rafael observation ID
-TEST_FCAST_MONITOR_ID = "al182024_fcast_2024-11-04T21:00:00"  # Rafael forecast
-TEST_OBSV_MONITOR_ID = "al182024_obsv_2024-11-06T21:00:00"  # Rafael obsv
-TEST_STORM_NAME = "Rafael"
+TEST_ATCF_ID = "TEST_ATCF_ID"
+TEST_MONITOR_ID = "TEST_MONITOR_ID"
+TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
+TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
+TEST_STORM_NAME = "TEST_STORM_NAME"
 
 TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
@@ -47,10 +47,11 @@ def add_test_row_to_monitoring(
 ) -> pd.DataFrame:
     """Add test row to monitoring df to simulate new monitoring point.
     This new monitoring point will cause an activation of all triggers.
-    Uses Hurricane Rafael data that actually passed through Cuba.
+    Uses Hurricane Rafael data as a template but creates proper test IDs.
     """
     print("adding test row to monitoring data")
     if fcast_obsv == "fcast":
+        # Use Hurricane Rafael as template but create test row
         df_monitoring_test = df_monitoring[
             df_monitoring["monitor_id"] == "al182024_fcast_2024-11-04T21:00:00"
         ].copy()
@@ -73,6 +74,7 @@ def add_test_row_to_monitoring(
             [df_monitoring, df_monitoring_test], ignore_index=True
         )
     else:
+        # Use Hurricane Rafael as template but create test row
         df_monitoring_test = df_monitoring[
             df_monitoring["monitor_id"] == "al182024_obsv_2024-11-06T21:00:00"
         ].copy()

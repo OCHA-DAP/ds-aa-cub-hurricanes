@@ -38,26 +38,18 @@ def prepare_email_data(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     monitor = monitoring_utils.create_cuba_hurricane_monitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
 
+    # Add test row only if TEST_STORM is enabled and we're using test IDs
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
 
+    # No need for DataFrame check - test IDs are unique
     cuba_tz = pytz.timezone("America/Havana")
-    cyclone_name = (
-        monitoring_point["name"].iloc[0]
-        if hasattr(monitoring_point["name"], "iloc")
-        else monitoring_point["name"]
-    )
+    cyclone_name = monitoring_point["name"]
     # Convert to scalar datetime - handle pandas Series by getting scalar value
     issue_time_raw = monitoring_point["issue_time"]
-    if hasattr(issue_time_raw, "iloc"):
-        # It's a pandas Series, get the scalar value
-        issue_time = pd.to_datetime(
-            issue_time_raw.iloc[0]
-            if len(issue_time_raw) > 0
-            else issue_time_raw
-        ).to_pydatetime()
-    elif hasattr(issue_time_raw, "to_pydatetime"):
+    if hasattr(issue_time_raw, "to_pydatetime"):
         issue_time = issue_time_raw.to_pydatetime()
     else:
         issue_time = pd.to_datetime(issue_time_raw).to_pydatetime()
@@ -70,28 +62,21 @@ def prepare_email_data(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     activation_subject = "(SIN ACTIVACIÓN)"
 
     if fcast_obsv == "fcast":
-        readiness_val = (
-            monitoring_point["readiness_trigger"].iloc[0]
-            if hasattr(monitoring_point["readiness_trigger"], "iloc")
-            else monitoring_point["readiness_trigger"]
+        readiness = (
+            "ACTIVADO"
+            if monitoring_point["readiness_trigger"]
+            else "NO ACTIVADO"
         )
-        action_val = (
-            monitoring_point["action_trigger"].iloc[0]
-            if hasattr(monitoring_point["action_trigger"], "iloc")
-            else monitoring_point["action_trigger"]
+        action = (
+            "ACTIVADO" if monitoring_point["action_trigger"] else "NO ACTIVADO"
         )
-        readiness = "ACTIVADO" if readiness_val else "NO ACTIVADO"
-        action = "ACTIVADO" if action_val else "NO ACTIVADO"
         obsv = ""
     else:
-        obsv_val = (
-            monitoring_point["obsv_trigger"].iloc[0]
-            if hasattr(monitoring_point["obsv_trigger"], "iloc")
-            else monitoring_point["obsv_trigger"]
-        )
         readiness = ""
         action = ""
-        obsv = "ACTIVADO" if obsv_val else "NO ACTIVADO"
+        obsv = (
+            "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
+        )
 
     return {
         "cyclone_name": cyclone_name,
@@ -143,8 +128,9 @@ def create_info_email_content(
 
     subject = (
         f"{test_subject}Acción anticipatoria Cuba – información sobre "
-        f"{email_data['fcast_obsv_es']} {email_data['cyclone_name']} {email_data['pub_time']}, "
-        f"{email_data['pub_date']} {email_data['activation_subject']}"
+        f"{email_data['fcast_obsv_es']} {email_data['cyclone_name']} "
+        f"{email_data['pub_time']}, {email_data['pub_date']} "
+        f"{email_data['activation_subject']}"
     )
 
     if for_preview:
