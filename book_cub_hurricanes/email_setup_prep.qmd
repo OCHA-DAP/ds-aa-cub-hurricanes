@@ -6,15 +6,29 @@
 Under current configuration emails need some plots on blob to grab. Therefore this chap/notebook creates those plots using `TEST_STORM` variable (under the hood)
 
 #### Test Map Plot
+
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
 ```{python}
 import sys
-sys.path.append('..')
 
-from src.email.plotting import create_plot, update_plots, create_scatter_plot, create_map_plot
+sys.path.append("..")
+
+from src.email.plotting import (
+    create_plot,
+    update_plots,
+    create_scatter_plot,
+    create_map_plot,
+    create_map_plot_figure,
+)
 from src.email.utils import (
-    add_test_row_to_monitoring, 
-    TEST_FCAST_MONITOR_ID, 
-    TEST_OBSV_MONITOR_ID
+    add_test_row_to_monitoring,
+    TEST_FCAST_MONITOR_ID,
+    TEST_OBSV_MONITOR_ID,
 )
 from src.monitoring import monitoring_utils
 import pandas as pd
@@ -81,5 +95,25 @@ print("   - email_preview_TEST_OBSV_MONITOR_ID_obsv_info.html")
 print(
     "\\n🌐 Open these files in your browser to see how the emails will look!"
 )
+
+```
+
+# Create a map plot using a real monitor_id
+```{python}
+# Let's create a map plot using a real monitor_id from the actual data
+from src.email.utils import load_monitoring_data
+
+# Load real monitoring data to get a valid monitor_id
+print("📊 Loading real monitoring data to find a valid monitor_id...")
+df_fcast = load_monitoring_data("fcast", with_tests=False)
+
+# Get a recent monitor_id
+real_monitor_id = df_fcast["monitor_id"].iloc[0]
+print(f"🎯 Using real monitor_id: {real_monitor_id}")
+
+# Create map plot for this real monitor_id
+
+m1 = create_map_plot_figure(real_monitor_id, fcast_obsv="fcast")
+
 
 ```

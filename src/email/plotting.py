@@ -254,7 +254,18 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     plt.close(fig)
 
 
-def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
+def create_map_plot_figure(
+    monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]
+) -> go.Figure:
+    """Create a map plot figure object without saving to blob storage.
+
+    Args:
+        monitor_id: The monitoring ID to create plot for
+        fcast_obsv: Whether this is forecast or observation data
+
+    Returns:
+        Plotly Figure object that can be displayed or saved
+    """
     adm = codab.load_codab_from_blob(admin_level=0)
     trig_zone = zma.load_zma()
     lts = {
@@ -500,14 +511,40 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         ],
     )
 
+    return fig
+
+
+def save_plot_to_blob(
+    fig: go.Figure, monitor_id: str, plot_type: Literal["map", "scatter"]
+) -> None:
+    """Save a plotly figure to blob storage.
+
+    Args:
+        fig: Plotly Figure object to save
+        monitor_id: The monitoring ID for blob naming
+        plot_type: Type of plot for blob naming
+    """
     buffer = io.BytesIO()
     # scale corresponds to 150 dpi
     fig.write_image(buffer, format="png", scale=2.08)
     buffer.seek(0)
 
-    blob_name = get_plot_blob_name(monitor_id, "map")
+    blob_name = get_plot_blob_name(monitor_id, plot_type)
 
     # Upload blob data using stratus container client
     container_client = stratus.get_container_client(write=True)
     blob_client = container_client.get_blob_client(blob_name)
     blob_client.upload_blob(buffer.getvalue(), overwrite=True)
+
+
+def create_map_plot(
+    monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]
+) -> None:
+    """Create a map plot and save it to blob storage (wrapper function).
+
+    Args:
+        monitor_id: The monitoring ID to create plot for
+        fcast_obsv: Whether this is forecast or observation data
+    """
+    fig = create_map_plot_figure(monitor_id, fcast_obsv)
+    save_plot_to_blob(fig, monitor_id, "map")
