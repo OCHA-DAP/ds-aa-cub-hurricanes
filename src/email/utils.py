@@ -3,7 +3,6 @@ import os
 import re
 from pathlib import Path
 from typing import Literal
-
 import pandas as pd
 import ocha_stratus as stratus
 
@@ -44,15 +43,16 @@ STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
 
 
 def add_test_row_to_monitoring(
-    df_monitoring: pd.DataFrame, fcast_obsv: Literal["fcast", "obsv"]
+    df_monitoring: pd.DataFrame, fcast_obsv: str
 ) -> pd.DataFrame:
     """Add test row to monitoring df to simulate new monitoring point.
-    This new monitoring point will cause an activation of all three triggers.
+    This new monitoring point will cause an activation of all triggers.
+    Uses Hurricane Rafael data that actually passed through Cuba.
     """
     print("adding test row to monitoring data")
     if fcast_obsv == "fcast":
         df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al022024_fcast_2024-07-01T15:00:00"
+            df_monitoring["monitor_id"] == "al182024_fcast_2024-11-04T21:00:00"
         ].copy()
         df_monitoring_test[
             [
@@ -74,7 +74,7 @@ def add_test_row_to_monitoring(
         )
     else:
         df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al022024_obsv_2024-07-04T15:00:00"
+            df_monitoring["monitor_id"] == "al182024_obsv_2024-11-06T21:00:00"
         ].copy()
         df_monitoring_test[
             [

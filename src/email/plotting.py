@@ -50,9 +50,8 @@ def update_plots(
 ):
     if clobber is None:
         clobber = []
-    df_monitoring = monitoring_utils.load_existing_monitoring_points(
-        fcast_obsv
-    )
+    monitor = monitoring_utils.CubaHurricaneMonitor()
+    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
     if TEST_STORM:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     existing_plot_blobs = stratus.list_container_blobs(
@@ -84,9 +83,8 @@ def create_plot(
 
 
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    df_monitoring = monitoring_utils.load_existing_monitoring_points(
-        fcast_obsv
-    )
+    monitor = monitoring_utils.CubaHurricaneMonitor()
+    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
@@ -94,7 +92,10 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     cyclone_name = monitoring_point["name"]
     issue_time = monitoring_point["issue_time"]
     issue_time_cuba = issue_time.astimezone(cuba_tz)
+
+    # THIS FILE OR EQUIVALENT MUST BE MADE
     blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
+
     stats = stratus.load_csv_from_blob(blob_name)
     if fcast_obsv == "fcast":
         rain_plot_var = "readiness_p"
@@ -310,9 +311,8 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             },
         },
     }
-    df_monitoring = monitoring_utils.load_existing_monitoring_points(
-        fcast_obsv
-    )
+    monitor = monitoring_utils.CubaHurricaneMonitor()
+    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
