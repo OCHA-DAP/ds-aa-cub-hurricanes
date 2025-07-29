@@ -115,5 +115,5 @@ print(f"🎯 Using real monitor_id: {real_monitor_id}")
 
 m1 = create_map_plot_figure(real_monitor_id, fcast_obsv="fcast")
 
-
+m1
 ```
