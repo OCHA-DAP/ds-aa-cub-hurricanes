@@ -39,12 +39,12 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    haiti_tz = pytz.timezone("America/Port-au-Prince")
+    cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
     issue_time = monitoring_point["issue_time"]
-    issue_time_hti = issue_time.astimezone(haiti_tz)
-    pub_time = issue_time_hti.strftime("%Hh%M")
-    pub_date = issue_time_hti.strftime("%-d %b %Y")
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
+    pub_time = issue_time_cuba.strftime("%Hh%M")
+    pub_date = issue_time_cuba.strftime("%-d %b %Y")
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
@@ -176,12 +176,12 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    haiti_tz = pytz.timezone("America/Port-au-Prince")
+    cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
     issue_time = monitoring_point["issue_time"]
-    issue_time_hti = issue_time.astimezone(haiti_tz)
-    pub_time = issue_time_hti.strftime("%Hh%M")
-    pub_date = issue_time_hti.strftime("%-d %b %Y")
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
+    pub_time = issue_time_cuba.strftime("%Hh%M")
+    pub_date = issue_time_cuba.strftime("%-d %b %Y")
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":

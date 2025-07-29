@@ -90,10 +90,10 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    haiti_tz = pytz.timezone("America/Port-au-Prince")
+    cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
     issue_time = monitoring_point["issue_time"]
-    issue_time_hti = issue_time.astimezone(haiti_tz)
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
     blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
     stats = stratus.load_csv_from_blob(blob_name)
     if fcast_obsv == "fcast":
@@ -104,8 +104,8 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         rain_ymax = 100
         s_thresh = THRESHS["readiness"]["s"]
         rain_thresh = THRESHS["readiness"]["p"]
-        fcast_obsv_fr = "prévisions"
-        no_pass_text = "pas prévu de passer"
+        fcast_obsv_es = "pronósticos"
+        no_pass_text = "no está previsto que pase"
     else:
         rain_plot_var = "obsv_p"
         s_plot_var = "obsv_s"
@@ -114,8 +114,8 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         rain_ymax = 170
         s_thresh = THRESHS["obsv"]["s"]
         rain_thresh = THRESHS["obsv"]["p"]
-        fcast_obsv_fr = "observations"
-        no_pass_text = "n'a pas passé"
+        fcast_obsv_es = "observaciones"
+        no_pass_text = "no ha pasado"
 
     def sid_color(sid):
         color = "blue"
@@ -128,15 +128,15 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     stats["color"] = stats["sid"].apply(sid_color)
     current_p = monitoring_point[rain_plot_var]
     current_s = monitoring_point[s_plot_var]
-    issue_time_str_es = convert_datetime_to_es_str(issue_time_hti)
+    issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
 
     date_str = (
         f"Pronóstico "
         f'{monitoring_point["issue_time"].strftime("%Hh%M %d %b UTC")}'
     )
 
-    for en_mo, fr_mo in FRENCH_MONTHS.items():
-        date_str = date_str.replace(en_mo, fr_mo)
+    for en_mo, es_mo in SPANISH_MONTHS.items():
+        date_str = date_str.replace(en_mo, es_mo)
 
     fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
 
@@ -177,7 +177,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         fontweight="bold",
     )
     ax.annotate(
-        f"\n   {fcast_obsv_fr} émises" f"\n   {issue_time_str_fr}",
+        f"\n   {fcast_obsv_es} emitidas" f"\n   {issue_time_str_es}",
         (current_s, current_p),
         va="center",
         ha="left",
@@ -197,7 +197,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     )
 
     ax.annotate(
-        "\nZone de déclenchement   ",
+        "\nZona de activación   ",
         (155, rain_ymax),
         ha="right",
         va="top",
@@ -216,16 +216,16 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     ax.set_xlim(right=155, left=0)
     ax.set_ylim(top=rain_ymax, bottom=0)
 
-    ax.set_xlabel("Vitesse de vent maximum (noeuds)")
+    ax.set_xlabel("Velocidad máxima del viento (nudos)")
     ax.set_ylabel(
-        "Précipitations pendant deux jours consécutifs maximum,\n"
-        f"moyenne sur toute la superficie (mm, {rain_source_str})"
+        "Precipitaciones durante dos días consecutivos máximo,\n"
+        f"promedio sobre toda la superficie (mm, {rain_source_str})"
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_title(
-        f"Comparaison de précipitations, vent, et impact\n"
-        f"Seuil de distance = {D_THRESH} km"
+        f"Comparación de precipitaciones, viento, e impacto\n"
+        f"Umbral de distancia = {D_THRESH} km"
     )
 
     if monitoring_point["min_dist"] >= D_THRESH:
@@ -243,7 +243,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             0.5,
             0.5,
             f"{cyclone_name} {no_pass_text}\n"
-            f"à moins de {D_THRESH} km de Haïti",
+            f"a menos de {D_THRESH} km de Cuba",
             fontsize=30,
             color="grey",
             ha="center",
@@ -316,13 +316,13 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    haiti_tz = pytz.timezone("America/Port-au-Prince")
+    cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
     atcf_id = monitoring_point["atcf_id"]
     if atcf_id == "TEST_ATCF_ID":
         atcf_id = "al022024"
     issue_time = monitoring_point["issue_time"]
-    issue_time_hti = issue_time.astimezone(haiti_tz)
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
 
     if fcast_obsv == "fcast":
         df_tracks = nhc.load_recent_glb_forecasts()
@@ -341,11 +341,11 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         )
         tracks_f["issuance"] = tracks_f["validTime"]
 
-    tracks_f["validTime_hti"] = tracks_f["validTime"].apply(
-        lambda x: x.astimezone(haiti_tz)
+    tracks_f["validTime_cuba"] = tracks_f["validTime"].apply(
+        lambda x: x.astimezone(cuba_tz)
     )
-    tracks_f["valid_time_str"] = tracks_f["validTime_hti"].apply(
-        convert_datetime_to_fr_str
+    tracks_f["valid_time_str"] = tracks_f["validTime_cuba"].apply(
+        convert_datetime_to_es_str
     )
 
     tracks_f["lt"] = tracks_f["validTime"] - tracks_f["issuance"]
@@ -415,7 +415,7 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
                 line=dict(width=2, color=lt_params["plot_color"]),
                 textfont=dict(size=20, color="white"),
                 customdata=dff["valid_time_str"],
-                hovertemplate=("Heure valide: %{customdata}<extra></extra>"),
+                hovertemplate=("Hora válida: %{customdata}<extra></extra>"),
             )
         )
 
@@ -472,11 +472,11 @@ def create_map_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         center_lat = centroid_lat
         center_lon = centroid_lon
 
-    issue_time_str_fr = convert_datetime_to_fr_str(issue_time_hti)
-    fcast_obsv_fr = "Observations" if fcast_obsv == "obsv" else "Prévisions"
+    issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
+    fcast_obsv_es = "Observaciones" if fcast_obsv == "obsv" else "Pronósticos"
     plot_title = (
-        f"{fcast_obsv_fr} NOAA pour {cyclone_name}<br>"
-        f"<sup>Émises {issue_time_str_fr} (heure locale Haïti)</sup>"
+        f"{fcast_obsv_es} NOAA para {cyclone_name}<br>"
+        f"<sup>Emitidas {issue_time_str_es} (hora local Cuba)</sup>"
     )
 
     if fcast_obsv == "fcast":
