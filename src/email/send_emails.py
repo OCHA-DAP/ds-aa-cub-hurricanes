@@ -6,6 +6,7 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from typing import Literal
 
+import pandas as pd
 import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
@@ -32,16 +33,34 @@ from src.monitoring import monitoring_utils
 import ocha_stratus as stratus
 
 
-def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    df_monitoring = monitoring_utils.load_existing_monitoring_points(
-        fcast_obsv
-    )
+def prepare_email_data(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
+    """Prepare all the data needed for an email (shared between send and preview)."""
+    monitor = monitoring_utils.create_cuba_hurricane_monitor()
+    df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
+
     if monitor_id in [TEST_FCAST_MONITOR_ID, TEST_OBSV_MONITOR_ID]:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
+
     cuba_tz = pytz.timezone("America/Havana")
-    cyclone_name = monitoring_point["name"]
-    issue_time = monitoring_point["issue_time"]
+    cyclone_name = (
+        monitoring_point["name"].iloc[0]
+        if hasattr(monitoring_point["name"], "iloc")
+        else monitoring_point["name"]
+    )
+    # Convert to scalar datetime - handle pandas Series by getting scalar value
+    issue_time_raw = monitoring_point["issue_time"]
+    if hasattr(issue_time_raw, "iloc"):
+        # It's a pandas Series, get the scalar value
+        issue_time = pd.to_datetime(
+            issue_time_raw.iloc[0]
+            if len(issue_time_raw) > 0
+            else issue_time_raw
+        ).to_pydatetime()
+    elif hasattr(issue_time_raw, "to_pydatetime"):
+        issue_time = issue_time_raw.to_pydatetime()
+    else:
+        issue_time = pd.to_datetime(issue_time_raw).to_pydatetime()
     issue_time_cuba = issue_time.astimezone(cuba_tz)
     pub_time = issue_time_cuba.strftime("%Hh%M")
     pub_date = issue_time_cuba.strftime("%-d %b %Y")
@@ -49,50 +68,140 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         pub_date = pub_date.replace(en_mo, es_mo)
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
     activation_subject = "(SIN ACTIVACIÓN)"
+
     if fcast_obsv == "fcast":
-        readiness = (
-            "ACTIVADO"
-            if monitoring_point["readiness_trigger"]
-            else "NO ACTIVADO"
+        readiness_val = (
+            monitoring_point["readiness_trigger"].iloc[0]
+            if hasattr(monitoring_point["readiness_trigger"], "iloc")
+            else monitoring_point["readiness_trigger"]
         )
-        action = (
-            "ACTIVADO" if monitoring_point["action_trigger"] else "NO ACTIVADO"
+        action_val = (
+            monitoring_point["action_trigger"].iloc[0]
+            if hasattr(monitoring_point["action_trigger"], "iloc")
+            else monitoring_point["action_trigger"]
         )
+        readiness = "ACTIVADO" if readiness_val else "NO ACTIVADO"
+        action = "ACTIVADO" if action_val else "NO ACTIVADO"
         obsv = ""
     else:
+        obsv_val = (
+            monitoring_point["obsv_trigger"].iloc[0]
+            if hasattr(monitoring_point["obsv_trigger"], "iloc")
+            else monitoring_point["obsv_trigger"]
+        )
         readiness = ""
         action = ""
-        obsv = (
-            "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
-        )
+        obsv = "ACTIVADO" if obsv_val else "NO ACTIVADO"
 
-    distribution_list = get_distribution_list()
-    valid_distribution_list = distribution_list[
-        distribution_list["email"].apply(is_valid_email)
-    ]
-    invalid_distribution_list = distribution_list[
-        ~distribution_list["email"].apply(is_valid_email)
-    ]
-    if not invalid_distribution_list.empty:
-        print(
-            f"Invalid emails found in distribution list: "
-            f"{invalid_distribution_list['email'].tolist()}"
-        )
-    to_list = valid_distribution_list[valid_distribution_list["info"] == "to"]
-    cc_list = valid_distribution_list[valid_distribution_list["info"] == "cc"]
+    return {
+        "cyclone_name": cyclone_name,
+        "pub_time": pub_time,
+        "pub_date": pub_date,
+        "fcast_obsv_es": fcast_obsv_es,
+        "activation_subject": activation_subject,
+        "readiness": readiness,
+        "action": action,
+        "obsv": obsv,
+    }
+
+
+def create_info_email_content(
+    monitor_id: str,
+    fcast_obsv: Literal["fcast", "obsv"],
+    for_preview: bool = False,
+):
+    """Create the HTML and text content for an info email."""
+    email_data = prepare_email_data(monitor_id, fcast_obsv)
+
+    if not for_preview:
+        distribution_list = get_distribution_list()
+        valid_distribution_list = distribution_list[
+            distribution_list["email"].apply(is_valid_email)
+        ]
+        invalid_distribution_list = distribution_list[
+            ~distribution_list["email"].apply(is_valid_email)
+        ]
+        if not invalid_distribution_list.empty:
+            print(
+                f"Invalid emails found in distribution list: "
+                f"{invalid_distribution_list['email'].tolist()}"
+            )
+        to_list = valid_distribution_list[
+            valid_distribution_list["info"] == "to"
+        ]
+        cc_list = valid_distribution_list[
+            valid_distribution_list["info"] == "cc"
+        ]
+    else:
+        to_list = cc_list = None
 
     test_subject = "PRUEBA : " if TEST_STORM else ""
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
-
     template_name = "informational"
     template = environment.get_template(f"{template_name}.html")
+
+    subject = (
+        f"{test_subject}Acción anticipatoria Cuba – información sobre "
+        f"{email_data['fcast_obsv_es']} {email_data['cyclone_name']} {email_data['pub_time']}, "
+        f"{email_data['pub_date']} {email_data['activation_subject']}"
+    )
+
+    if for_preview:
+        # For preview, use placeholder CIDs that will be replaced later
+        map_cid = "PREVIEW_MAP_PLACEHOLDER"
+        scatter_cid = "PREVIEW_SCATTER_PLACEHOLDER"
+        chd_banner_cid = "PREVIEW_BANNER_PLACEHOLDER"
+        ocha_logo_cid = "PREVIEW_LOGO_PLACEHOLDER"
+    else:
+        # For real emails, generate proper CIDs
+        map_cid = make_msgid(domain="humdata.org")[1:-1]
+        scatter_cid = make_msgid(domain="humdata.org")[1:-1]
+        chd_banner_cid = make_msgid(domain="humdata.org")[1:-1]
+        ocha_logo_cid = make_msgid(domain="humdata.org")[1:-1]
+
+    html_str = template.render(
+        name=email_data["cyclone_name"],
+        pub_time=email_data["pub_time"],
+        pub_date=email_data["pub_date"],
+        fcast_obsv=email_data["fcast_obsv_es"],
+        readiness=email_data["readiness"],
+        action=email_data["action"],
+        obsv=email_data["obsv"],
+        test_email=TEST_STORM,
+        email_disclaimer=EMAIL_DISCLAIMER,
+        map_cid=map_cid,
+        scatter_cid=scatter_cid,
+        chd_banner_cid=chd_banner_cid,
+        ocha_logo_cid=ocha_logo_cid,
+    )
+    text_str = html2text(html_str)
+
+    return {
+        "subject": subject,
+        "html": html_str,
+        "text": text_str,
+        "to_list": to_list,
+        "cc_list": cc_list,
+        "email_data": email_data,
+        "cids": {
+            "map": map_cid,
+            "scatter": scatter_cid,
+            "chd_banner": chd_banner_cid,
+            "ocha_logo": ocha_logo_cid,
+        },
+    }
+
+
+def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
+    """Send info email using shared email content creation."""
+    email_content = create_info_email_content(
+        monitor_id, fcast_obsv, for_preview=False
+    )
+
     msg = EmailMessage()
     msg.set_charset("utf-8")
-    msg["Subject"] = (
-        f"{test_subject}Acción anticipatoria Cuba – información sobre "
-        f"pronóstico {cyclone_name} {pub_time}, {pub_date} {activation_subject}"
-    )
+    msg["Subject"] = email_content["subject"]
     msg["From"] = Address(
         "Centro de Datos Humanitarios OCHA",
         EMAIL_ADDRESS.split("@")[0],
@@ -102,56 +211,39 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         Address(
             row["name"], row["email"].split("@")[0], row["email"].split("@")[1]
         )
-        for _, row in to_list.iterrows()
+        for _, row in email_content["to_list"].iterrows()
     ]
     msg["Cc"] = [
         Address(
             row["name"], row["email"].split("@")[0], row["email"].split("@")[1]
         )
-        for _, row in cc_list.iterrows()
+        for _, row in email_content["cc_list"].iterrows()
     ]
 
-    map_cid = make_msgid(domain="humdata.org")
-    scatter_cid = make_msgid(domain="humdata.org")
-    chd_banner_cid = make_msgid(domain="humdata.org")
-    ocha_logo_cid = make_msgid(domain="humdata.org")
+    msg.set_content(email_content["text"])
+    msg.add_alternative(email_content["html"], subtype="html")
 
-    html_str = template.render(
-        name=cyclone_name,
-        pub_time=pub_time,
-        pub_date=pub_date,
-        fcast_obsv=fcast_obsv_es,
-        readiness=readiness,
-        action=action,
-        obsv=obsv,
-        test_email=TEST_STORM,
-        email_disclaimer=EMAIL_DISCLAIMER,
-        map_cid=map_cid[1:-1],
-        scatter_cid=scatter_cid[1:-1],
-        chd_banner_cid=chd_banner_cid[1:-1],
-        ocha_logo_cid=ocha_logo_cid[1:-1],
-    )
-    text_str = html2text(html_str)
-    msg.set_content(text_str)
-    msg.add_alternative(html_str, subtype="html")
-
-    for plot_type, cid in zip(["map", "scatter"], [map_cid, scatter_cid]):
+    # Add plot images from blob storage
+    for plot_type in ["map", "scatter"]:
         blob_name = get_plot_blob_name(monitor_id, plot_type)
         image_data = io.BytesIO()
         container_client = stratus.get_container_client()
         blob_client = container_client.get_blob_client(blob_name)
         blob_client.download_blob().download_to_stream(image_data)
         image_data.seek(0)
+        cid = make_msgid(domain="humdata.org")
         msg.get_payload()[1].add_related(
             image_data.read(), "image", "png", cid=cid
         )
 
-    for filename, cid in zip(
+    # Add static images
+    for filename, cid_key in zip(
         ["centre_banner.png", "ocha_logo_wide.png"],
-        [chd_banner_cid, ocha_logo_cid],
+        ["chd_banner", "ocha_logo"],
     ):
         img_path = STATIC_DIR / filename
         with open(img_path, "rb") as img:
+            cid = make_msgid(domain="humdata.org")
             msg.get_payload()[1].add_related(
                 img.read(), "image", "png", cid=cid
             )
@@ -162,7 +254,8 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
         server.sendmail(
             EMAIL_ADDRESS,
-            to_list["email"].tolist() + cc_list["email"].tolist(),
+            email_content["to_list"]["email"].tolist()
+            + email_content["cc_list"]["email"].tolist(),
             msg.as_string(),
         )
 
