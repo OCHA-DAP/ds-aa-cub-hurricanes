@@ -14,11 +14,11 @@ from src.constants import (
     _parse_bool_env,
 )
 
-EMAIL_HOST = os.getenv("CHD_DS_HOST")
-EMAIL_PORT = int(os.getenv("CHD_DS_PORT"))
-EMAIL_PASSWORD = os.getenv("CHD_DS_EMAIL_PASSWORD")
-EMAIL_USERNAME = os.getenv("CHD_DS_EMAIL_USERNAME")
-EMAIL_ADDRESS = os.getenv("CHD_DS_EMAIL_ADDRESS")
+EMAIL_HOST = os.getenv("DSCI_AWS_EMAIL_HOST")
+EMAIL_PORT = int(os.getenv("DSCI_AWS_EMAIL_PORT"))
+EMAIL_PASSWORD = os.getenv("DSCI_AWS_EMAIL_PASSWORD")
+EMAIL_USERNAME = os.getenv("DSCI_AWS_EMAIL_USERNAME")
+EMAIL_ADDRESS = os.getenv("DSCI_AWS_EMAIL_ADDRESS")
 
 # Legacy flags - will be deprecated
 TEST_LIST = _parse_bool_env("TEST_LIST", default=False)
