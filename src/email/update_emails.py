@@ -11,6 +11,15 @@ from src.email.utils import (
 
 
 def update_obsv_info_emails(verbose: bool = False):
+    """Check observational monitoring data and coordinate info email sending.
+
+    Iterates through observational monitoring points and calls send_info_email()
+    for storms meeting criteria (within distance, no prior email, relevant
+    rainfall). Updates the email record to track what was sent.
+
+    Args:
+        verbose: Print detailed progress messages
+    """
     df_monitoring = load_monitoring_data("obsv")
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
@@ -54,6 +63,15 @@ def update_obsv_info_emails(verbose: bool = False):
 
 
 def update_fcast_info_emails(verbose: bool = False):
+    """Check forecast monitoring data and coordinate info email sending.
+
+    Iterates through forecast monitoring points and calls send_info_email()
+    for storms meeting criteria (within distance, no prior email).
+    Updates the email record to track what was sent.
+
+    Args:
+        verbose: Print detailed progress messages
+    """
     df_monitoring = load_monitoring_data("fcast")
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
@@ -93,6 +111,13 @@ def update_fcast_info_emails(verbose: bool = False):
 
 
 def update_obsv_trigger_emails():
+    """Check observational data and coordinate trigger email sending.
+
+    Iterates through observational monitoring data grouped by storm (atcf_id)
+    and calls send_trigger_email() for storms with obsv_trigger=True.
+    Avoids duplicates by checking if obsv or action emails already sent.
+    Updates the email record to track what was sent.
+    """
     df_monitoring = load_monitoring_data("obsv")
     df_existing_email_record = load_email_record_with_test_filtering(["obsv"])
     dicts = []
@@ -138,9 +163,12 @@ def update_obsv_trigger_emails():
 
 
 def update_fcast_trigger_emails():
-    """Cycle through all historical monitoring points to see if we should have
-    sent a trigger email for any of them. If we need to send any emails,
-    send them.
+    """Check forecast data and coordinate trigger email sending.
+
+    Iterates through forecast monitoring data grouped by storm (atcf_id)
+    and calls send_trigger_email() for storms meeting readiness or action
+    trigger criteria (not past cutoff). Checks each trigger type separately.
+    Updates the email record to track what was sent.
     """
     df_monitoring = load_monitoring_data("fcast")
     df_existing_email_record = load_email_record_with_test_filtering(
