@@ -1025,6 +1025,16 @@ class CubaHurricaneMonitor:
             logger.warning(f"No {monitoring_type} data to save.")
             return
 
+        # Import here to avoid circular imports
+        from src.email.utils import DRY_RUN
+
+        if DRY_RUN:
+            logger.info(
+                f"DRY_RUN: Would save {len(df)} {monitoring_type} "
+                f"monitoring records."
+            )
+            return
+
         blob_name = (
             f"{PROJECT_PREFIX}/monitoring/"
             f"cub_{monitoring_type}_monitoring.parquet"

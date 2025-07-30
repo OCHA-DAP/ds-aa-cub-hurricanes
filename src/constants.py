@@ -1,7 +1,23 @@
 import numpy as np
+import os
 
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
+
+
+# Runtime control flags - centralized configuration
+def _parse_bool_env(env_var: str, default: bool = False) -> bool:
+    """Parse environment variable as boolean with proper defaults."""
+    value = os.getenv(env_var)
+    if value is None:
+        return default
+    return value.lower() in ("true", "1", "yes", "on")
+
+
+# Main control flags
+DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
+TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
+FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 
 # Saffir-Simpson scale (knots)
 TS = 34

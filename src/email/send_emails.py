@@ -10,7 +10,7 @@ import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
-from src.constants import SPANISH_MONTHS
+from src.constants import SPANISH_MONTHS, DRY_RUN, FORCE_ALERT
 from src.email.plotting import get_plot_blob_name
 from src.email.utils import (
     EMAIL_ADDRESS,
@@ -21,9 +21,6 @@ from src.email.utils import (
     EMAIL_USERNAME,
     STATIC_DIR,
     TEMPLATES_DIR,
-    TEST_FCAST_MONITOR_ID,
-    TEST_OBSV_MONITOR_ID,
-    TEST_STORM,
     get_distribution_list,
     is_valid_email,
     load_monitoring_data,
@@ -34,11 +31,10 @@ import ocha_stratus as stratus
 def prepare_email_data(
     monitor_id: str,
     fcast_obsv: Literal["fcast", "obsv"],
-    with_tests: bool = True,
 ):
     """Prepare data needed for email (shared between send/preview)."""
-    # Load monitoring data with conditional test injection
-    df_monitoring = load_monitoring_data(fcast_obsv, with_tests=with_tests)
+    # Load monitoring data (FORCE_ALERT controlled internally)
+    df_monitoring = load_monitoring_data(fcast_obsv)
 
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
 
@@ -87,26 +83,10 @@ def create_info_email_content(
     monitor_id: str,
     fcast_obsv: Literal["fcast", "obsv"],
     for_preview: bool = False,
-    with_tests: bool = None,
 ):
     """Create the HTML and text content for an info email."""
-    # Determine with_tests behavior
-    if with_tests is not None:
-        # Explicit override provided
-        use_tests = with_tests
-    elif for_preview and monitor_id in [
-        TEST_FCAST_MONITOR_ID,
-        TEST_OBSV_MONITOR_ID,
-    ]:
-        # Preview with test monitor IDs defaults to including test data
-        use_tests = True
-    else:
-        # Default behavior (respects TEST_STORM internally)
-        use_tests = True
-
-    email_data = prepare_email_data(
-        monitor_id, fcast_obsv, with_tests=use_tests
-    )
+    # Email data loading respects FORCE_ALERT internally
+    email_data = prepare_email_data(monitor_id, fcast_obsv)
 
     if not for_preview:
         distribution_list = get_distribution_list()
@@ -130,7 +110,7 @@ def create_info_email_content(
     else:
         to_list = cc_list = None
 
-    test_subject = "PRUEBA : " if TEST_STORM else ""
+    test_subject = "PRUEBA : " if FORCE_ALERT else ""
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     template_name = "informational"
@@ -164,7 +144,7 @@ def create_info_email_content(
         readiness=email_data["readiness"],
         action=email_data["action"],
         obsv=email_data["obsv"],
-        test_email=TEST_STORM,
+        test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
         map_cid=map_cid,
         scatter_cid=scatter_cid,
@@ -191,6 +171,10 @@ def create_info_email_content(
 
 def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     """Send info email using shared email content creation."""
+    if DRY_RUN:
+        print(f"DRY_RUN: Would send info email for {monitor_id}")
+        return
+
     email_content = create_info_email_content(
         monitor_id, fcast_obsv, for_preview=False
     )
@@ -258,6 +242,13 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
 
 def send_trigger_email(monitor_id: str, trigger_name: str):
     """Send trigger email to distribution list."""
+    if DRY_RUN:
+        print(
+            f"DRY_RUN: Would send {trigger_name} trigger email for "
+            f"{monitor_id}"
+        )
+        return
+
     fcast_obsv = "fcast" if trigger_name in ["readiness", "action"] else "obsv"
     df_monitoring = load_monitoring_data(fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
@@ -296,7 +287,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         valid_distribution_list["trigger"] == "cc"
     ]
 
-    test_subject = "PRUEBA : " if TEST_STORM else ""
+    test_subject = "PRUEBA : " if FORCE_ALERT else ""
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -339,7 +330,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         pub_time=pub_time,
         pub_date=pub_date,
         fcast_obsv=fcast_obsv_es,
-        test_email=TEST_STORM,
+        test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
         chd_banner_cid=chd_banner_cid[1:-1],
         ocha_logo_cid=ocha_logo_cid[1:-1],

@@ -3,7 +3,7 @@ import traceback
 from src.constants import MIN_EMAIL_DISTANCE
 from src.email.send_emails import send_info_email, send_trigger_email
 from src.email.utils import (
-    TEST_STORM,
+    FORCE_ALERT,
     load_monitoring_data,
     load_email_record_with_test_filtering,
     save_email_record,
@@ -134,7 +134,7 @@ def update_obsv_trigger_emails():
             in df_existing_email_record[
                 df_existing_email_record["email_type"] == "action"
             ]["atcf_id"].unique()
-            and not TEST_STORM
+            and not FORCE_ALERT
         ):
             print(f"already sent action email for {atcf_id}")
         else:

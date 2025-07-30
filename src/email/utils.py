@@ -6,7 +6,13 @@ from typing import Literal
 import pandas as pd
 import ocha_stratus as stratus
 
-from src.constants import PROJECT_PREFIX
+from src.constants import (
+    PROJECT_PREFIX,
+    DRY_RUN,
+    TEST_EMAIL,
+    FORCE_ALERT,
+    _parse_bool_env,
+)
 
 EMAIL_HOST = os.getenv("CHD_DS_HOST")
 EMAIL_PORT = int(os.getenv("CHD_DS_PORT"))
@@ -14,23 +20,10 @@ EMAIL_PASSWORD = os.getenv("CHD_DS_EMAIL_PASSWORD")
 EMAIL_USERNAME = os.getenv("CHD_DS_EMAIL_USERNAME")
 EMAIL_ADDRESS = os.getenv("CHD_DS_EMAIL_ADDRESS")
 
-TEST_LIST = os.getenv("TEST_LIST")
-if TEST_LIST == "False":
-    TEST_LIST = False
-else:
-    TEST_LIST = True
-
-TEST_STORM = os.getenv("TEST_STORM")
-if TEST_STORM == "False":
-    TEST_STORM = False
-else:
-    TEST_STORM = True
-
-EMAIL_DISCLAIMER = os.getenv("EMAIL_DISCLAIMER")
-if EMAIL_DISCLAIMER == "True":
-    EMAIL_DISCLAIMER = True
-else:
-    EMAIL_DISCLAIMER = False
+# Legacy flags - will be deprecated
+TEST_LIST = _parse_bool_env("TEST_LIST", default=False)
+TEST_STORM = _parse_bool_env("TEST_STORM", default=False)
+EMAIL_DISCLAIMER = _parse_bool_env("EMAIL_DISCLAIMER", default=False)
 
 TEST_ATCF_ID = "TEST_ATCF_ID"
 TEST_MONITOR_ID = "TEST_MONITOR_ID"
@@ -106,7 +99,7 @@ def open_static_image(filename: str) -> str:
 
 def get_distribution_list() -> pd.DataFrame:
     """Load distribution list from blob storage."""
-    if TEST_LIST:
+    if TEST_EMAIL:  # Use new flag instead of TEST_LIST
         blob_name = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
     else:
         blob_name = f"{PROJECT_PREFIX}/email/distribution_list.csv"
@@ -119,14 +112,11 @@ def load_email_record() -> pd.DataFrame:
     return stratus.load_csv_from_blob(blob_name)
 
 
-def load_monitoring_data(
-    fcast_obsv: Literal["fcast", "obsv"], with_tests: bool = True
-) -> pd.DataFrame:
+def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
     """Load monitoring data with optional test row injection.
 
     Args:
         fcast_obsv: Whether to load forecast or observation data
-        with_tests: Whether to add test rows when TEST_STORM is enabled
 
     Returns:
         DataFrame with monitoring data, optionally including test rows
@@ -136,7 +126,8 @@ def load_monitoring_data(
     monitor = monitoring_utils.create_cuba_hurricane_monitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
 
-    if with_tests and TEST_STORM:
+    # Add test data if FORCE_ALERT is enabled
+    if FORCE_ALERT:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
 
     return df_monitoring
@@ -151,11 +142,11 @@ def load_email_record_with_test_filtering(
         email_types: List of email types to filter out for test data
 
     Returns:
-        DataFrame with email records, filtered if TEST_STORM is enabled
+        DataFrame with email records, filtered if FORCE_ALERT is enabled
     """
     df_existing_email_record = load_email_record()
 
-    if TEST_STORM and email_types:
+    if FORCE_ALERT and email_types:
         df_existing_email_record = df_existing_email_record[
             ~(
                 (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
@@ -173,6 +164,10 @@ def save_email_record(df_existing: pd.DataFrame, new_records: list) -> None:
         df_existing: Existing email record DataFrame
         new_records: List of dictionaries representing new email records
     """
+    if DRY_RUN:
+        print(f"DRY_RUN: Would save {len(new_records)} new email records")
+        return
+
     df_new_email_record = pd.DataFrame(new_records)
     df_combined_email_record = pd.concat(
         [df_existing, df_new_email_record], ignore_index=True
