@@ -86,7 +86,12 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     # THIS FILE OR EQUIVALENT MUST BE MADE
     blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
 
-    stats = stratus.load_csv_from_blob(blob_name)
+    try:
+        stats = stratus.load_csv_from_blob(blob_name)
+    except Exception as e:
+        print(f"⚠️  Could not load statistics file {blob_name}: {e}")
+        print(f"⚠️  Skipping scatter plot creation for {monitor_id}")
+        return
     if fcast_obsv == "fcast":
         rain_plot_var = None  # No precipitation variables for forecast
         s_plot_var = "readiness_s"
@@ -247,9 +252,13 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     blob_name = get_plot_blob_name(monitor_id, "scatter")
 
     # Upload blob data using stratus container client
-    container_client = stratus.get_container_client(write=True)
-    blob_client = container_client.get_blob_client(blob_name)
-    blob_client.upload_blob(buffer.getvalue(), overwrite=True)
+    try:
+        container_client = stratus.get_container_client(write=True)
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(buffer.getvalue(), overwrite=True)
+        print(f"✅ Successfully uploaded scatter plot: {blob_name}")
+    except Exception as e:
+        print(f"⚠️  Could not upload scatter plot {blob_name}: {e}")
 
     plt.close(fig)
 
@@ -266,8 +275,19 @@ def create_map_plot_figure(
     Returns:
         Plotly Figure object that can be displayed or saved
     """
-    adm = codab.load_codab_from_blob(admin_level=0)
-    trig_zone = zma.load_zma()
+    try:
+        adm = codab.load_codab_from_blob(admin_level=0)
+    except Exception as e:
+        print(f"⚠️  Could not load CODAB administrative boundaries: {e}")
+        print(f"⚠️  Skipping map plot creation for {monitor_id}")
+        return None
+
+    try:
+        trig_zone = zma.load_zma()
+    except Exception as e:
+        print(f"⚠️  Could not load ZMA trigger zone data: {e}")
+        print(f"⚠️  Skipping map plot creation for {monitor_id}")
+        return None
     lts = {
         "action": {
             "color": "darkorange",
@@ -532,9 +552,13 @@ def save_plot_to_blob(
     blob_name = get_plot_blob_name(monitor_id, plot_type)
 
     # Upload blob data using stratus container client
-    container_client = stratus.get_container_client(write=True)
-    blob_client = container_client.get_blob_client(blob_name)
-    blob_client.upload_blob(buffer.getvalue(), overwrite=True)
+    try:
+        container_client = stratus.get_container_client(write=True)
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(buffer.getvalue(), overwrite=True)
+        print(f"✅ Successfully uploaded {plot_type} plot: {blob_name}")
+    except Exception as e:
+        print(f"⚠️  Could not upload {plot_type} plot {blob_name}: {e}")
 
 
 def create_map_plot(
@@ -547,4 +571,10 @@ def create_map_plot(
         fcast_obsv: Whether this is forecast or observation data
     """
     fig = create_map_plot_figure(monitor_id, fcast_obsv)
-    save_plot_to_blob(fig, monitor_id, "map")
+    if fig is not None:
+        save_plot_to_blob(fig, monitor_id, "map")
+    else:
+        print(
+            f"⚠️  Skipping map plot upload for {monitor_id} "
+            f"due to data loading error"
+        )
