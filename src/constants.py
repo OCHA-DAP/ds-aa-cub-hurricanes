@@ -1,8 +1,12 @@
 import numpy as np
 import os
+from datetime import datetime, timezone
 
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
+
+# Monitoring start date - only process data from this date forward
+MONITORING_START_DATE = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
 
 # Runtime control flags - centralized configuration

@@ -75,6 +75,22 @@ def update_fcast_info_emails(verbose: bool = False):
     df_monitoring = load_monitoring_data("fcast")
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
+    # Log email eligibility summary
+    eligible_storms = df_monitoring[
+        df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE
+    ]
+    total_count = len(df_monitoring)
+    eligible_count = len(eligible_storms)
+    skipped_count = total_count - eligible_count
+
+    print("📧 Forecast email eligibility check:")
+    print(
+        f"   ✅ {eligible_count}/{total_count} storms within "
+        f"{MIN_EMAIL_DISTANCE}km"
+    )
+    if skipped_count > 0:
+        print(f"   ⏭️  {skipped_count} storms beyond distance threshold")
+
     dicts = []
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
         if row["min_dist"] > MIN_EMAIL_DISTANCE:

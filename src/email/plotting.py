@@ -12,6 +12,7 @@ from src.constants import (
     CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
+    MIN_EMAIL_DISTANCE,
     SPANISH_MONTHS,
     LON_ZOOM_RANGE,
     PROJECT_PREFIX,
@@ -51,7 +52,35 @@ def update_plots(
         name_starts_with=f"{PROJECT_PREFIX}/plots/{fcast_obsv}/"
     )
 
+    # Log email eligibility summary
+    eligible_count = len(
+        df_monitoring[df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE]
+    )
+    total_count = len(df_monitoring)
+    skipped_count = total_count - eligible_count
+
+    print(f"📧 Email eligibility for {fcast_obsv} monitoring:")
+    print(
+        f"   ✅ {eligible_count} storms within {MIN_EMAIL_DISTANCE}km "
+        f"(will create plots)"
+    )
+    if skipped_count > 0:
+        print(
+            f"   ⏭️  {skipped_count} storms beyond {MIN_EMAIL_DISTANCE}km "
+            f"(skipping plots)"
+        )
+
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
+        # Skip plots for storms beyond email distance threshold
+        if row["min_dist"] > MIN_EMAIL_DISTANCE:
+            if verbose:
+                print(
+                    f"Skipping plots for {monitor_id}: "
+                    f"distance {row['min_dist']:.1f}km > "
+                    f"{MIN_EMAIL_DISTANCE}km"
+                )
+            continue
+
         for plot_type in ["map", "scatter"]:
             blob_name = get_plot_blob_name(monitor_id, plot_type)
             if blob_name in existing_plot_blobs and plot_type not in clobber:
@@ -76,22 +105,21 @@ def create_plot(
 
 
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    df_monitoring = load_monitoring_data(fcast_obsv)
-    monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    cuba_tz = pytz.timezone("America/Havana")
-    cyclone_name = monitoring_point["name"]
-    issue_time = monitoring_point["issue_time"]
-    issue_time_cuba = issue_time.astimezone(cuba_tz)
-
-    # THIS FILE OR EQUIVALENT MUST BE MADE
+    # Check if statistics file exists first, before loading data
     blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
-
     try:
         stats = stratus.load_csv_from_blob(blob_name)
     except Exception as e:
         print(f"⚠️  Could not load statistics file {blob_name}: {e}")
         print(f"⚠️  Skipping scatter plot creation for {monitor_id}")
         return
+
+    df_monitoring = load_monitoring_data(fcast_obsv)
+    monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
+    cuba_tz = pytz.timezone("America/Havana")
+    cyclone_name = monitoring_point["name"]
+    issue_time = monitoring_point["issue_time"]
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
     if fcast_obsv == "fcast":
         rain_plot_var = None  # No precipitation variables for forecast
         s_plot_var = "readiness_s"

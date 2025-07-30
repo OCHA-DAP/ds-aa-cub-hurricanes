@@ -11,6 +11,7 @@ from src.constants import (
     DRY_RUN,
     TEST_EMAIL,
     FORCE_ALERT,
+    MONITORING_START_DATE,
     _parse_bool_env,
 )
 
@@ -42,7 +43,13 @@ def add_test_row_to_monitoring(
     This new monitoring point will cause an activation of all triggers.
     Uses Hurricane Rafael data as a template but creates proper test IDs.
     """
-    print("adding test row to monitoring data")
+    # Only print this once per fcast/obsv type per process
+    if not hasattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}"):
+        if fcast_obsv == "fcast":
+            print("🧪 Adding test forecast row for FORCE_ALERT testing")
+        else:
+            print("🧪 Adding test observation row for FORCE_ALERT testing")
+        setattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}", True)
     if fcast_obsv == "fcast":
         # Use Hurricane Rafael as template but create test row
         df_monitoring_test = df_monitoring[
@@ -63,6 +70,8 @@ def add_test_row_to_monitoring(
             True,
             True,
         )
+        # Set issue_time to MONITORING_START_DATE for test row
+        df_monitoring_test["issue_time"] = MONITORING_START_DATE
         # Ensure test row always triggers by setting past_cutoff to False
         if "past_cutoff" in df_monitoring_test.columns:
             df_monitoring_test["past_cutoff"] = False
@@ -87,6 +96,8 @@ def add_test_row_to_monitoring(
             TEST_ATCF_ID,
             True,
         )
+        # Set issue_time to MONITORING_START_DATE for test row
+        df_monitoring_test["issue_time"] = MONITORING_START_DATE
         df_monitoring = pd.concat(
             [df_monitoring, df_monitoring_test], ignore_index=True
         )
@@ -149,9 +160,20 @@ def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
     monitor = monitoring_utils.create_cuba_hurricane_monitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
 
-    # Add test data if FORCE_ALERT is enabled
+    # Add test data if FORCE_ALERT is enabled - do this BEFORE filtering
     if FORCE_ALERT:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+
+    # Filter by MONITORING_START_DATE to limit processing scope and prevent timeouts
+    df_monitoring["issue_time"] = pd.to_datetime(df_monitoring["issue_time"])
+    df_monitoring = df_monitoring[
+        df_monitoring["issue_time"] >= MONITORING_START_DATE
+    ]
+    print(
+        f"📅 Filtered {fcast_obsv} monitoring data from "
+        f"{MONITORING_START_DATE.strftime('%Y-%m-%d')}: "
+        f"{len(df_monitoring)} records remaining"
+    )
 
     return df_monitoring
 
