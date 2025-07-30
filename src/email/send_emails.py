@@ -270,10 +270,14 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":
         trigger_name_es = "preparación"
+        trigger_type_subj = "ALISTAMIENTO"
     elif trigger_name == "action":
         trigger_name_es = "acción"
+        trigger_type_subj = trigger_name_es
     else:
         trigger_name_es = "observacional"
+        trigger_type_subj = trigger_name_es
+
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
 
     distribution_list = get_distribution_list()
@@ -305,7 +309,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     msg.set_charset("utf-8")
     msg["Subject"] = (
         f"{test_subject}Acción anticipatoria Cuba – "
-        f"activador {trigger_name_es} alcanzado para "
+        f"Desencadenante de {trigger_type_subj} alcanzado para "
         f"{cyclone_name}"
     )
     msg["From"] = Address(
