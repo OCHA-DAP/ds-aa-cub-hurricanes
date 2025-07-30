@@ -124,3 +124,13 @@ The project enforces code quality through:
 - **GitHub Actions CI** for automated quality checks
 
 All code is automatically checked for formatting, import sorting, and test coverage in the CI pipeline.
+
+### Manual Steps
+
+There were several manual steps taken to set up the monitoring system for the 
+project that are not immediately obvious from the codebase. These include:
+
+1. Creation of map legend - was done manually in this [gslide](https://docs.google.com/presentation/d/1NlUxI7ZTlKH05CI2w7c-rUrkryD7ItBnNncx_ls3pJY/edit?slide=id.p#slide=id.p)
+2. Creation of initial maps/plots for testing. Done "manually" in book_cub_hurricanes/email_setup_prep.qmd
+3. Creation of `distribution_list.csv` and `test_distribution_list.csv` dropped into blob storage via Azure Storage Explorer.
+4. Creation/initiation of email_record.csv
