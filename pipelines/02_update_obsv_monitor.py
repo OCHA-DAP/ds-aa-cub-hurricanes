@@ -1,6 +1,7 @@
 from src.monitoring import monitoring_utils
 from src.utils.logging import get_logger
 from src.email import plotting, update_emails
+from src.constants import DRY_RUN, TEST_EMAIL, FORCE_ALERT
 
 logger = get_logger(__name__)
 
@@ -17,7 +18,8 @@ def update_observational_data():
 
 
 if __name__ == "__main__":
-        logger.info("🚀 Starting Cuba Hurricane Observational Pipeline")
+    # Log critical environment variable configuration
+    logger.info("🚀 Starting Cuba Hurricane Observational Pipeline")
     logger.info("📋 Environment Configuration:")
     logger.info(
         f"   DRY_RUN: {DRY_RUN} "
@@ -34,6 +36,7 @@ if __name__ == "__main__":
         f"adds PRUEBA prefix)"
     )
     logger.info("=" * 80)
+
     update_observational_data()
     update_emails.update_obsv_trigger_emails()
     plotting.update_plots(fcast_obsv="obsv")
