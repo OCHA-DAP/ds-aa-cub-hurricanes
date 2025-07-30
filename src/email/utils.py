@@ -63,6 +63,9 @@ def add_test_row_to_monitoring(
             True,
             True,
         )
+        # Ensure test row always triggers by setting past_cutoff to False
+        if "past_cutoff" in df_monitoring_test.columns:
+            df_monitoring_test["past_cutoff"] = False
         df_monitoring = pd.concat(
             [df_monitoring, df_monitoring_test], ignore_index=True
         )
@@ -107,9 +110,29 @@ def get_distribution_list() -> pd.DataFrame:
 
 
 def load_email_record() -> pd.DataFrame:
-    """Load record of emails that have been sent."""
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    return stratus.load_csv_from_blob(blob_name)
+    """Load record of emails that have been sent.
+
+    Uses test_email_record.csv if TEST_EMAIL=True, otherwise email_record.csv.
+    Returns empty DataFrame with correct columns if file doesn't exist.
+    """
+    if TEST_EMAIL:
+        blob_name = f"{PROJECT_PREFIX}/email/test_email_record.csv"
+    else:
+        blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    try:
+        return stratus.load_csv_from_blob(blob_name)
+    except Exception as e:
+        if "BlobNotFound" in str(e) or "does not exist" in str(e):
+            print(f"📝 Email record file not found: {blob_name}")
+            print("📝 Creating empty email record with correct structure")
+            # Return empty DataFrame with correct column structure
+            return pd.DataFrame(
+                columns=["monitor_id", "atcf_id", "email_type"]
+            )
+        else:
+            # Re-raise other exceptions
+            raise e
 
 
 def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
@@ -168,11 +191,22 @@ def save_email_record(df_existing: pd.DataFrame, new_records: list) -> None:
         print(f"DRY_RUN: Would save {len(new_records)} new email records")
         return
 
+    if len(new_records) == 0:
+        print("No new email records to save")
+        return
+
     df_new_email_record = pd.DataFrame(new_records)
     df_combined_email_record = pd.concat(
         [df_existing, df_new_email_record], ignore_index=True
     )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    # Use appropriate file based on TEST_EMAIL setting
+    if TEST_EMAIL:
+        blob_name = f"{PROJECT_PREFIX}/email/test_email_record.csv"
+    else:
+        blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    print(f"💾 Saving {len(new_records)} email records to {blob_name}")
     stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
 
 

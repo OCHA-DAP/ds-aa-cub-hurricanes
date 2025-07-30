@@ -120,6 +120,48 @@ m1
 
 ## Set email_record.csv
 
+generate email_record with correct headers but no rows:
+
+```{python}
+import pandas as pd
+import ocha_stratus as stratus
+from src.constants import PROJECT_PREFIX
+
+print("📝 Creating empty email_record.csv file...")
+
+# Create empty DataFrame with correct column structure
+# Based on the email system usage: monitor_id, atcf_id, email_type
+empty_email_record = pd.DataFrame(columns=[
+    "monitor_id",
+    "atcf_id", 
+    "email_type"
+])
+
+print(f"📊 Empty email record structure:")
+print(f"   Columns: {list(empty_email_record.columns)}")
+print(f"   Shape: {empty_email_record.shape}")
+
+# Save to blob storage
+blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+print(f"💾 Saving to blob: {blob_name}")
+
+try:
+    stratus.upload_csv_to_blob(empty_email_record, blob_name)
+    print("✅ Empty email_record.csv successfully created and uploaded to blob storage!")
+except Exception as e:
+    print(f"❌ Error uploading email record: {e}")
+
+# Verify the file was created by trying to load it
+try:
+    test_load = stratus.load_csv_from_blob(blob_name)
+    print(f"✅ Verification: Successfully loaded email_record.csv from blob")
+    print(f"   Loaded shape: {test_load.shape}")
+    print(f"   Loaded columns: {list(test_load.columns)}")
+except Exception as e:
+    print(f"⚠️  Verification failed: {e}")
+```
+
+
 ```{python}
 from src.email import update_emails, utils
 ```
@@ -155,15 +197,15 @@ df_monitoring.iloc[-20:]
 update_emails.update_fcast_info_emails(verbose=True)
 ```
 
-```python
+```{python}
 update_emails.update_obsv_info_emails()
 ```
 
-```python
+```{python}
 MIN_EMAIL_DISTANCE = 1000
 ```
 
-```python
+```{python}
 df_existing_email_record = utils.load_email_record()
 df_existing_email_record
 ```

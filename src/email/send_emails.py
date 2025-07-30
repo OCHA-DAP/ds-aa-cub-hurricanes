@@ -203,27 +203,35 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     msg.set_content(email_content["text"])
     msg.add_alternative(email_content["html"], subtype="html")
 
-    # Add plot images from blob storage
+    # Add plot images from blob storage using the CIDs from email content
     for plot_type in ["map", "scatter"]:
         blob_name = get_plot_blob_name(monitor_id, plot_type)
         image_data = io.BytesIO()
         container_client = stratus.get_container_client()
         blob_client = container_client.get_blob_client(blob_name)
-        blob_client.download_blob().download_to_stream(image_data)
-        image_data.seek(0)
-        cid = make_msgid(domain="humdata.org")
-        msg.get_payload()[1].add_related(
-            image_data.read(), "image", "png", cid=cid
-        )
 
-    # Add static images
+        try:
+            blob_client.download_blob().download_to_stream(image_data)
+            image_data.seek(0)
+            # Use the CID that was already embedded in the email content
+            cid = email_content["cids"][plot_type]
+            msg.get_payload()[1].add_related(
+                image_data.read(), "image", "png", cid=cid
+            )
+            print(f"✅ Added {plot_type} plot to email")
+        except Exception as e:
+            print(f"⚠️  Could not attach {plot_type} plot: {e}")
+            # Continue without this plot - the email will show broken image
+
+    # Add static images using the CIDs from email content
     for filename, cid_key in zip(
         ["centre_banner.png", "ocha_logo_wide.png"],
         ["chd_banner", "ocha_logo"],
     ):
         img_path = STATIC_DIR / filename
         with open(img_path, "rb") as img:
-            cid = make_msgid(domain="humdata.org")
+            # Use the CID that was already embedded in the email content
+            cid = email_content["cids"][cid_key]
             msg.get_payload()[1].add_related(
                 img.read(), "image", "png", cid=cid
             )
