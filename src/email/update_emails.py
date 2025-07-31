@@ -23,6 +23,23 @@ def update_obsv_info_emails(verbose: bool = False):
     df_monitoring = load_monitoring_data("obsv")
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
+    # Log email eligibility summary with rainfall criteria
+    within_distance = df_monitoring[
+        df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE
+    ]
+    within_distance_and_rain = within_distance[
+        within_distance["rainfall_relevant"]
+    ]
+    
+    print("📧 Observational email eligibility check:")
+    print(f"   ✅ {len(within_distance)}/{len(df_monitoring)} storms within "
+          f"{MIN_EMAIL_DISTANCE}km")
+    print(f"   🌧️  {len(within_distance_and_rain)}/{len(within_distance)} "
+          f"have relevant rainfall")
+    
+    if len(within_distance_and_rain) == 0:
+        print("   ⚠️  No storms meet both distance AND rainfall criteria")
+    
     dicts = []
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
         if row["min_dist"] > MIN_EMAIL_DISTANCE:
