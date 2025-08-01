@@ -522,7 +522,8 @@ def create_map_plot_figure(
         center_lat = (lat_max + lat_min) / 2
         center_lon = (lon_max + lon_min) / 2
     else:
-        zoom = 5.8
+        # Static Cuba-centered view for observations with lower zoom
+        zoom = 4.5  # Lowered from 5.8 to show more area
         center_lat = centroid_lat
         center_lon = centroid_lon
 

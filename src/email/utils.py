@@ -64,6 +64,9 @@ def create_dummy_storm_tracks(
         # Sort by time to ensure proper chronological order
         dummy_track = dummy_track.sort_values("lastUpdate")
 
+        # Replace 100-knot values with 105 knots to create threshold crossing
+        dummy_track.loc[dummy_track["intensity"] == 100, "intensity"] = 105
+
         # Find first point where wind crosses observation threshold (105 knots)
         obs_threshold = THRESHS["obsv"]["s"]  # 105 knots
         threshold_crossed_idx = dummy_track[
@@ -136,8 +139,10 @@ def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
 
         # Calculate when the threshold would be crossed based on dummy data
         # In the dummy Hurricane Rafael data, threshold crossing happens
-        # around day 3 of the storm track
-        threshold_crossing_date = MONITORING_START_DATE + pd.Timedelta(days=3)
+        # around day 3 of the storm track (specifically at 09:00 on day 4)
+        threshold_crossing_date = MONITORING_START_DATE + pd.Timedelta(
+            days=3, hours=12
+        )
 
         df = pd.DataFrame(
             [
