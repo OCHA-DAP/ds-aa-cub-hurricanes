@@ -1,12 +1,17 @@
 import numpy as np
 import os
+import pytz
 from datetime import datetime, timezone
 
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
 
 # Monitoring start date - only process data from this date forward
-MONITORING_START_DATE = datetime(2025, 1, 1, tzinfo=timezone.utc)
+# Set to Cuba timezone so that dummy emails show intended date
+cuba_tz = pytz.timezone("America/Havana")
+MONITORING_START_DATE = cuba_tz.localize(datetime(2025, 1, 1)).astimezone(
+    timezone.utc
+)
 
 
 # Runtime control flags - centralized configuration
