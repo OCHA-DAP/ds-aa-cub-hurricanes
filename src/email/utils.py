@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Literal
 import pandas as pd
 import ocha_stratus as stratus
+from src.datasources import nhc
+from datetime import datetime, timezone
 
 from src.constants import (
     PROJECT_PREFIX,
@@ -36,7 +38,9 @@ TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
 
 
-def create_dummy_storm_tracks(fcast_obsv: str) -> pd.DataFrame:
+def create_dummy_storm_tracks(
+    df_tracks: pd.DataFrame, fcast_obsv: str
+) -> pd.DataFrame:
     """Create dummy storm tracks based on Hurricane Rafael data but with test IDs.
 
     Args:
@@ -45,25 +49,48 @@ def create_dummy_storm_tracks(fcast_obsv: str) -> pd.DataFrame:
     Returns:
         DataFrame with tracks data modified to match dummy storm monitoring data
     """
-    from src.datasources import nhc
-
     # Use Hurricane Rafael as the base data
     dummy_id = "al182024"
     dummy_name = "Rafael"
+    # al182024_fcast_2024-11-04T21:00:00
+
+    if fcast_obsv == "obsv":
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id)
+            & (df_tracks["name"] == dummy_name)
+            # & (df_tracks["issuance"] == target_track_time)
+        ].copy()
+        len(dummy_track)
+        #  dummy_track["DUMMYMIN"]= min(dummy_track["lastUpdate"])
+        diff_from_min = dummy_track["lastUpdate"] - min(
+            dummy_track["lastUpdate"]
+        )
+        #  dummy_track["DIFFMIN"] = diff_from_min
+        # #  dummy_track['TEMPSTART']=MONITORING_START_DATE
+        dummy_track["lastUpdate"] = MONITORING_START_DATE + diff_from_min
 
     if fcast_obsv == "fcast":
-        # Load forecast tracks and filter to Rafael
-        df_tracks = nhc.load_recent_glb_forecasts()
-        tracks_f = df_tracks[
-            (df_tracks["id"] == dummy_id) & (df_tracks["name"] == dummy_name)
+
+        target_track_time = datetime(
+            2024, 11, 4, 21, 0, 0, tzinfo=timezone.utc
+        )
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id)
+            & (df_tracks["name"] == dummy_name)
+            & (df_tracks["issuance"] == target_track_time)
         ].copy()
         # Calculate lead time between issuance and validTime
-        lt = tracks_f["validTime"] - tracks_f["issuance"]
-        tracks_f["issuance"] = MONITORING_START_DATE
-        tracks_f["validTime"] = tracks_f["issuance"] + lt
-        # Inject maxwind value of 125 where lead time = 2 days
-        tracks_f.loc[lt == pd.Timedelta(days=2), "maxwind"] = 125
-        return tracks_f
+        lt = dummy_track["validTime"] - dummy_track["issuance"]
+        dummy_track["issuance"] = MONITORING_START_DATE
+        dummy_track["validTime"] = dummy_track["issuance"] + lt
+
+        # Inject maxwind value of 125 where lead time = 2 days (action)
+        dummy_track.loc[lt == pd.Timedelta(days=2, hours=9), "maxwind"] = 125
+        # Inject readiness activation
+        dummy_track.loc[lt == pd.Timedelta(days=4, hours=21), "maxwind"] = 125
+
+    dummy_track["id"] = TEST_ATCF_ID
+    return dummy_track
 
 
 def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
@@ -93,13 +120,19 @@ def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
             ]
         )
     else:
+        # For observation data, use a later issue time to capture the full
+        # storm track. In reality it should actually just go to the
+        # threshold crossing date, but ithink this is okay for the dummy
+        # visualization right now?
+        # go up to date of first thresholds crossing in dummy data fro observational
+        obs_issue_time = MONITORING_START_DATE + pd.Timedelta(days=3)
         df = pd.DataFrame(
             [
                 {
                     "monitor_id": DUMMY_MONITOR_ID,
                     "atcf_id": TEST_ATCF_ID,
                     "name": TEST_STORM_NAME,
-                    "issue_time": MONITORING_START_DATE,
+                    "issue_time": obs_issue_time,
                     "min_dist": 0.0,
                     "closest_s": 125,
                     "obsv_s": 110,
