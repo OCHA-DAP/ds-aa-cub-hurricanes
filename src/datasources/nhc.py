@@ -164,6 +164,24 @@ def load_historical_forecasts(include_geometry: bool = False):
         return df
 
 
+def load_recent_glb_nhc(fcast_obsv: str = "fcast"):
+    """
+    Load the most recent NHC forecast or observed tracks.
+
+    Parameters:
+    fcast_obsv (str): "fcast" for forecasts, "obsv" for observations.
+
+    Returns:
+    pd.DataFrame: DataFrame containing the tracks.
+    """
+    if fcast_obsv == "fcast":
+        return load_recent_glb_forecasts()
+    elif fcast_obsv == "obsv":
+        return load_recent_glb_obsv()
+    else:
+        raise ValueError("fcast_obsv must be 'fcast' or 'obsv'")
+
+
 def load_recent_glb_forecasts():
     return stratus.load_csv_from_blob(
         "noaa/nhc/forecasted_tracks.csv",
