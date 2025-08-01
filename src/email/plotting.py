@@ -17,11 +17,13 @@ from src.constants import (
     LON_ZOOM_RANGE,
     PROJECT_PREFIX,
     THRESHS,
+    FORCE_ALERT,
 )
 from src.datasources import codab, nhc, zma
 from src.email.utils import (
     load_monitoring_data,
     open_static_image,
+    create_dummy_storm_tracks,
 )
 import ocha_stratus as stratus
 
@@ -363,19 +365,26 @@ def create_map_plot_figure(
     cuba_tz = pytz.timezone("America/Havana")
     cyclone_name = monitoring_point["name"]
     atcf_id = monitoring_point["atcf_id"]
-    if atcf_id == "TEST_ATCF_ID":
-        atcf_id = "al182024"  # Use Hurricane Rafael for Cuba tests
+    # if atcf_id == "TEST_ATCF_ID":
+    #     atcf_id = "al182024"  # Use Hurricane Rafael for Cuba tests
     issue_time = monitoring_point["issue_time"]
     issue_time_cuba = issue_time.astimezone(cuba_tz)
 
+    df_tracks = nhc.load_recent_glb_nhc(fcast_obsv=fcast_obsv)
+
+    if FORCE_ALERT:
+        df_dummy_tracks = create_dummy_storm_tracks(
+            df_tracks, fcast_obsv=fcast_obsv
+        )
+        df_tracks = pd.concat([df_tracks, df_dummy_tracks], ignore_index=True)
+
     if fcast_obsv == "fcast":
-        df_tracks = nhc.load_recent_glb_forecasts()
         tracks_f = df_tracks[
             (df_tracks["id"] == atcf_id)
             & (df_tracks["issuance"] == issue_time)
         ].copy()
-    else:
-        df_tracks = nhc.load_recent_glb_obsv()
+
+    elif fcast_obsv == "obsv":
         tracks_f = df_tracks[
             (df_tracks["id"] == atcf_id)
             & (df_tracks["lastUpdate"] <= issue_time)
@@ -513,7 +522,8 @@ def create_map_plot_figure(
         center_lat = (lat_max + lat_min) / 2
         center_lon = (lon_max + lon_min) / 2
     else:
-        zoom = 5.8
+        # Static Cuba-centered view for observations with lower zoom
+        zoom = 4.5  # Lowered from 5.8 to show more area
         center_lat = centroid_lat
         center_lon = centroid_lon
 

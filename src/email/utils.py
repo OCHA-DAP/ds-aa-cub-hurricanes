@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Literal
 import pandas as pd
 import ocha_stratus as stratus
+from src.datasources import nhc
+from datetime import datetime, timezone
 
 from src.constants import (
     PROJECT_PREFIX,
@@ -12,6 +14,11 @@ from src.constants import (
     TEST_EMAIL,
     FORCE_ALERT,
     MONITORING_START_DATE,
+    TEST_ATCF_ID,
+    TEST_MONITOR_ID,
+    TEST_FCAST_MONITOR_ID,
+    TEST_OBSV_MONITOR_ID,
+    TEST_STORM_NAME,
     _parse_bool_env,
 )
 
@@ -26,14 +33,139 @@ TEST_LIST = _parse_bool_env("TEST_LIST", default=False)
 TEST_STORM = _parse_bool_env("TEST_STORM", default=False)
 EMAIL_DISCLAIMER = _parse_bool_env("EMAIL_DISCLAIMER", default=False)
 
-TEST_ATCF_ID = "TEST_ATCF_ID"
-TEST_MONITOR_ID = "TEST_MONITOR_ID"
-TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
-TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
-TEST_STORM_NAME = "TEST_STORM_NAME"
 
 TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
+
+
+def create_dummy_storm_tracks(
+    df_tracks: pd.DataFrame, fcast_obsv: str
+) -> pd.DataFrame:
+    """Create dummy storm tracks based on Hurricane Rafael data but with test IDs.
+
+    Args:
+        fcast_obsv: Whether to create forecast or observation tracks
+
+    Returns:
+        DataFrame with tracks data modified to match dummy storm monitoring data
+    """
+    # Use Hurricane Rafael as the base data
+    dummy_id = "al182024"
+    dummy_name = "Rafael"
+    # al182024_fcast_2024-11-04T21:00:00
+
+    if fcast_obsv == "obsv":
+        from src.constants import THRESHS
+
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id) & (df_tracks["name"] == dummy_name)
+        ].copy()
+
+        # Sort by time to ensure proper chronological order
+        dummy_track = dummy_track.sort_values("lastUpdate")
+
+        # Replace 100-knot values with 105 knots to create threshold crossing
+        dummy_track.loc[dummy_track["intensity"] == 100, "intensity"] = 105
+
+        # Find first point where wind crosses observation threshold (105 knots)
+        obs_threshold = THRESHS["obsv"]["s"]  # 105 knots
+        threshold_crossed_idx = dummy_track[
+            dummy_track["intensity"] >= obs_threshold
+        ].index
+
+        if len(threshold_crossed_idx) > 0:
+            # Include only points up to first threshold crossing
+            first_crossing_idx = threshold_crossed_idx[0]
+            dummy_track = dummy_track.loc[:first_crossing_idx]
+
+        # Shift timestamps to start from MONITORING_START_DATE
+        min_time = min(dummy_track["lastUpdate"])
+        diff_from_min = dummy_track["lastUpdate"] - min_time
+        dummy_track["lastUpdate"] = MONITORING_START_DATE + diff_from_min
+
+    if fcast_obsv == "fcast":
+
+        target_track_time = datetime(
+            2024, 11, 4, 21, 0, 0, tzinfo=timezone.utc
+        )
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id)
+            & (df_tracks["name"] == dummy_name)
+            & (df_tracks["issuance"] == target_track_time)
+        ].copy()
+        # Calculate lead time between issuance and validTime
+        lt = dummy_track["validTime"] - dummy_track["issuance"]
+        dummy_track["issuance"] = MONITORING_START_DATE
+        dummy_track["validTime"] = dummy_track["issuance"] + lt
+
+        # Inject maxwind value of 125 where lead time = 2 days (action)
+        dummy_track.loc[lt == pd.Timedelta(days=2, hours=9), "maxwind"] = 125
+        # Inject readiness activation
+        dummy_track.loc[lt == pd.Timedelta(days=4, hours=21), "maxwind"] = 125
+
+    dummy_track["id"] = TEST_ATCF_ID
+    return dummy_track
+
+
+def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
+    DUMMY_MONITOR_ID = (
+        TEST_FCAST_MONITOR_ID
+        if fcast_obsv == "fcast"
+        else TEST_OBSV_MONITOR_ID
+    )
+
+    if fcast_obsv == "fcast":
+        df = pd.DataFrame(
+            [
+                {
+                    "monitor_id": DUMMY_MONITOR_ID,
+                    "atcf_id": TEST_ATCF_ID,
+                    "name": TEST_STORM_NAME,
+                    "issue_time": MONITORING_START_DATE,
+                    "time_to_closest": None,
+                    "closest_s": 83.33,
+                    "past_cutoff": False,
+                    "min_dist": 83.0,
+                    "action_s": 125,
+                    "action_trigger": True,
+                    "readiness_s": 125,
+                    "readiness_trigger": True,
+                }
+            ]
+        )
+    else:
+        # For observation data, set issue time to when threshold was crossed
+        # This matches the realistic operational scenario
+
+        # Calculate when the threshold would be crossed based on dummy data
+        # In the dummy Hurricane Rafael data, threshold crossing happens
+        # around day 3 of the storm track (specifically at 09:00 on day 4)
+        threshold_crossing_date = MONITORING_START_DATE + pd.Timedelta(
+            days=3, hours=12
+        )
+
+        df = pd.DataFrame(
+            [
+                {
+                    "monitor_id": DUMMY_MONITOR_ID,
+                    "atcf_id": TEST_ATCF_ID,
+                    "name": TEST_STORM_NAME,
+                    "issue_time": threshold_crossing_date,
+                    "min_dist": 0.0,
+                    "closest_s": 125,
+                    "obsv_s": 110,
+                    "obsv_trigger": True,
+                    "closest_p": 100,
+                    "obsv_p": 100,
+                    "rainfall_relevant": True,
+                    "rainfall_source": "raster_quantile",
+                    "quantile_used": 0.8,
+                    "analysis_start": None,
+                    "analysis_end": None,
+                }
+            ]
+        )
+    return df
 
 
 def add_test_row_to_monitoring(
@@ -41,7 +173,7 @@ def add_test_row_to_monitoring(
 ) -> pd.DataFrame:
     """Add test row to monitoring df to simulate new monitoring point.
     This new monitoring point will cause an activation of all triggers.
-    Uses Hurricane Rafael data as a template but creates proper test IDs.
+    Uses create_dummy_storm_monitoring to generate test data.
     """
     # Only print this once per fcast/obsv type per process
     if not hasattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}"):
@@ -50,57 +182,13 @@ def add_test_row_to_monitoring(
         else:
             print("🧪 Adding test observation row for FORCE_ALERT testing")
         setattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}", True)
-    if fcast_obsv == "fcast":
-        # Use Hurricane Rafael as template but create test row
-        df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al182024_fcast_2024-11-04T21:00:00"
-        ].copy()
-        df_monitoring_test[
-            [
-                "monitor_id",
-                "name",
-                "atcf_id",
-                "readiness_trigger",
-                "action_trigger",
-            ]
-        ] = (
-            TEST_FCAST_MONITOR_ID,
-            TEST_STORM_NAME,
-            TEST_ATCF_ID,
-            True,
-            True,
-        )
-        # Set issue_time to MONITORING_START_DATE for test row
-        df_monitoring_test["issue_time"] = MONITORING_START_DATE
-        # Ensure test row always triggers by setting past_cutoff to False
-        if "past_cutoff" in df_monitoring_test.columns:
-            df_monitoring_test["past_cutoff"] = False
-        df_monitoring = pd.concat(
-            [df_monitoring, df_monitoring_test], ignore_index=True
-        )
-    else:
-        # Use Hurricane Rafael as template but create test row
-        df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al182024_obsv_2024-11-06T21:00:00"
-        ].copy()
-        df_monitoring_test[
-            [
-                "monitor_id",
-                "name",
-                "atcf_id",
-                "obsv_trigger",
-            ]
-        ] = (
-            TEST_OBSV_MONITOR_ID,
-            TEST_STORM_NAME,
-            TEST_ATCF_ID,
-            True,
-        )
-        # Set issue_time to MONITORING_START_DATE for test row
-        df_monitoring_test["issue_time"] = MONITORING_START_DATE
-        df_monitoring = pd.concat(
-            [df_monitoring, df_monitoring_test], ignore_index=True
-        )
+
+    # Create dummy storm monitoring data
+    df_monitoring_test = create_dummy_storm_monitoring(fcast_obsv)
+
+    df_monitoring = pd.concat(
+        [df_monitoring, df_monitoring_test], ignore_index=True
+    )
     return df_monitoring
 
 

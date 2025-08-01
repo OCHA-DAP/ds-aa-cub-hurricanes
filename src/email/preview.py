@@ -20,10 +20,20 @@ from src.email.utils import (
     STATIC_DIR,
     TEMPLATES_DIR,
     FORCE_ALERT,
+    DRY_RUN,
+    TEST_EMAIL,
     load_monitoring_data,
 )
 from src.monitoring import monitoring_utils
 import ocha_stratus as stratus
+
+
+def show_environment_status():
+    """Display current environment variable settings for debugging."""
+    print("🔧 Environment Variables:")
+    print(f"   DRY_RUN: {DRY_RUN}")
+    print(f"   TEST_EMAIL: {TEST_EMAIL}")
+    print(f"   FORCE_ALERT: {FORCE_ALERT}")
 
 
 def get_image_as_base64(
@@ -91,6 +101,9 @@ def preview_info_email(
     --------
     dict: Contains 'html', 'text', 'subject', and other email details
     """
+    # Show environment status for debugging
+    show_environment_status()
+
     # Use the simplified email creation logic
     email_content = create_info_email_content(
         monitor_id, fcast_obsv, for_preview=True
@@ -207,6 +220,9 @@ def preview_trigger_email(
     --------
     dict: Contains 'html', 'text', 'subject', and other email details
     """
+    # Show environment status for debugging
+    show_environment_status()
+
     fcast_obsv = "fcast" if trigger_name in ["readiness", "action"] else "obsv"
 
     # Load monitoring data using the simplified API
