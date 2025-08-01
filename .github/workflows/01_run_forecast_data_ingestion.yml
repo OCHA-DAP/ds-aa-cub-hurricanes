@@ -1,8 +1,29 @@
-name: Ingest Forecast Data
+name: Forecast Monitor
 
 on:
   workflow_dispatch:
-
+      inputs:
+        TEST_EMAIL:
+          required: true
+          type: choice
+          default: "true"
+          options:
+            - "true"
+            - "false"
+        DRY_RUN:
+          required: true
+          type: choice
+          default: "false"
+          options:
+            - "true"
+            - "false"
+        FORCE_ALERT:
+          required: true
+          type: choice
+          default: "false"
+          options:
+            - "true"
+            - "false" 
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -10,12 +31,20 @@ jobs:
       DSCI_AZ_BLOB_DEV_SAS: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS }}
       DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
       DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
+      DSCI_AWS_EMAIL_HOST: ${{ secrets.DSCI_AWS_EMAIL_HOST }}
+      DSCI_AWS_EMAIL_PORT: ${{ secrets.DSCI_AWS_EMAIL_PORT }}
+      DSCI_AWS_EMAIL_PASSWORD: ${{ secrets.DSCI_AWS_EMAIL_PASSWORD }}
+      DSCI_AWS_EMAIL_USERNAME: ${{ secrets.DSCI_AWS_EMAIL_USERNAME }}
+      DSCI_AWS_EMAIL_ADDRESS: ${{ secrets.DSCI_AWS_EMAIL_ADDRESS }}
+      TEST_EMAIL: ${{ inputs.TEST_EMAIL || 'true' }}
+      DRY_RUN: ${{ inputs.DRY_RUN || 'false' }}
+      FORCE_ALERT: ${{ inputs.FORCE_ALERT || 'false' }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        ref: forecast-monitor
-
+        ref: init-email-monitoring
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -30,4 +59,4 @@ jobs:
 
     - name: Run script
       run: |
-        python pipelines/01_update_fcast_data.py
+        python pipelines/01_update_fcast_monitor.py
