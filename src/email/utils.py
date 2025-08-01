@@ -55,18 +55,29 @@ def create_dummy_storm_tracks(
     # al182024_fcast_2024-11-04T21:00:00
 
     if fcast_obsv == "obsv":
+        from src.constants import THRESHS
+
         dummy_track = df_tracks[
-            (df_tracks["id"] == dummy_id)
-            & (df_tracks["name"] == dummy_name)
-            # & (df_tracks["issuance"] == target_track_time)
+            (df_tracks["id"] == dummy_id) & (df_tracks["name"] == dummy_name)
         ].copy()
-        len(dummy_track)
-        #  dummy_track["DUMMYMIN"]= min(dummy_track["lastUpdate"])
-        diff_from_min = dummy_track["lastUpdate"] - min(
-            dummy_track["lastUpdate"]
-        )
-        #  dummy_track["DIFFMIN"] = diff_from_min
-        # #  dummy_track['TEMPSTART']=MONITORING_START_DATE
+
+        # Sort by time to ensure proper chronological order
+        dummy_track = dummy_track.sort_values("lastUpdate")
+
+        # Find first point where wind crosses observation threshold (105 knots)
+        obs_threshold = THRESHS["obsv"]["s"]  # 105 knots
+        threshold_crossed_idx = dummy_track[
+            dummy_track["intensity"] >= obs_threshold
+        ].index
+
+        if len(threshold_crossed_idx) > 0:
+            # Include only points up to first threshold crossing
+            first_crossing_idx = threshold_crossed_idx[0]
+            dummy_track = dummy_track.loc[:first_crossing_idx]
+
+        # Shift timestamps to start from MONITORING_START_DATE
+        min_time = min(dummy_track["lastUpdate"])
+        diff_from_min = dummy_track["lastUpdate"] - min_time
         dummy_track["lastUpdate"] = MONITORING_START_DATE + diff_from_min
 
     if fcast_obsv == "fcast":
@@ -120,19 +131,21 @@ def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
             ]
         )
     else:
-        # For observation data, use a later issue time to capture the full
-        # storm track. In reality it should actually just go to the
-        # threshold crossing date, but ithink this is okay for the dummy
-        # visualization right now?
-        # go up to date of first thresholds crossing in dummy data fro observational
-        obs_issue_time = MONITORING_START_DATE + pd.Timedelta(days=3)
+        # For observation data, set issue time to when threshold was crossed
+        # This matches the realistic operational scenario
+
+        # Calculate when the threshold would be crossed based on dummy data
+        # In the dummy Hurricane Rafael data, threshold crossing happens
+        # around day 3 of the storm track
+        threshold_crossing_date = MONITORING_START_DATE + pd.Timedelta(days=3)
+
         df = pd.DataFrame(
             [
                 {
                     "monitor_id": DUMMY_MONITOR_ID,
                     "atcf_id": TEST_ATCF_ID,
                     "name": TEST_STORM_NAME,
-                    "issue_time": obs_issue_time,
+                    "issue_time": threshold_crossing_date,
                     "min_dist": 0.0,
                     "closest_s": 125,
                     "obsv_s": 110,
