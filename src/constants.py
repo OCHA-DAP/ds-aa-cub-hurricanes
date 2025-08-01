@@ -53,7 +53,7 @@ D_THRESH = 230
 THRESHS = {
     "readiness": {"s": 120, "lt_days": 5},
     "action": {"s": 120, "lt_days": 3},
-    "obsv": {"p": 98, "s": 100},  # NEED TO UPDATE FOR PROD
+    "obsv": {"p": 98.2, "s": 105},  # NEED TO UPDATE FOR PROD
 }
 
 MIN_EMAIL_DISTANCE = 1000
@@ -114,3 +114,10 @@ LON_ZOOM_RANGE = np.array(
         360.0,
     ]
 )
+
+
+TEST_ATCF_ID = "TEST_ATCF_ID"
+TEST_MONITOR_ID = "TEST_MONITOR_ID"
+TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
+TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
+TEST_STORM_NAME = "TEST_STORM_NAME"
