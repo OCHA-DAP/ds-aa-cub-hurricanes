@@ -36,7 +36,6 @@ import numpy as np
 CHECK_ACTIVITY_SINCE = datetime(2025, 7, 31)
 
 # Load recent NHC forecast tracks
-print("Loading NHC forecast data...")
 df_forecast = nhc.load_recent_glb_nhc("fcast")
 df_obsv = nhc.load_recent_glb_nhc("obsv")
 
@@ -55,21 +54,66 @@ df_obsv_filtered = df_obsv[
     (df_obsv["lastUpdate"] >= CHECK_ACTIVITY_SINCE_UTC)
 ]
 
-# Print results or no data messages
-if len(df_forecast_filtered) == 0 and len(df_obsv_filtered) == 0:
-    print(f"No new hurricane activity detected since {CHECK_ACTIVITY_SINCE.date()} in CHD NHC pipeline")
-else:
-    if len(df_forecast_filtered) > 0:
-        print(f"✅ Found {len(df_forecast_filtered)} forecast records since {CHECK_ACTIVITY_SINCE.date()}")
-    if len(df_obsv_filtered) > 0:
-        print(f"✅ Found {len(df_obsv_filtered)} observational records since {CHECK_ACTIVITY_SINCE.date()}")
+# Store results for display
+forecast_count = len(df_forecast_filtered)
+obsv_count = len(df_obsv_filtered)
+check_date = CHECK_ACTIVITY_SINCE.strftime("%B %d, %Y")
 ```
 
+## NHC Data Pipeline Status
+
+**Monitoring Period:** Since `{python} check_date`
+
+```{python}
+#| echo: false
+from IPython.display import Markdown
+
+if forecast_count == 0 and obsv_count == 0:
+    status_message = f"""
+### 🟢 No Hurricane Activity Detected
+
+No new hurricane activity has been detected since **{check_date}** in the CHD NHC pipeline for the Atlantic basin.
+
+<br>
+
+**Summary:**
+
+- 📊 **Forecast Records:** {forecast_count}
+
+- 📈 **Observational Records:** {obsv_count}
+
+- 🌊 **Basin:** Atlantic (AL)
+
+<br>
+"""
+else:
+    status_message = f"""
+### 🟡 Hurricane Activity Detected
+
+New hurricane activity has been detected since **{check_date}** in the CHD NHC pipeline.
+
+<br>
+
+**Summary:**
+
+- 📊 **Forecast Records:** {forecast_count}
+
+- 📈 **Observational Records:** {obsv_count}
+
+- 🌊 **Basin:** Atlantic (AL)
+
+<br>
+"""
+
+display(Markdown(status_message))
+```
+
+
+## NHC Tropical Weather Outlook
 
 ```{python}
 #| echo: false
 # Scrape and display NHC Tropical Weather Outlook map
-print("\nFetching NHC Tropical Weather Outlook map...")
 
 try:
     # Fetch the GTWO page
@@ -108,8 +152,6 @@ try:
                 break
     
     if outlook_img_url:
-        print(f"Found outlook image: {outlook_img_url}")
-        
         # Download the image and save it locally for embedding
         img_response = requests.get(outlook_img_url, timeout=10)
         img_response.raise_for_status()
@@ -119,17 +161,61 @@ try:
         with open(temp_img_path, "wb") as f:
             f.write(img_response.content)
         
-        print(f"✅ Downloaded NHC outlook image")
+        # Extract timestamp from URL if possible
+        import re
+        timestamp_match = re.search(r'(\d{10})', outlook_img_url)
+        timestamp_str = f" (Updated: {timestamp_match.group(1)})" if timestamp_match else ""
+        
+        download_success = True
         
     else:
-        print("Could not find the tropical weather outlook image on the page.")
+        download_success = False
         
 except requests.RequestException as e:
-    print(f"Error fetching the NHC page: {e}")
+    download_success = False
+    error_message = f"Network error: {str(e)}"
 except Exception as e:
-    print(f"Error processing the image: {e}")
-
+    download_success = False
+    error_message = f"Processing error: {str(e)}"
 ```
 
-![NHC 7-Day Tropical Weather Outlook](temp_nhc_outlook.png){width=100%}
+```{python}
+#| echo: false
+if download_success:
+    display(Markdown(f"""
+### 🌪️ 7-Day Tropical Weather Outlook
+
+Latest outlook from the National Hurricane Center showing areas of potential tropical development over the next 7 days.
+
+<br>
+
+**Source:** [NHC Tropical Weather Outlook](https://www.nhc.noaa.gov/gtwo.php)  
+
+**Last Retrieved:** {datetime.now().strftime("%B %d, %Y at %I:%M %p UTC")}
+
+<br>
+"""))
+else:
+    display(Markdown(f"""
+### ⚠️ Weather Outlook Unavailable
+
+Unable to retrieve the current NHC Tropical Weather Outlook.
+
+<br>
+
+**Error:** {error_message if 'error_message' in locals() else 'Could not locate outlook image on NHC website'}  
+
+**Fallback:** Visit [NHC Tropical Weather Outlook](https://www.nhc.noaa.gov/gtwo.php) directly
+
+<br>
+"""))
+```
+
+```{python}
+#| echo: false
+if download_success:
+    display(Markdown("![NHC 7-Day Tropical Weather Outlook](temp_nhc_outlook.png)"))
+else:
+    display(Markdown("*Weather outlook image could not be retrieved at this time.*"))
+```
 
