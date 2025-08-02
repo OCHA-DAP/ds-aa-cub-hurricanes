@@ -8,7 +8,7 @@ archive_url: "https://example.com/archive"
 date: "August 2025"
 subject: "Monthly Hurricane Summary"
 jupyter:
-  kernel: ds-aa-cub-hurricanes
+  kernel: python3
 execute:
   engine: jupyter
 ---
