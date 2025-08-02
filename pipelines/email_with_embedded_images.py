@@ -127,20 +127,21 @@ def send_hurricane_report():
     """Render Quarto document and send hurricane report with images."""
     import subprocess
 
-    # Email configuration (you can move these to environment variables)
+    # Email configuration from existing email utilities
     from src.email.utils import (
         EMAIL_HOST,
         EMAIL_PORT,
         EMAIL_USERNAME,
         EMAIL_PASSWORD,
+        EMAIL_ADDRESS,
     )
 
     SMTP_SERVER = EMAIL_HOST
     SMTP_PORT = EMAIL_PORT
     EMAIL_USER = EMAIL_USERNAME
     EMAIL_PASS = EMAIL_PASSWORD
-    EMAIL_TO = "zachary.arno@un.org"
-    EMAIL_FROM = "data.science@humdata.org"
+    EMAIL_TO = "zachary.arno@un.org"  # TODO: Make this configurable
+    EMAIL_FROM = EMAIL_ADDRESS
     SUBJECT = "Daily Hurricane Summary"
 
     # Step 1: Render Quarto document

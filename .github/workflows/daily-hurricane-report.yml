@@ -16,6 +16,15 @@ on:
 jobs:
   generate-and-send-report:
     runs-on: ubuntu-latest
+    env:
+      DSCI_AZ_BLOB_DEV_SAS: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS }}
+      DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
+      DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
+      DSCI_AWS_EMAIL_HOST: ${{ secrets.DSCI_AWS_EMAIL_HOST }}
+      DSCI_AWS_EMAIL_PORT: ${{ secrets.DSCI_AWS_EMAIL_PORT }}
+      DSCI_AWS_EMAIL_PASSWORD: ${{ secrets.DSCI_AWS_EMAIL_PASSWORD }}
+      DSCI_AWS_EMAIL_USERNAME: ${{ secrets.DSCI_AWS_EMAIL_USERNAME }}
+      DSCI_AWS_EMAIL_ADDRESS: ${{ secrets.DSCI_AWS_EMAIL_ADDRESS }}
     
     steps:
     - name: Checkout repository
@@ -91,15 +100,7 @@ jobs:
         
     - name: Generate and Send Hurricane Report
       env:
-        # Email configuration from repository secrets
-        EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
-        EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
-        EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-        
-        # Optional: Add any other environment variables your code needs
+        # Set PYTHONPATH for Python module imports
         PYTHONPATH: ${{ github.workspace }}
         
       run: |
