@@ -90,9 +90,6 @@ jobs:
           pip install -e .
         fi
         
-        # Install additional packages that might be needed for email/web scraping
-        pip install requests beautifulsoup4 lxml pillow
-        
     - name: Verify Quarto installation
       run: |
         quarto --version
