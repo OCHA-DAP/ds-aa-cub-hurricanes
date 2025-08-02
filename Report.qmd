@@ -6,14 +6,16 @@ format:
 banner_url: "src/email/static/centre_banner_white.png"
 archive_url: "https://example.com/archive"
 date: "August 2025"
-subject: "Monthly Hurricane Summary"
+# subject: "Monthly Hurricane Summary"
 jupyter:
-  kernel: python3
+  kernel: ds-aa-cub-hurricanes
 execute:
   engine: jupyter
 ---
 
-# Hello from my email template!
+# Daily NHC Check
+
+This is an internal email meant for daily monitoring of NHC data in the Atlantic basin. It's meant to sanity check out nhc pipeline and cuba hurricane monitoring by giving allowing us to check whether any storms have been detected in our database against the latest NHC publication.
 
 ```{python}
 #| echo: false

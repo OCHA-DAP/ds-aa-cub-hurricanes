@@ -66,13 +66,21 @@ jobs:
     - name: Cache Python dependencies
       uses: actions/cache@v4
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        path: |
+          ~/.cache/pip
+          venv
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
         restore-keys: |
+          ${{ runner.os }}-venv-
           ${{ runner.os }}-pip-
           
-    - name: Install Python dependencies
+    - name: Create virtual environment and install dependencies
       run: |
+        # Create virtual environment
+        python -m venv venv
+        source venv/bin/activate
+        
+        # Upgrade pip and install build tools
         python -m pip install --upgrade pip
         pip install wheel setuptools
         
@@ -90,8 +98,12 @@ jobs:
           pip install -e .
         fi
         
+        # Install Jupyter kernel in the virtual environment
+        python -m ipykernel install --user --name=ds-aa-cub-hurricanes --display-name="ds-aa-cub-hurricanes"
+        
     - name: Verify Quarto installation
       run: |
+        source venv/bin/activate
         quarto --version
         quarto check
         
@@ -101,6 +113,7 @@ jobs:
         PYTHONPATH: ${{ github.workspace }}
         
       run: |
+        source venv/bin/activate
         echo "📊📧 Rendering Quarto document and sending Hurricane Report Email..."
         python pipelines/email_with_embedded_images.py
         
