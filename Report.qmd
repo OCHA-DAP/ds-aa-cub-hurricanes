@@ -1,0 +1,133 @@
+---
+title: "Daily Summary"
+format:
+  html:
+    template: quarto-email-template.html  
+banner_url: "src/email/static/centre_banner_white.png"
+archive_url: "https://example.com/archive"
+date: "August 2025"
+subject: "Monthly Hurricane Summary"
+jupyter:
+  kernel: ds-aa-cub-hurricanes
+execute:
+  engine: jupyter
+---
+
+# Hello from my email template!
+
+```{python}
+#| echo: false
+from src.datasources import nhc
+import pandas as pd
+from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from PIL import Image
+from io import BytesIO
+import numpy as np
+```
+
+```{python}
+#| echo: false
+CHECK_ACTIVITY_SINCE = datetime(2025, 7, 31)
+
+# Load recent NHC forecast tracks
+print("Loading NHC forecast data...")
+df_forecast = nhc.load_recent_glb_nhc("fcast")
+df_obsv = nhc.load_recent_glb_nhc("obsv")
+
+# Convert CHECK_ACTIVITY_SINCE to timezone-aware datetime to match data
+import pytz
+CHECK_ACTIVITY_SINCE_UTC = pytz.UTC.localize(CHECK_ACTIVITY_SINCE)
+
+# Filter for Atlantic basin and dates >= July 31, 2025
+df_forecast_filtered = df_forecast[
+    (df_forecast["basin"] == "al") & 
+    (df_forecast["validTime"] >= CHECK_ACTIVITY_SINCE_UTC)
+]
+
+df_obsv_filtered = df_obsv[
+    (df_obsv["basin"] == "al") & 
+    (df_obsv["lastUpdate"] >= CHECK_ACTIVITY_SINCE_UTC)
+]
+
+# Print results or no data messages
+if len(df_forecast_filtered) == 0 and len(df_obsv_filtered) == 0:
+    print(f"No new hurricane activity detected since {CHECK_ACTIVITY_SINCE.date()} in CHD NHC pipeline")
+else:
+    if len(df_forecast_filtered) > 0:
+        print(f"✅ Found {len(df_forecast_filtered)} forecast records since {CHECK_ACTIVITY_SINCE.date()}")
+    if len(df_obsv_filtered) > 0:
+        print(f"✅ Found {len(df_obsv_filtered)} observational records since {CHECK_ACTIVITY_SINCE.date()}")
+```
+
+
+```{python}
+#| echo: false
+# Scrape and display NHC Tropical Weather Outlook map
+print("\nFetching NHC Tropical Weather Outlook map...")
+
+try:
+    # Fetch the GTWO page
+    response = requests.get("https://www.nhc.noaa.gov/gtwo.php", timeout=10)
+    response.raise_for_status()
+    
+    # Parse the HTML to find the outlook image
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
+    # Look for the 7-day outlook image (typically has "gtwo_7d" in the src)
+    img_tags = soup.find_all('img')
+    outlook_img_url = None
+    
+    for img in img_tags:
+        src = img.get('src', '')
+        if 'gtwo' in src and ('7d' in src or 'outlook' in src):
+            if src.startswith('/'):
+                outlook_img_url = f"https://www.nhc.noaa.gov{src}"
+            elif src.startswith('http'):
+                outlook_img_url = src
+            else:
+                outlook_img_url = f"https://www.nhc.noaa.gov/{src}"
+            break
+    
+    # If we didn't find the specific image, try to find any GTWO image
+    if not outlook_img_url:
+        for img in img_tags:
+            src = img.get('src', '')
+            if 'gtwo' in src:
+                if src.startswith('/'):
+                    outlook_img_url = f"https://www.nhc.noaa.gov{src}"
+                elif src.startswith('http'):
+                    outlook_img_url = src
+                else:
+                    outlook_img_url = f"https://www.nhc.noaa.gov/{src}"
+                break
+    
+    if outlook_img_url:
+        print(f"Found outlook image: {outlook_img_url}")
+        
+        # Download the image and save it locally for embedding
+        img_response = requests.get(outlook_img_url, timeout=10)
+        img_response.raise_for_status()
+        
+        # Save to a temporary file
+        temp_img_path = "temp_nhc_outlook.png"
+        with open(temp_img_path, "wb") as f:
+            f.write(img_response.content)
+        
+        print(f"✅ Downloaded NHC outlook image")
+        
+    else:
+        print("Could not find the tropical weather outlook image on the page.")
+        
+except requests.RequestException as e:
+    print(f"Error fetching the NHC page: {e}")
+except Exception as e:
+    print(f"Error processing the image: {e}")
+
+```
+
+![NHC 7-Day Tropical Weather Outlook](temp_nhc_outlook.png){width=100%}
+

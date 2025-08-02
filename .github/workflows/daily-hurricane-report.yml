@@ -1,0 +1,124 @@
+name: Daily Hurricane Report
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC (adjust timezone as needed)
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Report.qmd'
+      - 'pipelines/email_with_embedded_images.py'
+      - 'src/**'
+      - '.github/workflows/daily-hurricane-report.yml'
+
+jobs:
+  generate-and-send-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Set up Quarto
+      uses: quarto-dev/quarto-actions/setup@v2
+      with:
+        version: pre-release
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgdal-dev \
+          gdal-bin \
+          libproj-dev \
+          proj-data \
+          proj-bin \
+          libgeos-dev \
+          libspatialindex-dev \
+          libcurl4-openssl-dev \
+          libssl-dev \
+          libxml2-dev \
+          libfontconfig1-dev \
+          libcairo2-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
+          libfreetype6-dev \
+          libpng-dev \
+          libtiff5-dev \
+          libjpeg-dev
+          
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install wheel setuptools
+        
+        # Install requirements if they exist
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+        
+        if [ -f requirements-dev.txt ]; then
+          pip install -r requirements-dev.txt
+        fi
+        
+        # Install package in development mode if pyproject.toml exists
+        if [ -f pyproject.toml ]; then
+          pip install -e .
+        fi
+        
+        # Install additional packages that might be needed for email/web scraping
+        pip install requests beautifulsoup4 lxml pillow
+        
+    - name: Verify Quarto installation
+      run: |
+        quarto --version
+        quarto check
+        
+    - name: Generate and Send Hurricane Report
+      env:
+        # Email configuration from repository secrets
+        EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+        EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+        EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        
+        # Optional: Add any other environment variables your code needs
+        PYTHONPATH: ${{ github.workspace }}
+        
+      run: |
+        echo "📊📧 Rendering Quarto document and sending Hurricane Report Email..."
+        python pipelines/email_with_embedded_images.py
+        
+    - name: Upload Report as Artifact
+      if: always()  # Always upload, even if email fails
+      uses: actions/upload-artifact@v3
+      with:
+        name: hurricane-report-${{ github.run_number }}
+        path: |
+          Report.html
+          temp_nhc_outlook.png
+        retention-days: 30
+        
+    - name: Cleanup temporary files
+      if: always()
+      run: |
+        # Clean up any temporary files
+        rm -f temp_nhc_outlook.png
+        echo "🧹 Cleanup completed"
