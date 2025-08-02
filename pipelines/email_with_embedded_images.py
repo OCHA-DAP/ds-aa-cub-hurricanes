@@ -135,14 +135,29 @@ def send_hurricane_report():
         EMAIL_PASSWORD,
         EMAIL_ADDRESS,
     )
+    from src.constants import PROJECT_PREFIX
+    import ocha_stratus as stratus
 
     SMTP_SERVER = EMAIL_HOST
     SMTP_PORT = EMAIL_PORT
     EMAIL_USER = EMAIL_USERNAME
     EMAIL_PASS = EMAIL_PASSWORD
-    EMAIL_TO = "zachary.arno@un.org"  # TODO: Make this configurable
+
+    # Load distribution list from blob storage
+    print("📧 Loading email distribution list...")
+    try:
+        blob_name = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
+        df_distribution = stratus.load_csv_from_blob(blob_name)
+        email_list = df_distribution["email"].tolist()
+        EMAIL_TO = ", ".join(email_list)
+        print(f"✅ Loaded {len(email_list)} emails from distribution list")
+    except Exception as e:
+        print(f"⚠️ Could not load distribution list: {e}")
+        print("📧 Falling back to default test email")
+        EMAIL_TO = "zachary.arno@un.org"
+
     EMAIL_FROM = EMAIL_ADDRESS
-    SUBJECT = "Daily Hurricane Summary"
+    SUBJECT = "Daily Hurricane Summary - Atlantic Basin"
 
     # Step 1: Render Quarto document
     print("📊 Rendering Quarto document...")
