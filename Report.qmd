@@ -15,7 +15,7 @@ execute:
 
 # Daily NHC Check
 
-This is an internal email meant for daily monitoring of NHC data in the Atlantic basin. It's meant to sanity check out nhc pipeline and cuba hurricane monitoring by giving allowing us to check whether any storms have been detected in our database against the latest NHC publication.
+This is an internal automated daily monitoring report email meant for daily monitoring for NHC Atlantic basin data. It's adds a manual validation layer on to our a.) NHC pipeline, and b.) Cuba hurricane monitoring. It's provides a quick overview of storms detected in the Atlantic Basin in our pipeline  in comparison to the latest NHC 7-day outlook published daily.
 
 ```{python}
 #| echo: false
@@ -65,7 +65,7 @@ check_date = CHECK_ACTIVITY_SINCE.strftime("%B %d, %Y")
 **Monitoring Period:** Since `{python} check_date`
 
 ```{python}
-#| echo: false
+# | echo: false
 from IPython.display import Markdown
 
 if forecast_count == 0 and obsv_count == 0:
@@ -88,7 +88,7 @@ No new hurricane activity has been detected since **{check_date}** in the CHD NH
 """
 else:
     status_message = f"""
-### 🟡 Hurricane Activity Detected
+### 🟡 Hurricane Activity Detected -  Increased Monitoring/ Vigilance Recommended
 
 New hurricane activity has been detected since **{check_date}** in the CHD NHC pipeline.
 
