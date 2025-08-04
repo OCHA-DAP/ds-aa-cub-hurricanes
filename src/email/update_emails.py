@@ -13,9 +13,9 @@ from src.email.utils import (
 def update_obsv_info_emails(verbose: bool = False):
     """Check observational monitoring data and coordinate info email sending.
 
-    Iterates through observational monitoring points and calls send_info_email()
-    for storms meeting criteria (within distance, no prior email, relevant
-    rainfall). Updates the email record to track what was sent.
+    Iterates through observational monitoring points and calls
+    send_info_email() for storms meeting criteria (within distance, no prior
+    email, relevant rainfall). Updates the email record to track what was sent.
 
     Args:
         verbose: Print detailed progress messages
@@ -32,10 +32,20 @@ def update_obsv_info_emails(verbose: bool = False):
     ]
 
     print("📧 Observational email eligibility check:")
-    print(
-        f"   ✅ {len(within_distance)}/{len(df_monitoring)} storms within "
-        f"{MIN_EMAIL_DISTANCE}km"
-    )
+    if len(within_distance) > 0:
+        print(
+            f"   ✅ {len(within_distance)} storms within "
+            f"{MIN_EMAIL_DISTANCE}km:"
+        )
+        for _, row in within_distance.iterrows():
+            storm_date = row["issue_time"].strftime("%Y-%m-%d")
+            print(
+                f"      • {row['name']} ({storm_date}): "
+                f"{row['min_dist']:.1f}km"
+            )
+    else:
+        print(f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km threshold")
+
     print(
         f"   🌧️  {len(within_distance_and_rain)}/{len(within_distance)} "
         f"have relevant rainfall"
@@ -105,10 +115,16 @@ def update_fcast_info_emails(verbose: bool = False):
     skipped_count = total_count - eligible_count
 
     print("📧 Forecast email eligibility check:")
-    print(
-        f"   ✅ {eligible_count}/{total_count} storms within "
-        f"{MIN_EMAIL_DISTANCE}km"
-    )
+    if eligible_count > 0:
+        print(f"   ✅ {eligible_count} storms within {MIN_EMAIL_DISTANCE}km:")
+        for _, row in eligible_storms.iterrows():
+            storm_date = row["issue_time"].strftime("%Y-%m-%d")
+            print(
+                f"      • {row['name']} ({storm_date}): "
+                f"{row['min_dist']:.1f}km"
+            )
+    else:
+        print(f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km threshold")
     if skipped_count > 0:
         print(f"   ⏭️  {skipped_count} storms beyond distance threshold")
 

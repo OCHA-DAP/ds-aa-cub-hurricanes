@@ -1001,11 +1001,28 @@ class CubaHurricaneMonitor:
             data_type = "forecast"
 
         if df_new.empty:
-            logger.info(f"No new {data_type} data found.")
+            logger.info(f"No new {data_type} data found since last run.")
+            logger.info(
+                "This could mean: 1) No active storms, "
+                "2) All storms already processed, or "
+                "3) No storms meet monitoring criteria"
+            )
             if clobber:
                 return pd.DataFrame()
             else:
-                return self._load_existing_monitoring(monitoring_type)
+                existing_data = self._load_existing_monitoring(monitoring_type)
+                if not existing_data.empty:
+                    latest_date = existing_data["issue_time"].max()
+                    latest_storms = existing_data[
+                        existing_data["issue_time"] == latest_date
+                    ]["atcf_id"].unique()
+                    logger.info(
+                        f"Returning existing data: {len(existing_data)} "
+                        f"records, latest from "
+                        f"{latest_date.strftime('%Y-%m-%d')} "
+                        f"for storms: {', '.join(latest_storms)}"
+                    )
+                return existing_data
 
         logger.info(f"Found {len(df_new)} new {data_type} points.")
 

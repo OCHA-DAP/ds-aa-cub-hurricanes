@@ -55,17 +55,70 @@ def update_plots(
     )
 
     # Log email eligibility summary
-    eligible_count = len(
-        df_monitoring[df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE]
-    )
+    eligible_df = df_monitoring[
+        df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE
+    ]
+    eligible_count = len(eligible_df)
     total_count = len(df_monitoring)
     skipped_count = total_count - eligible_count
 
     print(f"📧 Email eligibility for {fcast_obsv} monitoring:")
-    print(
-        f"   ✅ {eligible_count} storms within {MIN_EMAIL_DISTANCE}km "
-        f"(will create plots)"
-    )
+    if eligible_count > 0:
+        # Show details about eligible storms and plot creation status
+        plots_to_create = 0
+        plots_already_exist = 0
+
+        for _, row in eligible_df.iterrows():
+            storm_date = row["issue_time"].strftime("%Y-%m-%d")
+            monitor_id = row.name  # row.name is the index (monitor_id)
+
+            # Check if plots need to be created for this storm
+            will_create_plots = False
+            for plot_type in ["map", "scatter"]:
+                blob_name = get_plot_blob_name(monitor_id, plot_type)
+                if (
+                    blob_name not in existing_plot_blobs
+                    or plot_type in clobber
+                ):
+                    will_create_plots = True
+                    break
+
+            if will_create_plots:
+                plots_to_create += 1
+                status_icon = "🔄"
+                status_text = "will create plots"
+            else:
+                plots_already_exist += 1
+                status_icon = "✅"
+                status_text = "plots exist"
+
+            print(
+                f"   {status_icon} {row['name']} ({storm_date}): "
+                f"{row['min_dist']:.1f}km - {status_text}"
+            )
+
+        # Summary message
+        if plots_to_create > 0 and plots_already_exist > 0:
+            print(
+                f"   📊 Total: {eligible_count} eligible storms "
+                f"({plots_to_create} will create plots, "
+                f"{plots_already_exist} plots exist)"
+            )
+        elif plots_to_create > 0:
+            print(
+                f"   📊 Total: {eligible_count} storms " f"(will create plots)"
+            )
+        else:
+            print(
+                f"   📊 Total: {eligible_count} storms "
+                f"(all plots already exist)"
+            )
+    else:
+        print(
+            f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km threshold "
+            f"(no plots to create)"
+        )
+
     if skipped_count > 0:
         print(
             f"   ⏭️  {skipped_count} storms beyond {MIN_EMAIL_DISTANCE}km "
