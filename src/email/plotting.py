@@ -70,7 +70,7 @@ def update_plots(
 
         for _, row in eligible_df.iterrows():
             storm_date = row["issue_time"].strftime("%Y-%m-%d")
-            monitor_id = row.name  # row.name is the index (monitor_id)
+            monitor_id = str(row.name)  # Convert to string for consistency
 
             # Check if plots need to be created for this storm
             will_create_plots = False
