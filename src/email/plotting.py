@@ -160,10 +160,18 @@ def create_plot(
 
 
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
+
     # Check if statistics file exists first, before loading data
-    blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
+    # blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
+
+    blob_name = (
+        f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
+    )
+    # df_stats = stratus.load_parquet_from_blob(blob_name)
+
     try:
-        stats = stratus.load_csv_from_blob(blob_name)
+        stats = stratus.load_parquet_from_blob(blob_name)
+        # stats = stratus.load_csv_from_blob(blob_name)
     except Exception as e:
         print(f"⚠️  Could not load statistics file {blob_name}: {e}")
         print(f"⚠️  Skipping scatter plot creation for {monitor_id}")
@@ -188,7 +196,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     else:
         rain_plot_var = "obsv_p"
         s_plot_var = "obsv_s"
-        rain_col = "max_roll2_sum_rain_imerg"
+        rain_col = "q80_roll2"
         rain_source_str = "IMERG"
         rain_ymax = 170
         s_thresh = THRESHS["obsv"]["s"]
@@ -196,15 +204,26 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         fcast_obsv_es = "observaciones"
         no_pass_text = "no ha pasado"
 
-    def sid_color(sid):
-        color = "blue"
-        if sid in CERF_SIDS:
-            color = "red"
-        return color
+    # Don't need this anymore
+    # def sid_color(sid):
+    #     color = "blue"
+    #     if sid in CERF_SIDS:
+    #         color = "red"
+    #     return color
 
+    stats["color"] = stats["cerf_str"].apply(
+        lambda x: "red" if x == "True" else "blue"
+    )
+
+    # minor wrangling to fit func
+    # rename inplace cool
+    stats.rename(
+        columns={"Total Affected": "affected_population"}, inplace=True
+    )
+    stats["year"] = stats["valid_time_min"].dt.year
     stats["marker_size"] = stats["affected_population"] / 6e2
     stats["marker_size"] = stats["marker_size"].fillna(1)
-    stats["color"] = stats["sid"].apply(sid_color)
+    # stats["color"] = stats["sid"].apply(sid_color)
     current_p = monitoring_point[rain_plot_var] if rain_plot_var else None
     current_s = monitoring_point[s_plot_var]
     issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
@@ -220,7 +239,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
 
     ax.scatter(
-        stats["max_wind"],
+        stats["wind_speed_max"],
         stats[rain_col],
         s=stats["marker_size"],
         c=stats["color"],
@@ -233,7 +252,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     ):
         ax.annotate(
             txt.capitalize(),
-            (stats["max_wind"][j] + 0.5, stats[rain_col][j]),
+            (stats["wind_speed_max"][j] + 0.5, stats[rain_col][j]),
             ha="left",
             va="center",
             fontsize=7,
