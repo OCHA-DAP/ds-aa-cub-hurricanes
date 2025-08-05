@@ -418,7 +418,7 @@ def create_2d_plot(stats, monitoring_point):
     ax.spines["right"].set_visible(False)
     ax.set_title(
         f"Comparación de precipitaciones, viento, e impacto\n"
-        f"Umbral de distancia = {D_THRESH} km"
+        f"Zona de Máxima Atención",
     )
 
     # Add overlay if storm is beyond threshold
