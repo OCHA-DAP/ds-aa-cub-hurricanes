@@ -148,6 +148,9 @@ def send_hurricane_report():
     try:
         blob_name = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
         df_distribution = stratus.load_csv_from_blob(blob_name)
+        df_distribution = df_distribution[
+            df_distribution["daily_summary"].notna()
+        ]
         email_list = df_distribution["email"].tolist()
         EMAIL_TO = ", ".join(email_list)
         print(f"✅ Loaded {len(email_list)} emails from distribution list")
