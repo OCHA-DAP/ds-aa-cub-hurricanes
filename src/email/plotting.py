@@ -265,7 +265,7 @@ def create_1d_plot(stats, monitoring_point):
         fontsize=9,
     )
 
-    ax.set_xlim(left=0, right=155)
+    ax.set_xlim(left=0, right=175)
     ax.set_ylim(bottom=0, top=1)
 
     # Hide y-axis as it's just for display purposes
@@ -317,7 +317,7 @@ def create_2d_plot(stats, monitoring_point):
     rain_col = "q80_roll2"
     s_thresh = THRESHS["obsv"]["s"]
     rain_thresh = THRESHS["obsv"]["p"]
-    rain_ymax = 170
+    rain_ymax = 190
     rain_source_str = "IMERG"
     fcast_obsv_es = "observaciones"
     no_pass_text = "no ha pasado"
@@ -406,13 +406,13 @@ def create_2d_plot(stats, monitoring_point):
         fontstyle="italic",
     )
 
-    ax.set_xlim(right=155, left=0)
+    ax.set_xlim(right=175, left=0)
     ax.set_ylim(top=rain_ymax, bottom=0)
 
     ax.set_xlabel("Velocidad máxima del viento (nudos)")
     ax.set_ylabel(
         "Precipitaciones durante dos días consecutivos máximo,\n"
-        f"promedio sobre toda la superficie (mm, {rain_source_str})"
+        f"percentil 80 sobre toda la superficie (mm, {rain_source_str})"
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
