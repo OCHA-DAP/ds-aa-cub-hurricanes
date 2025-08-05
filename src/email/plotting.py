@@ -12,9 +12,9 @@ from src.constants import (
     CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
-    MIN_EMAIL_DISTANCE,
     SPANISH_MONTHS,
     LON_ZOOM_RANGE,
+    MIN_EMAIL_DISTANCE,
     PROJECT_PREFIX,
     THRESHS,
     FORCE_ALERT,
@@ -55,6 +55,7 @@ def update_plots(
     )
 
     # Log email eligibility summary
+    # Info emails use MIN_EMAIL_DISTANCE criteria, not ZMA
     eligible_df = df_monitoring[
         df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE
     ]
@@ -115,24 +116,24 @@ def update_plots(
             )
     else:
         print(
-            f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km threshold "
+            f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km "
             f"(no plots to create)"
         )
 
     if skipped_count > 0:
         print(
-            f"   ⏭️  {skipped_count} storms beyond {MIN_EMAIL_DISTANCE}km "
+            f"   ⏭️  {skipped_count} storms beyond distance threshold "
             f"(skipping plots)"
         )
 
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
-        # Skip plots for storms beyond email distance threshold
+        # Skip plots for storms beyond distance threshold
+        # (info emails use MIN_EMAIL_DISTANCE)
         if row["min_dist"] > MIN_EMAIL_DISTANCE:
             if verbose:
                 print(
                     f"Skipping plots for {monitor_id}: "
-                    f"distance {row['min_dist']:.1f}km > "
-                    f"{MIN_EMAIL_DISTANCE}km"
+                    f"storm beyond {MIN_EMAIL_DISTANCE}km threshold"
                 )
             continue
 
@@ -278,14 +279,14 @@ def create_1d_plot(stats, monitoring_point):
     ax.spines["left"].set_visible(False)
 
     ax.set_title(
-        f"Comparación de velocidad del viento e impacto\n"
-        f"Zona de Máxima Atención",
+        "Comparación de velocidad del viento e impacto\n"
+        "Zona de Máxima Atención",
         fontsize=12,
         pad=20,
     )
 
-    # Add overlay if storm is beyond threshold
-    if monitoring_point["min_dist"] >= D_THRESH:
+    # Add overlay if storm is outside ZMA
+    if not monitoring_point["in_zma"]:
         rect = plt.Rectangle(
             (0, 0),
             1,
@@ -300,7 +301,7 @@ def create_1d_plot(stats, monitoring_point):
             0.5,
             0.5,
             f"{cyclone_name} {no_pass_text}\n"
-            f"a menos de {D_THRESH} km de Cuba",
+            "por la Zona de Máxima Atención",
             fontsize=30,
             color="grey",
             ha="center",
@@ -417,12 +418,12 @@ def create_2d_plot(stats, monitoring_point):
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_title(
-        f"Comparación de precipitaciones, viento, e impacto\n"
-        f"Zona de Máxima Atención",
+        "Comparación de precipitaciones, viento, e impacto\n"
+        "Zona de Máxima Atención",
     )
 
-    # Add overlay if storm is beyond threshold
-    if monitoring_point["min_dist"] >= D_THRESH:
+    # Add overlay if storm is outside ZMA
+    if not monitoring_point["in_zma"]:
         rect = plt.Rectangle(
             (0, 0),
             1,
@@ -437,7 +438,7 @@ def create_2d_plot(stats, monitoring_point):
             0.5,
             0.5,
             f"{cyclone_name} {no_pass_text}\n"
-            f"a menos de {D_THRESH} km de Cuba",
+            "por la Zona de Máxima Atención",
             fontsize=30,
             color="grey",
             ha="center",

@@ -500,6 +500,10 @@ class CubaHurricaneMonitor:
 
             closest_row = closest_stats["closest_row"]
 
+            # Check if storm intersects ZMA
+            gdf_zma = self._filter_by_zma(gdf)
+            in_zma = not gdf_zma.empty
+
             # Calculate trigger statistics
             action_stats = self._get_wind_trigger_stats(
                 gdf, "action", use_leadtime=True
@@ -521,6 +525,7 @@ class CubaHurricaneMonitor:
                 "past_cutoff": closest_row["leadtime"]
                 < pd.Timedelta(hours=72),  # Using 72 hours as default
                 "min_dist": closest_stats["min_dist"],
+                "in_zma": in_zma,
                 **action_stats,
                 **readiness_stats,
             }
@@ -560,6 +565,7 @@ class CubaHurricaneMonitor:
 
             # Calculate observational trigger based on ZMA intersection
             gdf_zma = self._filter_by_zma(gdf_recent)
+            in_zma = not gdf_zma.empty
 
             if gdf_zma.empty:
                 logger.info(
@@ -605,6 +611,7 @@ class CubaHurricaneMonitor:
                 "name": name,
                 "issue_time": issue_time,
                 "min_dist": closest_stats["min_dist"],
+                "in_zma": in_zma,
                 "closest_s": closest_s,
                 "closest_p": closest_p,
                 "obsv_s": max_s,
@@ -1117,6 +1124,10 @@ class CubaHurricaneMonitor:
 
             closest_row = closest_stats["closest_row"]
 
+            # Check if storm intersects ZMA
+            gdf_zma = self._filter_by_zma(gdf)
+            in_zma = not gdf_zma.empty
+
             # Calculate observational trigger (no leadtime filtering)
             obsv_stats = self._get_wind_trigger_stats(
                 gdf, "obsv", wind_col="intensity", use_leadtime=False
@@ -1131,6 +1142,7 @@ class CubaHurricaneMonitor:
                 "name": group_recent["name"].iloc[-1],
                 "issue_time": issue_time,
                 "min_dist": closest_stats["min_dist"],
+                "in_zma": in_zma,
                 "closest_s": closest_row["intensity"],
                 **obsv_stats,
             }
