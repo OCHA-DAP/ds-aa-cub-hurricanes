@@ -156,6 +156,12 @@ export TEST_EMAIL=true
 export FORCE_ALERT=true
 python your_script.py
 ```
+or like:
+
+```bash
+TEST_EMAIL=true DRY_RUN=false FORCE_ALERT=true python pipelines/01_update_fcast_monitor.py
+```
+
 
 ### Testing Override
 

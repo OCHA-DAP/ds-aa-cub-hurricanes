@@ -28,6 +28,13 @@ DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
 TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
 FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 
+
+# this would actually be a better replacement way to deal w/ env vars
+# in the long run
+# def force_alert():
+#     return _parse_bool_env("FORCE_ALERT", default=False)
+
+
 # Saffir-Simpson scale (knots)
 TS = 34
 CAT1 = 64

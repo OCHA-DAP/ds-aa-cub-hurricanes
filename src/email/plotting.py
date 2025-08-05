@@ -12,9 +12,9 @@ from src.constants import (
     CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
-    MIN_EMAIL_DISTANCE,
     SPANISH_MONTHS,
     LON_ZOOM_RANGE,
+    MIN_EMAIL_DISTANCE,
     PROJECT_PREFIX,
     THRESHS,
     FORCE_ALERT,
@@ -55,6 +55,7 @@ def update_plots(
     )
 
     # Log email eligibility summary
+    # Info emails use MIN_EMAIL_DISTANCE criteria, not ZMA
     eligible_df = df_monitoring[
         df_monitoring["min_dist"] <= MIN_EMAIL_DISTANCE
     ]
@@ -115,24 +116,24 @@ def update_plots(
             )
     else:
         print(
-            f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km threshold "
+            f"   ⚠️  No storms within {MIN_EMAIL_DISTANCE}km "
             f"(no plots to create)"
         )
 
     if skipped_count > 0:
         print(
-            f"   ⏭️  {skipped_count} storms beyond {MIN_EMAIL_DISTANCE}km "
+            f"   ⏭️  {skipped_count} storms beyond distance threshold "
             f"(skipping plots)"
         )
 
     for monitor_id, row in df_monitoring.set_index("monitor_id").iterrows():
-        # Skip plots for storms beyond email distance threshold
+        # Skip plots for storms beyond distance threshold
+        # (info emails use MIN_EMAIL_DISTANCE)
         if row["min_dist"] > MIN_EMAIL_DISTANCE:
             if verbose:
                 print(
                     f"Skipping plots for {monitor_id}: "
-                    f"distance {row['min_dist']:.1f}km > "
-                    f"{MIN_EMAIL_DISTANCE}km"
+                    f"storm beyond {MIN_EMAIL_DISTANCE}km threshold"
                 )
             continue
 
@@ -159,68 +160,182 @@ def create_plot(
         raise ValueError(f"Unknown plot type: {plot_type}")
 
 
-def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
-    # Check if statistics file exists first, before loading data
-    blob_name = f"{PROJECT_PREFIX}/processed/stats_{D_THRESH}km.csv"
-    try:
-        stats = stratus.load_csv_from_blob(blob_name)
-    except Exception as e:
-        print(f"⚠️  Could not load statistics file {blob_name}: {e}")
-        print(f"⚠️  Skipping scatter plot creation for {monitor_id}")
-        return
+def create_1d_plot(stats, monitoring_point):
+    """Create a 1D wind speed plot for forecast data."""
+    # Hardcode forecast-specific parameters
+    s_thresh = THRESHS["readiness"]["s"]
+    fcast_obsv_es = "pronósticos"
+    no_pass_text = "no está previsto que pase"
 
-    df_monitoring = load_monitoring_data(fcast_obsv)
-    monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
-    cuba_tz = pytz.timezone("America/Havana")
+    # Extract needed values from monitoring_point
     cyclone_name = monitoring_point["name"]
+    current_s = monitoring_point["readiness_s"]
     issue_time = monitoring_point["issue_time"]
+    cuba_tz = pytz.timezone("America/Havana")
     issue_time_cuba = issue_time.astimezone(cuba_tz)
-    if fcast_obsv == "fcast":
-        rain_plot_var = None  # No precipitation variables for forecast
-        s_plot_var = "readiness_s"
-        rain_col = "max_roll2_sum_rain"
-        rain_source_str = "CHIRPS"
-        rain_ymax = 100
-        s_thresh = THRESHS["readiness"]["s"]
-        rain_thresh = None  # No rain threshold for forecast
-        fcast_obsv_es = "pronósticos"
-        no_pass_text = "no está previsto que pase"
-    else:
-        rain_plot_var = "obsv_p"
-        s_plot_var = "obsv_s"
-        rain_col = "max_roll2_sum_rain_imerg"
-        rain_source_str = "IMERG"
-        rain_ymax = 170
-        s_thresh = THRESHS["obsv"]["s"]
-        rain_thresh = THRESHS["obsv"]["p"]
-        fcast_obsv_es = "observaciones"
-        no_pass_text = "no ha pasado"
-
-    def sid_color(sid):
-        color = "blue"
-        if sid in CERF_SIDS:
-            color = "red"
-        return color
-
-    stats["marker_size"] = stats["affected_population"] / 6e2
-    stats["marker_size"] = stats["marker_size"].fillna(1)
-    stats["color"] = stats["sid"].apply(sid_color)
-    current_p = monitoring_point[rain_plot_var] if rain_plot_var else None
-    current_s = monitoring_point[s_plot_var]
     issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
 
-    date_str = (
-        f"Pronóstico "
-        f'{monitoring_point["issue_time"].strftime("%Hh%M %d %b UTC")}'
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+
+    # Create 1D plot along x-axis (wind speed) with random jitter
+    y_positions = np.random.normal(0.5, 0.1, len(stats))
+
+    ax.scatter(
+        stats["wind_speed_max"],
+        y_positions,
+        s=stats["marker_size"],
+        c=stats["color"],
+        alpha=0.6,
+        edgecolors="none",
     )
 
-    for en_mo, es_mo in SPANISH_MONTHS.items():
-        date_str = date_str.replace(en_mo, es_mo)
+    # Add storm name annotations
+    for j, txt in enumerate(
+        stats["name"].str.capitalize() + "\n" + stats["year"].astype(str)
+    ):
+        ax.annotate(
+            txt.capitalize(),
+            (stats["wind_speed_max"][j] + 0.5, y_positions[j]),
+            ha="left",
+            va="center",
+            fontsize=7,
+        )
+
+    # Mark current storm
+    current_y = 0.5  # Center position
+    ax.scatter(
+        [current_s],
+        [current_y],
+        marker="x",
+        color=CHD_GREEN,
+        linewidths=4,
+        s=150,
+        zorder=10,
+    )
+    ax.annotate(
+        f"{cyclone_name}",
+        (current_s, current_y + 0.15),
+        va="center",
+        ha="center",
+        color=CHD_GREEN,
+        fontweight="bold",
+        fontsize=10,
+    )
+    ax.annotate(
+        f"{fcast_obsv_es} emitidas {issue_time_str_es}",
+        (current_s, current_y - 0.15),
+        va="center",
+        ha="center",
+        color=CHD_GREEN,
+        fontstyle="italic",
+        fontsize=8,
+    )
+
+    # Add threshold line
+    ax.axvline(
+        x=s_thresh, color="orange", linewidth=2, linestyle="--", alpha=0.8
+    )
+    ax.fill_betweenx(
+        [0, 1],
+        s_thresh,
+        155,
+        color="gold",
+        alpha=0.2,
+        zorder=-1,
+    )
+
+    # Threshold annotation
+    ax.annotate(
+        "Umbral de activación",
+        (s_thresh + 2, 0.9),
+        ha="left",
+        va="top",
+        color="orange",
+        fontweight="bold",
+        fontsize=9,
+    )
+
+    # CERF legend
+    ax.annotate(
+        "Asignaciones CERF en rojo",
+        (5, 0.9),
+        ha="left",
+        va="top",
+        color="crimson",
+        fontstyle="italic",
+        fontsize=9,
+    )
+
+    ax.set_xlim(left=0, right=175)
+    ax.set_ylim(bottom=0, top=1)
+
+    # Hide y-axis as it's just for display purposes
+    ax.set_yticks([])
+    ax.set_xlabel("Velocidad máxima del viento (nudos)", fontsize=12)
+    ax.set_ylabel("")
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+
+    ax.set_title(
+        "Comparación de velocidad del viento e impacto\n"
+        "Zona de Máxima Atención",
+        fontsize=12,
+        pad=20,
+    )
+
+    # Add overlay if storm is outside ZMA
+    if not monitoring_point["in_zma"]:
+        rect = plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            transform=ax.transAxes,
+            color="white",
+            alpha=0.7,
+            zorder=3,
+        )
+        ax.add_patch(rect)
+        ax.text(
+            0.5,
+            0.5,
+            f"{cyclone_name} {no_pass_text}\n"
+            "por la Zona de Máxima Atención",
+            fontsize=30,
+            color="grey",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+
+    return fig, ax
+
+
+def create_2d_plot(stats, monitoring_point):
+    """Create a 2D scatter plot for observation data."""
+    # Hardcode observation-specific parameters
+    rain_col = "q80_roll2"
+    s_thresh = THRESHS["obsv"]["s"]
+    rain_thresh = THRESHS["obsv"]["p"]
+    rain_ymax = 190
+    rain_source_str = "IMERG"
+    fcast_obsv_es = "observaciones"
+    no_pass_text = "no ha pasado"
+
+    # Extract needed values from monitoring_point
+    cyclone_name = monitoring_point["name"]
+    current_s = monitoring_point["obsv_s"]
+    current_p = monitoring_point["obsv_p"]
+    issue_time = monitoring_point["issue_time"]
+    cuba_tz = pytz.timezone("America/Havana")
+    issue_time_cuba = issue_time.astimezone(cuba_tz)
+    issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
 
     fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
 
     ax.scatter(
-        stats["max_wind"],
+        stats["wind_speed_max"],
         stats[rain_col],
         s=stats["marker_size"],
         c=stats["color"],
@@ -233,7 +348,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     ):
         ax.annotate(
             txt.capitalize(),
-            (stats["max_wind"][j] + 0.5, stats[rain_col][j]),
+            (stats["wind_speed_max"][j] + 0.5, stats[rain_col][j]),
             ha="left",
             va="center",
             fontsize=7,
@@ -292,22 +407,23 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
         fontstyle="italic",
     )
 
-    ax.set_xlim(right=155, left=0)
+    ax.set_xlim(right=175, left=0)
     ax.set_ylim(top=rain_ymax, bottom=0)
 
     ax.set_xlabel("Velocidad máxima del viento (nudos)")
     ax.set_ylabel(
         "Precipitaciones durante dos días consecutivos máximo,\n"
-        f"promedio sobre toda la superficie (mm, {rain_source_str})"
+        f"percentil 80 sobre toda la superficie (mm, {rain_source_str})"
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_title(
-        f"Comparación de precipitaciones, viento, e impacto\n"
-        f"Umbral de distancia = {D_THRESH} km"
+        "Comparación de precipitaciones, viento, e impacto\n"
+        "Zona de Máxima Atención",
     )
 
-    if monitoring_point["min_dist"] >= D_THRESH:
+    # Add overlay if storm is outside ZMA
+    if not monitoring_point["in_zma"]:
         rect = plt.Rectangle(
             (0, 0),
             1,
@@ -322,13 +438,51 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
             0.5,
             0.5,
             f"{cyclone_name} {no_pass_text}\n"
-            f"a menos de {D_THRESH} km de Cuba",
+            "por la Zona de Máxima Atención",
             fontsize=30,
             color="grey",
             ha="center",
             va="center",
             transform=ax.transAxes,
         )
+
+    return fig, ax
+
+
+def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
+    # Check if statistics file exists first, before loading data
+    blob_name = (
+        f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
+    )
+
+    try:
+        stats = stratus.load_parquet_from_blob(blob_name)
+    except Exception as e:
+        print(f"⚠️  Could not load statistics file {blob_name}: {e}")
+        print(f"⚠️  Skipping scatter plot creation for {monitor_id}")
+        return
+
+    df_monitoring = load_monitoring_data(fcast_obsv)
+    monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
+
+    # Process stats data (common for both plot types)
+    stats["color"] = stats["cerf_str"].apply(
+        lambda x: "red" if x == "True" else "blue"
+    )
+    stats.rename(
+        columns={"Total Affected": "affected_population"}, inplace=True
+    )
+    stats["year"] = stats["valid_time_min"].dt.year
+    stats["marker_size"] = stats["affected_population"] / 6e2
+    stats["marker_size"] = stats["marker_size"].fillna(1)
+
+    # Create plot based on fcast_obsv type
+    if fcast_obsv == "fcast":
+        fig, ax = create_1d_plot(stats, monitoring_point)
+    else:
+        fig, ax = create_2d_plot(stats, monitoring_point)
+
+    # Common save logic
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
     buffer.seek(0)
