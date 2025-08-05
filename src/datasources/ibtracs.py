@@ -18,3 +18,19 @@ def load_storms():
     """
     df = pd.read_sql(query, stratus.get_engine("dev"))
     return df
+
+
+def knots2cat(knots):
+    """Convert wind speed in knots to Saffir-Simpson hurricane category."""
+    category = 0
+    if knots >= 137:
+        category = 5
+    elif knots >= 113:
+        category = 4
+    elif knots >= 96:
+        category = 3
+    elif knots >= 83:
+        category = 2
+    elif knots >= 64:
+        category = 1
+    return category
