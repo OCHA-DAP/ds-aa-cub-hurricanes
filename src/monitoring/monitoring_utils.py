@@ -13,7 +13,7 @@ import ocha_stratus as stratus
 import pandas as pd
 
 from src.constants import D_THRESH, NUMERIC_NAME_REGEX, PROJECT_PREFIX, THRESHS
-from src.datasources import codab, imerg, nhc
+from src.datasources import codab, imerg, nhc, zma
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -269,6 +269,7 @@ class CubaHurricaneMonitor:
         rainfall_source: Optional[str] = None,
     ):
         self.adm0 = codab.load_codab_from_blob().to_crs(3857)
+        self.zma = zma.load_zma().to_crs(3857)  # Load ZMA for filtering
         self.rainfall_processor = rainfall_processor
         self.rainfall_source = rainfall_source
 
@@ -393,6 +394,10 @@ class CubaHurricaneMonitor:
         """Filter GeoDataFrame to points within distance threshold."""
         return gdf[gdf["distance"] < max_dist]
 
+    def _filter_by_zma(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Filter GeoDataFrame to points within ZMA."""
+        return gdf[gdf.within(self.zma.iloc[0].geometry)]
+
     def _filter_by_leadtime(
         self, gdf: gpd.GeoDataFrame, max_days: int
     ) -> gpd.GeoDataFrame:
@@ -446,8 +451,8 @@ class CubaHurricaneMonitor:
         use_leadtime: bool = True,
     ) -> Dict:
         """Get wind-based trigger statistics for a specific trigger type."""
-        # Filter by distance first
-        gdf_dist = self._filter_by_distance(gdf)
+        # Filter by ZMA first - triggers are based on storm within ZMA
+        gdf_zma = self._filter_by_zma(gdf)
 
         # Apply leadtime filtering if needed (forecast data only)
         if (
@@ -456,10 +461,10 @@ class CubaHurricaneMonitor:
             and trigger_type in ["action", "readiness"]
         ):
             gdf_filtered = self._filter_by_leadtime(
-                gdf_dist, THRESHS[trigger_type]["lt_days"]
+                gdf_zma, THRESHS[trigger_type]["lt_days"]
             )
         else:
-            gdf_filtered = gdf_dist
+            gdf_filtered = gdf_zma
 
         # Calculate wind statistics
         max_wind = self._get_max_wind_in_period(gdf_filtered, wind_col)
@@ -553,13 +558,13 @@ class CubaHurricaneMonitor:
                 pd.Timestamp(landfall_end_day_late),
             )
 
-            # Calculate observational trigger based on distance threshold
-            gdf_dist = gdf_recent[gdf_recent["distance"] < D_THRESH]
+            # Calculate observational trigger based on ZMA intersection
+            gdf_zma = self._filter_by_zma(gdf_recent)
 
-            if gdf_dist.empty:
+            if gdf_zma.empty:
                 logger.info(
                     f"{atcf_id}_{issue_time.isoformat()[:10]} did not pass "
-                    f"distance threshold {D_THRESH} km."
+                    f"ZMA intersection requirement."
                 )
                 # Still return data but with empty trigger values
                 max_s = 0
@@ -567,12 +572,12 @@ class CubaHurricaneMonitor:
                 obsv_trigger = False
                 rainfall_relevant = False
             else:
-                max_s = gdf_dist["intensity"].max()
+                max_s = gdf_zma["intensity"].max()
 
                 # Define rainfall analysis period
-                start_day = pd.Timestamp(gdf_dist["lastUpdate"].min().date())
+                start_day = pd.Timestamp(gdf_zma["lastUpdate"].min().date())
                 end_day_late = pd.Timestamp(
-                    gdf_dist["lastUpdate"].max().date() + pd.Timedelta(days=1)
+                    gdf_zma["lastUpdate"].max().date() + pd.Timedelta(days=1)
                 )
 
                 # Check if rainfall is relevant (within storm period)
@@ -616,7 +621,7 @@ class CubaHurricaneMonitor:
         atcf_id: str,
         group: pd.DataFrame,
         gdf_recent: gpd.GeoDataFrame,
-        gdf_dist_recent: gpd.GeoDataFrame,
+        gdf_zma_recent: gpd.GeoDataFrame,
         storm_rainfall_df: pd.DataFrame,
         analysis_start: pd.Timestamp,
         analysis_end: pd.Timestamp,
@@ -632,8 +637,8 @@ class CubaHurricaneMonitor:
 
             landfall_row = closest_stats["closest_row"]
 
-            # Calculate wind statistics for distance-filtered track
-            max_s = gdf_dist_recent["intensity"].max()
+            # Calculate wind statistics for ZMA-filtered track
+            max_s = gdf_zma_recent["intensity"].max()
 
             # Check if storm is still active
             track_max_time = gdf_recent["lastUpdate"].max()
@@ -857,18 +862,18 @@ class CubaHurricaneMonitor:
             # Create GeoDataFrame with distance
             gdf = self._create_track_geodataframe(df_interp)
 
-            # Pre-filter by distance threshold
-            gdf_dist = gdf[gdf["distance"] < D_THRESH]
+            # Pre-filter by ZMA intersection
+            gdf_zma = self._filter_by_zma(gdf)
 
-            if gdf_dist.empty:
+            if gdf_zma.empty:
                 logger.info(
-                    f"Storm {atcf_id} did not pass distance threshold "
-                    f"{D_THRESH} km. Keeping wind-only data."
+                    f"Storm {atcf_id} did not pass ZMA intersection "
+                    f"requirement. Keeping wind-only data."
                 )
                 continue
 
             # Check if storm meets minimum wind threshold
-            max_wind = gdf_dist["intensity"].max()
+            max_wind = gdf_zma["intensity"].max()
             if max_wind < THRESHS["obsv"]["s"]:
                 logger.info(
                     f"Storm {atcf_id} max wind {max_wind} kt below threshold "
@@ -879,12 +884,12 @@ class CubaHurricaneMonitor:
             logger.info(
                 f"Storm {atcf_id} qualifies for rainfall analysis: "
                 f"max_wind={max_wind} kt, "
-                f"min_dist={gdf_dist['distance'].min():.1f} km"
+                f"min_dist={gdf['distance'].min():.1f} km"
             )
 
             # Define storm period for rainfall analysis
-            storm_start = gdf_dist["lastUpdate"].min()
-            storm_end = gdf_dist["lastUpdate"].max()
+            storm_start = gdf_zma["lastUpdate"].min()
+            storm_end = gdf_zma["lastUpdate"].max()
 
             # Extend period by 1 day on each side
             analysis_start = storm_start - pd.Timedelta(days=1)
@@ -917,12 +922,12 @@ class CubaHurricaneMonitor:
 
                 # Filter track data to issue time
                 gdf_recent = gdf[gdf["lastUpdate"] <= issue_time]
-                gdf_dist_recent = gdf_recent[gdf_recent["distance"] < D_THRESH]
+                gdf_zma_recent = self._filter_by_zma(gdf_recent)
 
-                if gdf_dist_recent.empty:
+                if gdf_zma_recent.empty:
                     logger.debug(
                         f"Skipping rainfall for {monitor_id} - no track "
-                        f"points within distance threshold at issue time."
+                        f"points within ZMA at issue time."
                     )
                     continue
 
@@ -930,7 +935,7 @@ class CubaHurricaneMonitor:
                     atcf_id,
                     group,
                     gdf_recent,
-                    gdf_dist_recent,
+                    gdf_zma_recent,
                     storm_rainfall_df,
                     analysis_start,
                     analysis_end,
