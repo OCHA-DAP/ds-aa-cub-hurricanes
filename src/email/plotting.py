@@ -144,7 +144,15 @@ def update_plots(
                     print(f"Skipping {blob_name}, already exists")
                 continue
             print(f"Creating {blob_name}")
-            create_plot(monitor_id, plot_type, fcast_obsv)
+            try:
+                create_plot(monitor_id, plot_type, fcast_obsv)
+            except Exception as e:
+                print(
+                    f"❌ Failed to create {plot_type} plot for "
+                    f"{monitor_id}: {e}"
+                )
+                print("🔄 Continuing with next plot...")
+                continue
 
 
 def create_plot(
@@ -514,6 +522,11 @@ def create_map_plot_figure(
     """
     try:
         adm = codab.load_codab_from_blob(admin_level=0)
+        # Drastically simplify Cuba outline to avoid Kaleido timeout
+        # This reduces geometric complexity while preserving the basic shape
+        adm = adm.to_crs(3857)  # Project to meters for better simplification
+        adm_centroid = adm.to_crs(3857).centroid.to_crs(4326)[0]
+        centroid_lat, centroid_lon = adm_centroid.y, adm_centroid.x
     except Exception as e:
         print(f"⚠️  Could not load CODAB administrative boundaries: {e}")
         print(f"⚠️  Skipping map plot creation for {monitor_id}")
@@ -614,18 +627,6 @@ def create_map_plot_figure(
     rain_level = monitoring_point[rain_plot_var] if rain_plot_var else None
     fig = go.Figure()
 
-    # adm0 outline
-    for geom in adm.geometry[0].geoms:
-        x, y = geom.exterior.coords.xy
-        fig.add_trace(
-            go.Scattermapbox(
-                lon=list(x),
-                lat=list(y),
-                mode="lines",
-                line_color="grey",
-                showlegend=False,
-            )
-        )
     # buffer
     fig.add_trace(
         go.Choroplethmapbox(
@@ -690,16 +691,16 @@ def create_map_plot_figure(
             if rain_level > lt_params["threshs"]["roll2_rain_dist"]:
                 fig.add_trace(
                     go.Scattermapbox(
-                        lon=[-72.3],
-                        lat=[19],
+                        lon=[centroid_lon],
+                        lat=[centroid_lat],
                         mode="markers",
                         marker=dict(size=50, color="red"),
                     )
                 )
             fig.add_trace(
                 go.Scattermapbox(
-                    lon=[-72.3],
-                    lat=[19],
+                    lon=[centroid_lon],
+                    lat=[centroid_lat],
                     mode="text+markers",
                     text=[rain_level_str],
                     marker=dict(size=40, color="blue"),
@@ -707,8 +708,6 @@ def create_map_plot_figure(
                     hoverinfo="none",
                 )
             )
-    adm_centroid = adm.to_crs(3857).centroid.to_crs(4326)[0]
-    centroid_lat, centroid_lon = adm_centroid.y, adm_centroid.x
 
     if fcast_obsv == "fcast":
         lat_max = max(tracks_f["latitude"])

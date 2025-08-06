@@ -13,7 +13,7 @@ def update_forecast_data():
         rainfall_source="raster"
     )
 
-    # Update observational data
+    # Update forecast data
     monitor.update_monitoring("fcast", clobber=False)
 
 
