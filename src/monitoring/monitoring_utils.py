@@ -170,10 +170,11 @@ class IMERGRasterProcessor:
                 missing_dates_str = ", ".join(
                     str(d) for d in sorted(missing_dates)
                 )
-                raise ValueError(
+                logger.info(
                     f"Missing IMERG raster data for {len(missing_dates)} "
-                    f"dates: {missing_dates_str}. This may indicate Azure "
-                    f"blob storage access issues or missing data files."
+                    f"dates: {missing_dates_str}. This is expected when "
+                    f"observational data is published before forecast data "
+                    f"becomes available."
                 )
 
             logger.info(
