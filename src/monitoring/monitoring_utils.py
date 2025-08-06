@@ -533,91 +533,61 @@ class CubaHurricaneMonitor:
             logger.warning(f"Error processing forecast for {atcf_id}: {e}")
             return None
 
-    def _process_single_observation_with_rainfall(
-        self,
-        atcf_id: str,
-        group: pd.DataFrame,
-        gdf_recent: gpd.GeoDataFrame,
-        rain_recent: pd.DataFrame,
-        issue_time: pd.Timestamp,
+    def _process_single_observation(
+        self, atcf_id: str, group: pd.DataFrame, issue_time: pd.Timestamp
     ) -> Optional[Dict]:
-        """Process observational track with rainfall data integration."""
-        try:
-            # Get storm name
-            name = group[group["lastUpdate"] <= issue_time].iloc[-1]["name"]
+        """
+        Process a single observational track into monitoring record.
 
-            # Calculate closest approach statistics
-            closest_stats = self._get_closest_approach_stats(gdf_recent)
+        Used by process_observational_tracks_with_raster() for wind-based
+        analysis before rainfall data is added.
+        """
+        try:
+            # Filter to data available at issue time
+            group_recent = self._filter_by_time(
+                group, "lastUpdate", issue_time
+            )
+            if group_recent.empty:
+                return None
+
+            # Interpolate track
+            df_interp = self._interpolate_track(
+                group_recent,
+                "lastUpdate",
+                ["latitude", "longitude", "intensity"],
+            )
+
+            # Create GeoDataFrame with distance
+            gdf = self._create_track_geodataframe(df_interp)
+
+            # Calculate closest approach
+            closest_stats = self._get_closest_approach_stats(gdf)
             if closest_stats["closest_row"] is None:
                 return None
 
-            landfall_row = closest_stats["closest_row"]
-            closest_s = landfall_row["intensity"]
+            closest_row = closest_stats["closest_row"]
 
-            # Calculate closest approach rainfall
-            landfall_start_day = landfall_row["lastUpdate"].date()
-            landfall_end_day_late = landfall_start_day + pd.Timedelta(days=1)
-            closest_p = self.rainfall_processor.get_rainfall_for_period(
-                rain_recent,
-                pd.Timestamp(landfall_start_day),
-                pd.Timestamp(landfall_end_day_late),
-            )
-
-            # Calculate observational trigger based on ZMA intersection
-            gdf_zma = self._filter_by_zma(gdf_recent)
+            # Check if storm intersects ZMA
+            gdf_zma = self._filter_by_zma(gdf)
             in_zma = not gdf_zma.empty
 
-            if gdf_zma.empty:
-                logger.info(
-                    f"{atcf_id}_{issue_time.isoformat()[:10]} did not pass "
-                    f"ZMA intersection requirement."
-                )
-                # Still return data but with empty trigger values
-                max_s = 0
-                max_p = 0
-                obsv_trigger = False
-                rainfall_relevant = False
-            else:
-                max_s = gdf_zma["intensity"].max()
+            # Calculate observational trigger (no leadtime filtering)
+            obsv_stats = self._get_wind_trigger_stats(
+                gdf, "obsv", wind_col="intensity", use_leadtime=False
+            )
 
-                # Define rainfall analysis period
-                start_day = pd.Timestamp(gdf_zma["lastUpdate"].min().date())
-                end_day_late = pd.Timestamp(
-                    gdf_zma["lastUpdate"].max().date() + pd.Timedelta(days=1)
-                )
-
-                # Check if rainfall is relevant (within storm period)
-                rainfall_relevant = (
-                    self.rainfall_processor.is_storm_still_active(
-                        rain_recent, end_day_late
-                    )
-                )
-
-                # Calculate rainfall for trigger period
-                max_p = self.rainfall_processor.get_rainfall_for_period(
-                    rain_recent, start_day, end_day_late
-                )
-
-                # Calculate trigger based on both wind and rainfall thresholds
-                obsv_trigger = (max_p >= THRESHS["obsv"]["p"]) & (
-                    max_s >= THRESHS["obsv"]["s"]
-                )
-
+            # Build result
             return {
                 "monitor_id": self._create_monitor_id(
                     atcf_id, "obsv", issue_time
                 ),
                 "atcf_id": atcf_id,
-                "name": name,
+                "name": group_recent["name"].iloc[-1],
                 "issue_time": issue_time,
                 "min_dist": closest_stats["min_dist"],
                 "in_zma": in_zma,
-                "closest_s": closest_s,
-                "closest_p": closest_p,
-                "obsv_s": max_s,
-                "obsv_p": max_p,
-                "rainfall_relevant": rainfall_relevant,
-                "obsv_trigger": obsv_trigger,
+                "closest_s": closest_row["intensity"],
+                **obsv_stats,
             }
         except Exception as e:
             logger.warning(f"Error processing observation for {atcf_id}: {e}")
@@ -1078,73 +1048,129 @@ class CubaHurricaneMonitor:
         self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
     ) -> pd.DataFrame:
         """Convenience method that prepares and saves data."""
-        # Use raster-based processing for observational data if configured
-        if monitoring_type == "obsv" and self.rainfall_source == "raster":
-            df_combined = self.prepare_monitoring_data_with_raster(
-                monitoring_type, clobber
-            )
-        else:
-            df_combined = self.prepare_monitoring_data(
-                monitoring_type, clobber
-            )
+        # Use raster-based processing approach for all monitoring
+        # (forecasts don't use rainfall anyway)
+        df_combined = self.prepare_monitoring_data_with_raster(
+            monitoring_type, clobber
+        )
 
         self.save_monitoring_data(df_combined, monitoring_type)
         return df_combined
 
     # ============================================================================
-    # OLD METHODS
+    # DEPRECATED METHODS - Legacy rainfall processor approach
+    # ============================================================================
+    # These methods are no longer used in the current pipeline but kept for
+    # backward compatibility. The current pipeline uses:
+    # - process_observational_tracks_with_raster() for observations
+    # - process_forecast_tracks() for forecasts
     # ============================================================================
 
-    def _process_single_observation(
-        self, atcf_id: str, group: pd.DataFrame, issue_time: pd.Timestamp
+    def _process_single_observation_with_rainfall(
+        self,
+        atcf_id: str,
+        group: pd.DataFrame,
+        gdf_recent: gpd.GeoDataFrame,
+        rain_recent: pd.DataFrame,
+        issue_time: pd.Timestamp,
     ) -> Optional[Dict]:
-        """Process a single observational track into monitoring record."""
+        """
+        DEPRECATED: Process observational track with rainfall data integration.
+
+        This method is no longer used in the current pipeline.
+        Use process_observational_tracks_with_raster() instead.
+        """
+        logger.error(
+            "🚨 DEPRECATED: _process_single_observation_with_rainfall"
+        )
+        logger.error("🚨 This method should NOT be used in current pipeline!")
+        logger.error(
+            "🚨 Use process_observational_tracks_with_raster() instead"
+        )
+        logger.error("🚨 Check your code flow - this indicates a bug!")
+
+        # STOP EXECUTION - Deprecated method should not be called
+        raise DeprecationWarning(
+            "🚨 DEPRECATED: _process_single_observation_with_rainfall "
+            "should not be called! Use raster method instead"
+        )
+
         try:
-            # Filter to data available at issue time
-            group_recent = self._filter_by_time(
-                group, "lastUpdate", issue_time
-            )
-            if group_recent.empty:
-                return None
+            # Get storm name
+            name = group[group["lastUpdate"] <= issue_time].iloc[-1]["name"]
 
-            # Interpolate track
-            df_interp = self._interpolate_track(
-                group_recent,
-                "lastUpdate",
-                ["latitude", "longitude", "intensity"],
-            )
-
-            # Create GeoDataFrame with distance
-            gdf = self._create_track_geodataframe(df_interp)
-
-            # Calculate closest approach
-            closest_stats = self._get_closest_approach_stats(gdf)
+            # Calculate closest approach statistics
+            closest_stats = self._get_closest_approach_stats(gdf_recent)
             if closest_stats["closest_row"] is None:
                 return None
 
-            closest_row = closest_stats["closest_row"]
+            landfall_row = closest_stats["closest_row"]
+            closest_s = landfall_row["intensity"]
 
-            # Check if storm intersects ZMA
-            gdf_zma = self._filter_by_zma(gdf)
-            in_zma = not gdf_zma.empty
-
-            # Calculate observational trigger (no leadtime filtering)
-            obsv_stats = self._get_wind_trigger_stats(
-                gdf, "obsv", wind_col="intensity", use_leadtime=False
+            # Calculate closest approach rainfall
+            landfall_start_day = landfall_row["lastUpdate"].date()
+            landfall_end_day_late = landfall_start_day + pd.Timedelta(days=1)
+            closest_p = self.rainfall_processor.get_rainfall_for_period(
+                rain_recent,
+                pd.Timestamp(landfall_start_day),
+                pd.Timestamp(landfall_end_day_late),
             )
 
-            # Build result
+            # Calculate observational trigger based on ZMA intersection
+            gdf_zma = self._filter_by_zma(gdf_recent)
+            in_zma = not gdf_zma.empty
+
+            if gdf_zma.empty:
+                logger.info(
+                    f"{atcf_id}_{issue_time.isoformat()[:10]} did not pass "
+                    f"ZMA intersection requirement."
+                )
+                # Still return data but with empty trigger values
+                max_s = 0
+                max_p = 0
+                obsv_trigger = False
+                rainfall_relevant = False
+            else:
+                max_s = gdf_zma["intensity"].max()
+
+                # Define rainfall analysis period
+                start_day = pd.Timestamp(gdf_zma["lastUpdate"].min().date())
+                end_day_late = pd.Timestamp(
+                    gdf_zma["lastUpdate"].max().date() + pd.Timedelta(days=1)
+                )
+
+                # Check if rainfall is relevant (within storm period)
+                rainfall_relevant = (
+                    self.rainfall_processor.is_storm_still_active(
+                        rain_recent, end_day_late
+                    )
+                )
+
+                # Calculate rainfall for trigger period
+                max_p = self.rainfall_processor.get_rainfall_for_period(
+                    rain_recent, start_day, end_day_late
+                )
+
+                # Calculate trigger based on both wind and rainfall thresholds
+                obsv_trigger = (max_p >= THRESHS["obsv"]["p"]) & (
+                    max_s >= THRESHS["obsv"]["s"]
+                )
+
             return {
                 "monitor_id": self._create_monitor_id(
                     atcf_id, "obsv", issue_time
                 ),
                 "atcf_id": atcf_id,
-                "name": group_recent["name"].iloc[-1],
+                "name": name,
                 "issue_time": issue_time,
                 "min_dist": closest_stats["min_dist"],
                 "in_zma": in_zma,
-                "closest_s": closest_row["intensity"],
-                **obsv_stats,
+                "closest_s": closest_s,
+                "closest_p": closest_p,
+                "obsv_s": max_s,
+                "obsv_p": max_p,
+                "rainfall_relevant": rainfall_relevant,
+                "obsv_trigger": obsv_trigger,
             }
         except Exception as e:
             logger.warning(f"Error processing observation for {atcf_id}: {e}")
@@ -1153,7 +1179,26 @@ class CubaHurricaneMonitor:
     def process_observational_tracks(
         self, clobber: bool = False
     ) -> pd.DataFrame:
-        """Process NHC observational tracks into monitoring records."""
+        """
+        DEPRECATED: Process NHC observational tracks into monitoring records.
+
+        This method uses the legacy rainfall processor approach and is no
+        longer used in the current pipeline. Use
+        process_observational_tracks_with_raster() instead.
+        """
+        logger.error(
+            "🚨 DEPRECATED METHOD CALLED: process_observational_tracks"
+        )
+        logger.error("🚨 This method should NOT be used in current pipeline!")
+        logger.error("🚨 Use process_observational_tracks_with_raster()")
+        logger.error("🚨 Check your code flow - this indicates a bug!")
+
+        # STOP EXECUTION - Deprecated method should not be called
+        raise DeprecationWarning(
+            "🚨 DEPRECATED: process_observational_tracks "
+            "should not be called! Use raster method instead"
+        )
+
         logger.info("Loading NHC observational tracks for Atlantic basin.")
         obsv_tracks = nhc.load_recent_glb_obsv()
 
@@ -1272,7 +1317,24 @@ class CubaHurricaneMonitor:
     def prepare_monitoring_data(
         self, monitoring_type: Literal["fcast", "obsv"], clobber: bool = False
     ) -> pd.DataFrame:
-        """Prepare monitoring data without saving."""
+        """
+        DEPRECATED: Prepare monitoring data without saving.
+
+        This method uses the legacy rainfall processor approach and is no
+        longer used in the current pipeline. Use
+        prepare_monitoring_data_with_raster() instead.
+        """
+        logger.error("🚨 DEPRECATED METHOD CALLED: prepare_monitoring_data")
+        logger.error("🚨 This method should NOT be used in current pipeline!")
+        logger.error("🚨 Use prepare_monitoring_data_with_raster() instead")
+        logger.error("🚨 Check your code flow - this indicates a bug!")
+
+        # STOP EXECUTION - Deprecated method should not be called
+        raise DeprecationWarning(
+            "🚨 DEPRECATED: prepare_monitoring_data "
+            "should not be called! Use raster method instead"
+        )
+
         if monitoring_type == "obsv":
             df_new = self.process_observational_tracks(clobber)
             data_type = "observational"
