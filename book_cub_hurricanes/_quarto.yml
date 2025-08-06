@@ -20,6 +20,7 @@ book:
     - era5_soil_moisture.qmd
     - threestage_trig_plot.qmd
     - summary.qmd
+    - appendix_check_quantile_calc.qmd
     - references.qmd
 
 bibliography: references.bib
