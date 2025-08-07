@@ -124,3 +124,118 @@ The project enforces code quality through:
 - **GitHub Actions CI** for automated quality checks
 
 All code is automatically checked for formatting, import sorting, and test coverage in the CI pipeline.
+
+### Manual Steps
+
+There were several manual steps taken to set up the monitoring system for the 
+project that are not immediately obvious from the codebase. These include:
+
+1. Creation of map legend - was done manually in this [gslide](https://docs.google.com/presentation/d/1NlUxI7ZTlKH05CI2w7c-rUrkryD7ItBnNncx_ls3pJY/edit?slide=id.p#slide=id.p)
+2. Creation of initial maps/plots for testing. Done "manually" in book_cub_hurricanes/email_setup_prep.qmd
+3. Creation of `distribution_list.csv` and `test_distribution_list.csv` dropped into blob storage via Azure Storage Explorer.
+4. Creation/initiation of email_record.csv
+
+## Monitoring Run States
+
+The monitoring system uses three environment variables to control runtime behavior. These can be set as environment variables or overridden for testing by monkey-patching the constants in [`src/constants.py`](src/constants.py).
+
+### Control Flags
+
+| Flag | Default | Purpose | 
+|------|---------|---------|
+| `DRY_RUN` | `true` | Prevents external side effects (email sending, record saving) |
+| `TEST_EMAIL` | `true` | Controls distribution list selection |
+| `FORCE_ALERT` | `false` | Enables test data injection and email prefixes |
+
+### Environment Variable Usage
+
+Set flags via environment variables:
+```bash
+export DRY_RUN=false
+export TEST_EMAIL=true
+export FORCE_ALERT=true
+python your_script.py
+```
+or like:
+
+```bash
+TEST_EMAIL=true DRY_RUN=false FORCE_ALERT=true python pipelines/01_update_fcast_monitor.py
+```
+
+
+### Testing Override
+
+For testing, monkey-patch the constants directly:
+```python
+import src.constants as constants
+
+# Override flags for testing
+constants.DRY_RUN = False
+constants.TEST_EMAIL = False  
+constants.FORCE_ALERT = True
+
+# Now run your functions - they'll use the overridden values
+from src.email.send_emails import send_info_email
+send_info_email(monitor_id, "fcast")
+```
+
+### Common Run State Combinations
+
+#### 🔧 **Development/Testing** (Default)
+```python
+DRY_RUN = True      # Safe - no emails sent, no records saved
+TEST_EMAIL = True   # Use test distribution list
+FORCE_ALERT = False # Use real monitoring data
+```
+- **Use case**: Safe development and testing
+- **Behavior**: Functions run but no external side effects occur
+
+#### 🧪 **Preview Generation** 
+```python
+DRY_RUN = True      # No emails sent
+TEST_EMAIL = True   # Test distribution (but not used in preview)
+FORCE_ALERT = True  # Add "PRUEBA" prefix and test data
+```
+- **Use case**: Generate email previews with test data
+- **Behavior**: Creates HTML previews with test storm data and "PRUEBA" subject prefix
+
+#### ⚠️ **Test Email Sending**
+```python
+DRY_RUN = False     # Actually send emails
+TEST_EMAIL = True   # Send to test distribution list only
+FORCE_ALERT = True  # Mark emails as test with "PRUEBA" prefix
+```
+- **Use case**: End-to-end testing with real email delivery
+- **Behavior**: Sends actual emails but only to test recipients with test markers
+
+#### 🚀 **Production**
+```python
+DRY_RUN = False     # Send emails and save records
+TEST_EMAIL = False  # Use production distribution list
+FORCE_ALERT = False # Use real data, no test markers
+```
+- **Use case**: Live production monitoring
+- **Behavior**: Full production behavior with real recipients and data
+
+### Flag Details
+
+#### `DRY_RUN`
+- **Purpose**: Master safety switch
+- **When `true`**: 
+  - `send_info_email()` and `send_trigger_email()` print messages instead of sending
+  - `save_email_record()` prints message instead of saving to blob storage
+- **When `false`**: Full execution with external side effects
+
+#### `TEST_EMAIL` 
+- **Purpose**: Controls email distribution lists
+- **When `true`**: Uses `test_distribution_list.csv` from blob storage
+- **When `false`**: Uses `distribution_list.csv` from blob storage
+- **Note**: Only affects actual email sending, not preview functions
+
+#### `FORCE_ALERT`
+- **Purpose**: Test data injection and email marking
+- **When `true`**: 
+  - Adds "PRUEBA : " prefix to email subjects
+  - Injects test monitoring data (triggers activated)
+  - Email templates show test indicators
+- **When `false`**: Uses real monitoring data and standard email formatting

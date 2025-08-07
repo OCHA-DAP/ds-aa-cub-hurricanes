@@ -1,0 +1,221 @@
+---
+title: "Daily Summary"
+format:
+  html:
+    template: quarto-email-template.html  
+banner_url: "src/email/static/centre_banner_white.png"
+archive_url: "https://example.com/archive"
+date: "August 2025"
+# subject: "Monthly Hurricane Summary"
+jupyter:
+  kernel: ds-aa-cub-hurricanes
+execute:
+  engine: jupyter
+---
+
+# Daily NHC Check
+
+This is an internal automated daily monitoring report email meant for daily monitoring for NHC Atlantic basin data. It's adds a manual validation layer on to our a.) NHC pipeline, and b.) Cuba hurricane monitoring. It's provides a quick overview of storms detected in the Atlantic Basin in our pipeline  in comparison to the latest NHC 7-day outlook published daily.
+
+```{python}
+#| echo: false
+from src.datasources import nhc
+import pandas as pd
+from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from PIL import Image
+from io import BytesIO
+import numpy as np
+```
+
+```{python}
+#| echo: false
+CHECK_ACTIVITY_SINCE = datetime(2025, 7, 31)
+
+# Load recent NHC forecast tracks
+df_forecast = nhc.load_recent_glb_nhc("fcast")
+df_obsv = nhc.load_recent_glb_nhc("obsv")
+
+# Convert CHECK_ACTIVITY_SINCE to timezone-aware datetime to match data
+import pytz
+CHECK_ACTIVITY_SINCE_UTC = pytz.UTC.localize(CHECK_ACTIVITY_SINCE)
+
+# Filter for Atlantic basin and dates >= July 31, 2025
+df_forecast_filtered = df_forecast[
+    (df_forecast["basin"] == "al") & 
+    (df_forecast["validTime"] >= CHECK_ACTIVITY_SINCE_UTC)
+]
+
+df_obsv_filtered = df_obsv[
+    (df_obsv["basin"] == "al") & 
+    (df_obsv["lastUpdate"] >= CHECK_ACTIVITY_SINCE_UTC)
+]
+
+# Store results for display
+forecast_count = len(df_forecast_filtered)
+obsv_count = len(df_obsv_filtered)
+check_date = CHECK_ACTIVITY_SINCE.strftime("%B %d, %Y")
+```
+
+## NHC Data Pipeline Status
+
+**Monitoring Period:** Since `{python} check_date`
+
+```{python}
+# | echo: false
+from IPython.display import Markdown
+
+if forecast_count == 0 and obsv_count == 0:
+    status_message = f"""
+### 🟢 No Hurricane Activity Detected
+
+No new hurricane activity has been detected since **{check_date}** in the CHD NHC pipeline for the Atlantic basin.
+
+<br>
+
+**Summary:**
+
+- 📊 **Forecast Records:** {forecast_count}
+
+- 📈 **Observational Records:** {obsv_count}
+
+- 🌊 **Basin:** Atlantic (AL)
+
+<br>
+"""
+else:
+    status_message = f"""
+### 🟡 Hurricane Activity Detected -  Increased Monitoring/ Vigilance Recommended
+
+New hurricane activity has been detected since **{check_date}** in the CHD NHC pipeline.
+
+<br>
+
+**Summary:**
+
+- 📊 **Forecast Records:** {forecast_count}
+
+- 📈 **Observational Records:** {obsv_count}
+
+- 🌊 **Basin:** Atlantic (AL)
+
+<br>
+"""
+
+display(Markdown(status_message))
+```
+
+
+## NHC Tropical Weather Outlook
+
+```{python}
+#| echo: false
+# Scrape and display NHC Tropical Weather Outlook map
+
+try:
+    # Fetch the GTWO page
+    response = requests.get("https://www.nhc.noaa.gov/gtwo.php", timeout=10)
+    response.raise_for_status()
+    
+    # Parse the HTML to find the outlook image
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
+    # Look for the 7-day outlook image (typically has "gtwo_7d" in the src)
+    img_tags = soup.find_all('img')
+    outlook_img_url = None
+    
+    for img in img_tags:
+        src = img.get('src', '')
+        if 'gtwo' in src and ('7d' in src or 'outlook' in src):
+            if src.startswith('/'):
+                outlook_img_url = f"https://www.nhc.noaa.gov{src}"
+            elif src.startswith('http'):
+                outlook_img_url = src
+            else:
+                outlook_img_url = f"https://www.nhc.noaa.gov/{src}"
+            break
+    
+    # If we didn't find the specific image, try to find any GTWO image
+    if not outlook_img_url:
+        for img in img_tags:
+            src = img.get('src', '')
+            if 'gtwo' in src:
+                if src.startswith('/'):
+                    outlook_img_url = f"https://www.nhc.noaa.gov{src}"
+                elif src.startswith('http'):
+                    outlook_img_url = src
+                else:
+                    outlook_img_url = f"https://www.nhc.noaa.gov/{src}"
+                break
+    
+    if outlook_img_url:
+        # Download the image and save it locally for embedding
+        img_response = requests.get(outlook_img_url, timeout=10)
+        img_response.raise_for_status()
+        
+        # Save to a temporary file
+        temp_img_path = "temp_nhc_outlook.png"
+        with open(temp_img_path, "wb") as f:
+            f.write(img_response.content)
+        
+        # Extract timestamp from URL if possible
+        import re
+        timestamp_match = re.search(r'(\d{10})', outlook_img_url)
+        timestamp_str = f" (Updated: {timestamp_match.group(1)})" if timestamp_match else ""
+        
+        download_success = True
+        
+    else:
+        download_success = False
+        
+except requests.RequestException as e:
+    download_success = False
+    error_message = f"Network error: {str(e)}"
+except Exception as e:
+    download_success = False
+    error_message = f"Processing error: {str(e)}"
+```
+
+```{python}
+#| echo: false
+if download_success:
+    display(Markdown(f"""
+### 🌪️ 7-Day Tropical Weather Outlook
+
+Latest outlook from the National Hurricane Center showing areas of potential tropical development over the next 7 days.
+
+<br>
+
+**Source:** [NHC Tropical Weather Outlook](https://www.nhc.noaa.gov/gtwo.php)  
+
+**Last Retrieved:** {datetime.now().strftime("%B %d, %Y at %I:%M %p UTC")}
+
+<br>
+"""))
+else:
+    display(Markdown(f"""
+### ⚠️ Weather Outlook Unavailable
+
+Unable to retrieve the current NHC Tropical Weather Outlook.
+
+<br>
+
+**Error:** {error_message if 'error_message' in locals() else 'Could not locate outlook image on NHC website'}  
+
+**Fallback:** Visit [NHC Tropical Weather Outlook](https://www.nhc.noaa.gov/gtwo.php) directly
+
+<br>
+"""))
+```
+
+```{python}
+#| echo: false
+if download_success:
+    display(Markdown("![NHC 7-Day Tropical Weather Outlook](temp_nhc_outlook.png)"))
+else:
+    display(Markdown("*Weather outlook image could not be retrieved at this time.*"))
+```
+
