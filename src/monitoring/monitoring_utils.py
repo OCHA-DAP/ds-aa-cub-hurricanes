@@ -184,7 +184,7 @@ class IMERGRasterProcessor:
             da_clip = da.rio.clip(self.adm0.geometry)
 
             # Calculate 2-day rolling sum
-            da_rolling2 = da_clip.rolling(date=2).sum()
+            da_rolling2 = da_clip.rolling(date=2, min_periods=1).sum()
 
             # Calculate quantile-based metrics for each date
             records = []

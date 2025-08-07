@@ -124,104 +124,192 @@ except Exception as e:
         f"✅ Loaded {len(obsv_tracks)} recent track points from {obsv_tracks['atcf_id'].nunique()} storms"
     )
 
-print(f"\n🎯 Applying monitoring criteria to identify qualifying storms...")
+print(f"\n🎯 Pre-filtering storms by monitoring criteria...")
 print(f"   Wind threshold: {THRESHS['obsv']['s']} kt")
 print(f"   Must intersect ZMA")
 
 # Create monitor instance to use existing methods
 monitor = CubaHurricaneMonitor()
-qualifying_storms = []
 raster_processor = IMERGRasterProcessor(quantile=0.8)
 
-# monitor._filter_by_zma
-# monitor.filter
-# Check each storm against monitoring criteria
-print(f"\n🔄 Processing storms to find qualifying ones...")
-for i, (sid, group) in enumerate(
-    obsv_tracks.groupby("sid")
-):  # Group by SID instead of atcf_id
-    if i >= 10:  # Limit to first 10 storms for testing
-        print(f"   Limiting to first 10 storms for validation...")
-        break
+# Step 1: Pre-filter to find ALL qualifying storms first
+print(f"\n🔄 Finding all qualifying storms...")
+qualifying_storms = []
+total_storms = obsv_tracks["sid"].nunique()
+print(f"   Checking {total_storms} total storms...")
 
-    print(f"   Checking {sid}...")
+# Debug: Let's analyze the filtering process step by step
+wind_qualified = []
+zma_qualified = []
+both_qualified = []
 
+for sid, group in obsv_tracks.groupby("sid"):
     try:
         # First, apply wind threshold filter (cheap operation)
         max_wind = group["intensity"].max()
-        if max_wind < THRESHS["obsv"]["s"]:
-            print(
-                f"     ❌ {sid}: Wind {max_wind:.1f} kt < {THRESHS['obsv']['s']} kt (pre-filter)"
+        if max_wind >= THRESHS["obsv"]["s"]:
+            wind_qualified.append(sid)
+
+        # Let's also check distance to Cuba for all storms
+        group_clean = monitor._remove_track_duplicates(
+            group.sort_values("lastUpdate"), "lastUpdate"
+        )
+        gdf_simple = monitor._create_track_geodataframe(group_clean)
+        min_distance = gdf_simple["distance"].min()
+
+        # Check ZMA intersection
+        has_zma_intersection = not monitor._filter_by_zma(gdf_simple).empty
+        if has_zma_intersection:
+            zma_qualified.append(sid)
+
+        # Only proceed with storms that meet BOTH criteria
+        if max_wind >= THRESHS["obsv"]["s"] and has_zma_intersection:
+            both_qualified.append(sid)
+
+            # Store qualifying storm info
+            storm_start = group["lastUpdate"].min()
+            storm_end = group["lastUpdate"].max()
+
+            qualifying_storms.append(
+                {
+                    "sid": sid,
+                    "atcf_id": (
+                        group["atcf_id"].iloc[0]
+                        if "atcf_id" in group.columns
+                        else None
+                    ),
+                    "storm_start": storm_start,
+                    "storm_end": storm_end,
+                    "max_wind": max_wind,
+                    "min_distance": min_distance,
+                    "group_data": group,  # Store for later processing
+                }
             )
+
+        # Debug output for first few storms
+        if (
+            len(wind_qualified + zma_qualified + both_qualified) <= 20
+        ):  # Show first 20
+            wind_status = "✅" if max_wind >= THRESHS["obsv"]["s"] else "❌"
+            zma_status = "✅" if has_zma_intersection else "❌"
+            print(
+                f"   {sid}: Wind={wind_status}({max_wind:.1f}kt) ZMA={zma_status}({min_distance:.1f}km)"
+            )
+
+    except Exception as e:
+        print(f"     ⚠️ {sid}: Error in pre-filtering - {e}")
+
+print(f"\n📊 Filtering Analysis:")
+print(f"   Total storms: {total_storms}")
+print(f"   Storms with wind ≥{THRESHS['obsv']['s']} kt: {len(wind_qualified)}")
+print(f"   Storms intersecting ZMA: {len(zma_qualified)}")
+print(f"   Storms meeting BOTH criteria: {len(both_qualified)}")
+print(f"   Final qualifying storms: {len(qualifying_storms)}")
+
+# If we have too few qualifying storms, let's try a distance-based approach
+if len(qualifying_storms) < 10:
+    print(
+        f"\n🎯 Too few qualifying storms. Let's try distance-based filtering..."
+    )
+    print(f"   Looking for storms within 200km of Cuba with wind ≥80kt...")
+
+    distance_qualified = []
+    for sid, group in obsv_tracks.groupby("sid"):
+        try:
+            max_wind = group["intensity"].max()
+            if max_wind < 80:  # Lower wind threshold
+                continue
+
+            group_clean = monitor._remove_track_duplicates(
+                group.sort_values("lastUpdate"), "lastUpdate"
+            )
+            gdf_simple = monitor._create_track_geodataframe(group_clean)
+            min_distance = gdf_simple["distance"].min()
+
+            if min_distance < 200:  # 200km distance threshold
+                storm_start = group["lastUpdate"].min()
+                storm_end = group["lastUpdate"].max()
+
+                distance_qualified.append(
+                    {
+                        "sid": sid,
+                        "atcf_id": (
+                            group["atcf_id"].iloc[0]
+                            if "atcf_id" in group.columns
+                            else None
+                        ),
+                        "storm_start": storm_start,
+                        "storm_end": storm_end,
+                        "max_wind": max_wind,
+                        "min_distance": min_distance,
+                        "group_data": group,
+                    }
+                )
+
+        except Exception as e:
             continue
 
-        print(f"     ✅ {sid}: Passes wind threshold ({max_wind:.1f} kt)")
+    print(f"   Distance-qualified storms: {len(distance_qualified)}")
 
-        # Quick boolean check: does this storm have ANY track points in ZMA? (cheap operation)
+    if len(distance_qualified) > len(qualifying_storms):
+        print(f"   Using distance-qualified storms for analysis...")
+        qualifying_storms = distance_qualified
+
+print(f"\n✅ Final dataset: {len(qualifying_storms)} storms for analysis")
+
+# Step 2: Now sample from qualifying storms for detailed processing
+sample_size = min(10, len(qualifying_storms))
+print(
+    f"\n🎯 Processing detailed analysis for {sample_size} qualifying storms..."
+)
+
+
+for i, storm_info in enumerate(qualifying_storms[:sample_size]):
+    sid = storm_info["sid"]
+    atcf_id = storm_info["atcf_id"]
+    max_wind = storm_info["max_wind"]
+    group = storm_info["group_data"]
+
+    print(
+        f"   Processing {i+1}/{sample_size}: {sid} (wind={max_wind:.1f} kt)..."
+    )
+
+    try:
+        # Now do the expensive interpolation for detailed analysis
         group_clean = monitor._remove_track_duplicates(
             group.sort_values("lastUpdate"), "lastUpdate"
         )
 
-        # Create minimal GeoDataFrame just for ZMA intersection check
-        gdf_simple = monitor._create_track_geodataframe(group_clean)
-        has_zma_intersection = not monitor._filter_by_zma(gdf_simple).empty
-
-        if not has_zma_intersection:
-            print(f"     ❌ {sid}: No ZMA intersection (pre-filter)")
-            continue
-
-        print(f"     ✅ {sid}: Has ZMA intersection, processing full track...")
-
-        # Now do the expensive interpolation only for storms that pass both filters
         df_interp = monitor._interpolate_track(
             group_clean,
             "lastUpdate",
             ["latitude", "longitude", "intensity", "pressure"],
         )
 
-        # Create full GeoDataFrame and get ZMA-intersecting segments
+        # Create full GeoDataFrame and get detailed stats
         gdf = monitor._create_track_geodataframe(df_interp)
         gdf_zma = monitor._filter_by_zma(gdf)
 
-        print(
-            f"     ✅ {sid}: QUALIFIES (wind={max_wind:.1f} kt, ZMA intersection)"
-        )
+        print(f"     ✅ {sid}: Detailed analysis complete")
 
         # Store storm info for comparison - use original group data for dates
-        storm_start = group["lastUpdate"].min()
-        storm_end = group["lastUpdate"].max()
+        storm_start = storm_info["storm_start"]
+        storm_end = storm_info["storm_end"]
 
-        # Debug output to check date values
-        print(
-            f"     Debug: storm_start = {storm_start}, storm_end = {storm_end}"
-        )
-        print(
-            f"     Debug: date range = {storm_start.date() if pd.notna(storm_start) else 'NaT'} to {storm_end.date() if pd.notna(storm_end) else 'NaT'}"
-        )
-
-        qualifying_storms.append(
+        # Update the storm info with detailed stats
+        storm_info.update(
             {
-                "sid": sid,
-                "atcf_id": (
-                    group["atcf_id"].iloc[0]
-                    if "atcf_id" in group.columns
-                    else None
-                ),  # Keep ATCF ID for reference
-                "storm_start": storm_start,
-                "storm_end": storm_end,
-                "max_wind": max_wind,
                 "min_dist": gdf["distance"].min(),
             }
         )
 
     except Exception as e:
-        print(f"     ⚠️ {sid}: Error processing - {e}")
+        print(f"     ⚠️ {sid}: Error in detailed processing - {e}")
 
-print(f"\n📊 Summary:")
-print(
-    f"   Total storms processed: {min(10, obsv_tracks['atcf_id'].nunique())}"
-)
-print(f"   Qualifying storms: {len(qualifying_storms)}")
+print(f"\n📊 Final Summary:")
+print(f"   Total storms in dataset: {total_storms}")
+print(f"   Storms available for analysis: {len(qualifying_storms)}")
+print(f"   Storms processed for detailed analysis: {sample_size}")
 
 if len(qualifying_storms) > 0:
     print(
@@ -230,7 +318,11 @@ if len(qualifying_storms) > 0:
 
     validation_results = []
 
-    for storm_info in qualifying_storms[:3]:  # Limit to first 3 for speed
+    # Process more storms for better validation - use at least 5-10 storms
+    rainfall_sample_size = min(10, len(qualifying_storms))
+    print(f"   Processing rainfall for {rainfall_sample_size} storms...")
+
+    for storm_info in qualifying_storms[:rainfall_sample_size]:
         sid = storm_info["sid"]
         atcf_id = storm_info["atcf_id"]
         storm_start = storm_info["storm_start"]
