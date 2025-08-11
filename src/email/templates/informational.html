@@ -16,12 +16,12 @@
   <p>Estimados colegas,</p>
   <p>
     Las {{ fcast_obsv }}s para {{ name }} de {{ pub_time }}, {{ pub_date }} (hora local Cuba) acaban de ser emitidas por
-    el Centro Nacional de Huracanes de NOAA, operador del Centro Meteorológico Regional Especializado (RSMC) Miami, y
-    por
+    el Centro Nacional de Huracanes de NOAA, operador del Centro Meteorológico Regional Especializado (RSMC) Miami
+
     {% if fcast_obsv == "pronóstico" %}
-    CHC de UC Santa Barbara (CHIRPS-GEFS).
-    {% else %}
-    NASA (IMERG).
+    .
+    {% elif fcast_obsv == "observación" %}
+    , y por NASA (IMERG).
     {% endif %}
   </p>
   <p>

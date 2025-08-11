@@ -5,41 +5,167 @@ from pathlib import Path
 from typing import Literal
 import pandas as pd
 import ocha_stratus as stratus
+from src.datasources import nhc
+from datetime import datetime, timezone
 
-from src.constants import PROJECT_PREFIX
+from src.constants import (
+    PROJECT_PREFIX,
+    DRY_RUN,
+    TEST_EMAIL,
+    FORCE_ALERT,
+    MONITORING_START_DATE,
+    TEST_ATCF_ID,
+    TEST_MONITOR_ID,
+    TEST_FCAST_MONITOR_ID,
+    TEST_OBSV_MONITOR_ID,
+    TEST_STORM_NAME,
+    _parse_bool_env,
+)
 
-EMAIL_HOST = os.getenv("CHD_DS_HOST")
-EMAIL_PORT = int(os.getenv("CHD_DS_PORT"))
-EMAIL_PASSWORD = os.getenv("CHD_DS_EMAIL_PASSWORD")
-EMAIL_USERNAME = os.getenv("CHD_DS_EMAIL_USERNAME")
-EMAIL_ADDRESS = os.getenv("CHD_DS_EMAIL_ADDRESS")
+EMAIL_HOST = os.getenv("DSCI_AWS_EMAIL_HOST")
+EMAIL_PORT = int(os.getenv("DSCI_AWS_EMAIL_PORT"))
+EMAIL_PASSWORD = os.getenv("DSCI_AWS_EMAIL_PASSWORD")
+EMAIL_USERNAME = os.getenv("DSCI_AWS_EMAIL_USERNAME")
+EMAIL_ADDRESS = os.getenv("DSCI_AWS_EMAIL_ADDRESS")
 
-TEST_LIST = os.getenv("TEST_LIST")
-if TEST_LIST == "False":
-    TEST_LIST = False
-else:
-    TEST_LIST = True
+# Legacy flags - will be deprecated
+TEST_LIST = _parse_bool_env("TEST_LIST", default=False)
+TEST_STORM = _parse_bool_env("TEST_STORM", default=False)
+EMAIL_DISCLAIMER = _parse_bool_env("EMAIL_DISCLAIMER", default=False)
 
-TEST_STORM = os.getenv("TEST_STORM")
-if TEST_STORM == "False":
-    TEST_STORM = False
-else:
-    TEST_STORM = True
-
-EMAIL_DISCLAIMER = os.getenv("EMAIL_DISCLAIMER")
-if EMAIL_DISCLAIMER == "True":
-    EMAIL_DISCLAIMER = True
-else:
-    EMAIL_DISCLAIMER = False
-
-TEST_ATCF_ID = "TEST_ATCF_ID"
-TEST_MONITOR_ID = "TEST_MONITOR_ID"
-TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
-TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
-TEST_STORM_NAME = "TEST_STORM_NAME"
 
 TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
+
+
+def create_dummy_storm_tracks(
+    df_tracks: pd.DataFrame, fcast_obsv: str
+) -> pd.DataFrame:
+    """Create dummy storm tracks based on Hurricane Rafael data but with test IDs.
+
+    Args:
+        fcast_obsv: Whether to create forecast or observation tracks
+
+    Returns:
+        DataFrame with tracks data modified to match dummy storm monitoring data
+    """
+    # Use Hurricane Rafael as the base data
+    dummy_id = "al182024"
+    dummy_name = "Rafael"
+    # al182024_fcast_2024-11-04T21:00:00
+
+    if fcast_obsv == "obsv":
+        from src.constants import THRESHS
+
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id) & (df_tracks["name"] == dummy_name)
+        ].copy()
+
+        # Sort by time to ensure proper chronological order
+        dummy_track = dummy_track.sort_values("lastUpdate")
+
+        # Replace 100-knot values with 105 knots to create threshold crossing
+        dummy_track.loc[dummy_track["intensity"] == 100, "intensity"] = 105
+
+        # Find first point where wind crosses observation threshold (105 knots)
+        obs_threshold = THRESHS["obsv"]["s"]  # 105 knots
+        threshold_crossed_idx = dummy_track[
+            dummy_track["intensity"] >= obs_threshold
+        ].index
+
+        if len(threshold_crossed_idx) > 0:
+            # Include only points up to first threshold crossing
+            first_crossing_idx = threshold_crossed_idx[0]
+            dummy_track = dummy_track.loc[:first_crossing_idx]
+
+        # Shift timestamps to start from MONITORING_START_DATE
+        min_time = min(dummy_track["lastUpdate"])
+        diff_from_min = dummy_track["lastUpdate"] - min_time
+        dummy_track["lastUpdate"] = MONITORING_START_DATE + diff_from_min
+
+    if fcast_obsv == "fcast":
+
+        target_track_time = datetime(
+            2024, 11, 4, 21, 0, 0, tzinfo=timezone.utc
+        )
+        dummy_track = df_tracks[
+            (df_tracks["id"] == dummy_id)
+            & (df_tracks["name"] == dummy_name)
+            & (df_tracks["issuance"] == target_track_time)
+        ].copy()
+        # Calculate lead time between issuance and validTime
+        lt = dummy_track["validTime"] - dummy_track["issuance"]
+        dummy_track["issuance"] = MONITORING_START_DATE
+        dummy_track["validTime"] = dummy_track["issuance"] + lt
+
+        # Inject maxwind value of 125 where lead time = 2 days (action)
+        dummy_track.loc[lt == pd.Timedelta(days=2, hours=9), "maxwind"] = 125
+        # Inject readiness activation
+        dummy_track.loc[lt == pd.Timedelta(days=4, hours=21), "maxwind"] = 125
+
+    dummy_track["id"] = TEST_ATCF_ID
+    return dummy_track
+
+
+def create_dummy_storm_monitoring(fcast_obsv: str) -> pd.DataFrame:
+    DUMMY_MONITOR_ID = (
+        TEST_FCAST_MONITOR_ID
+        if fcast_obsv == "fcast"
+        else TEST_OBSV_MONITOR_ID
+    )
+
+    if fcast_obsv == "fcast":
+        df = pd.DataFrame(
+            [
+                {
+                    "monitor_id": DUMMY_MONITOR_ID,
+                    "atcf_id": TEST_ATCF_ID,
+                    "name": TEST_STORM_NAME,
+                    "issue_time": MONITORING_START_DATE,
+                    "time_to_closest": None,
+                    "closest_s": 83.33,
+                    "past_cutoff": False,
+                    "min_dist": 83.0,
+                    "action_s": 125,
+                    "action_trigger": True,
+                    "readiness_s": 125,
+                    "readiness_trigger": True,
+                }
+            ]
+        )
+    else:
+        # For observation data, set issue time to when threshold was crossed
+        # This matches the realistic operational scenario
+
+        # Calculate when the threshold would be crossed based on dummy data
+        # In the dummy Hurricane Rafael data, threshold crossing happens
+        # around day 3 of the storm track (specifically at 09:00 on day 4)
+        threshold_crossing_date = MONITORING_START_DATE + pd.Timedelta(
+            days=3, hours=12
+        )
+
+        df = pd.DataFrame(
+            [
+                {
+                    "monitor_id": DUMMY_MONITOR_ID,
+                    "atcf_id": TEST_ATCF_ID,
+                    "name": TEST_STORM_NAME,
+                    "issue_time": threshold_crossing_date,
+                    "min_dist": 0.0,
+                    "closest_s": 125,
+                    "obsv_s": 110,
+                    "obsv_trigger": True,
+                    "closest_p": 100,
+                    "obsv_p": 100,
+                    "rainfall_relevant": True,
+                    "rainfall_source": "raster_quantile",
+                    "quantile_used": 0.8,
+                    "analysis_start": None,
+                    "analysis_end": None,
+                }
+            ]
+        )
+    return df
 
 
 def add_test_row_to_monitoring(
@@ -47,53 +173,22 @@ def add_test_row_to_monitoring(
 ) -> pd.DataFrame:
     """Add test row to monitoring df to simulate new monitoring point.
     This new monitoring point will cause an activation of all triggers.
-    Uses Hurricane Rafael data as a template but creates proper test IDs.
+    Uses create_dummy_storm_monitoring to generate test data.
     """
-    print("adding test row to monitoring data")
-    if fcast_obsv == "fcast":
-        # Use Hurricane Rafael as template but create test row
-        df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al182024_fcast_2024-11-04T21:00:00"
-        ].copy()
-        df_monitoring_test[
-            [
-                "monitor_id",
-                "name",
-                "atcf_id",
-                "readiness_trigger",
-                "action_trigger",
-            ]
-        ] = (
-            TEST_FCAST_MONITOR_ID,
-            TEST_STORM_NAME,
-            TEST_ATCF_ID,
-            True,
-            True,
-        )
-        df_monitoring = pd.concat(
-            [df_monitoring, df_monitoring_test], ignore_index=True
-        )
-    else:
-        # Use Hurricane Rafael as template but create test row
-        df_monitoring_test = df_monitoring[
-            df_monitoring["monitor_id"] == "al182024_obsv_2024-11-06T21:00:00"
-        ].copy()
-        df_monitoring_test[
-            [
-                "monitor_id",
-                "name",
-                "atcf_id",
-                "obsv_trigger",
-            ]
-        ] = (
-            TEST_OBSV_MONITOR_ID,
-            TEST_STORM_NAME,
-            TEST_ATCF_ID,
-            True,
-        )
-        df_monitoring = pd.concat(
-            [df_monitoring, df_monitoring_test], ignore_index=True
-        )
+    # Only print this once per fcast/obsv type per process
+    if not hasattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}"):
+        if fcast_obsv == "fcast":
+            print("🧪 Adding test forecast row for FORCE_ALERT testing")
+        else:
+            print("🧪 Adding test observation row for FORCE_ALERT testing")
+        setattr(add_test_row_to_monitoring, f"_added_{fcast_obsv}", True)
+
+    # Create dummy storm monitoring data
+    df_monitoring_test = create_dummy_storm_monitoring(fcast_obsv)
+
+    df_monitoring = pd.concat(
+        [df_monitoring, df_monitoring_test], ignore_index=True
+    )
     return df_monitoring
 
 
@@ -106,7 +201,7 @@ def open_static_image(filename: str) -> str:
 
 def get_distribution_list() -> pd.DataFrame:
     """Load distribution list from blob storage."""
-    if TEST_LIST:
+    if TEST_EMAIL:  # Use new flag instead of TEST_LIST
         blob_name = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
     else:
         blob_name = f"{PROJECT_PREFIX}/email/distribution_list.csv"
@@ -114,19 +209,36 @@ def get_distribution_list() -> pd.DataFrame:
 
 
 def load_email_record() -> pd.DataFrame:
-    """Load record of emails that have been sent."""
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
-    return stratus.load_csv_from_blob(blob_name)
+    """Load record of emails that have been sent.
+
+    Uses test_email_record.csv if TEST_EMAIL=True, otherwise email_record.csv.
+    Returns empty DataFrame with correct columns if file doesn't exist.
+    """
+    if TEST_EMAIL:
+        blob_name = f"{PROJECT_PREFIX}/email/test_email_record.csv"
+    else:
+        blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    try:
+        return stratus.load_csv_from_blob(blob_name)
+    except Exception as e:
+        if "BlobNotFound" in str(e) or "does not exist" in str(e):
+            print(f"📝 Email record file not found: {blob_name}")
+            print("📝 Creating empty email record with correct structure")
+            # Return empty DataFrame with correct column structure
+            return pd.DataFrame(
+                columns=["monitor_id", "atcf_id", "email_type"]
+            )
+        else:
+            # Re-raise other exceptions
+            raise e
 
 
-def load_monitoring_data(
-    fcast_obsv: Literal["fcast", "obsv"], with_tests: bool = True
-) -> pd.DataFrame:
+def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
     """Load monitoring data with optional test row injection.
 
     Args:
         fcast_obsv: Whether to load forecast or observation data
-        with_tests: Whether to add test rows when TEST_STORM is enabled
 
     Returns:
         DataFrame with monitoring data, optionally including test rows
@@ -136,8 +248,20 @@ def load_monitoring_data(
     monitor = monitoring_utils.create_cuba_hurricane_monitor()
     df_monitoring = monitor._load_existing_monitoring(fcast_obsv)
 
-    if with_tests and TEST_STORM:
+    # Add test data if FORCE_ALERT is enabled - do this BEFORE filtering
+    if FORCE_ALERT:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
+
+    # Filter by MONITORING_START_DATE to limit processing scope and prevent timeouts
+    df_monitoring["issue_time"] = pd.to_datetime(df_monitoring["issue_time"])
+    df_monitoring = df_monitoring[
+        df_monitoring["issue_time"] >= MONITORING_START_DATE
+    ]
+    print(
+        f"📅 Filtered {fcast_obsv} monitoring data from "
+        f"{MONITORING_START_DATE.strftime('%Y-%m-%d')}: "
+        f"{len(df_monitoring)} records remaining"
+    )
 
     return df_monitoring
 
@@ -151,11 +275,11 @@ def load_email_record_with_test_filtering(
         email_types: List of email types to filter out for test data
 
     Returns:
-        DataFrame with email records, filtered if TEST_STORM is enabled
+        DataFrame with email records, filtered if FORCE_ALERT is enabled
     """
     df_existing_email_record = load_email_record()
 
-    if TEST_STORM and email_types:
+    if FORCE_ALERT and email_types:
         df_existing_email_record = df_existing_email_record[
             ~(
                 (df_existing_email_record["atcf_id"] == TEST_ATCF_ID)
@@ -173,11 +297,26 @@ def save_email_record(df_existing: pd.DataFrame, new_records: list) -> None:
         df_existing: Existing email record DataFrame
         new_records: List of dictionaries representing new email records
     """
+    if DRY_RUN:
+        print(f"DRY_RUN: Would save {len(new_records)} new email records")
+        return
+
+    if len(new_records) == 0:
+        print("No new email records to save")
+        return
+
     df_new_email_record = pd.DataFrame(new_records)
     df_combined_email_record = pd.concat(
         [df_existing, df_new_email_record], ignore_index=True
     )
-    blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    # Use appropriate file based on TEST_EMAIL setting
+    if TEST_EMAIL:
+        blob_name = f"{PROJECT_PREFIX}/email/test_email_record.csv"
+    else:
+        blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+
+    print(f"💾 Saving {len(new_records)} email records to {blob_name}")
     stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
 
 

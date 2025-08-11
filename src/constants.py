@@ -1,7 +1,39 @@
 import numpy as np
+import os
+import pytz
+from datetime import datetime, timezone
 
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
+
+# Monitoring start date - only process data from this date forward
+# Set to Cuba timezone so that dummy emails show intended date
+cuba_tz = pytz.timezone("America/Havana")
+MONITORING_START_DATE = cuba_tz.localize(datetime(2025, 1, 1)).astimezone(
+    timezone.utc
+)
+
+
+# Runtime control flags - centralized configuration
+def _parse_bool_env(env_var: str, default: bool = False) -> bool:
+    """Parse environment variable as boolean with proper defaults."""
+    value = os.getenv(env_var)
+    if value is None:
+        return default
+    return value.lower() in ("true", "1", "yes", "on")
+
+
+# Main control flags
+DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
+TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
+FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
+
+
+# this would actually be a better replacement way to deal w/ env vars
+# in the long run
+# def force_alert():
+#     return _parse_bool_env("FORCE_ALERT", default=False)
+
 
 # Saffir-Simpson scale (knots)
 TS = 34
@@ -33,7 +65,7 @@ D_THRESH = 230
 THRESHS = {
     "readiness": {"s": 120, "lt_days": 5},
     "action": {"s": 120, "lt_days": 3},
-    "obsv": {"p": 98, "s": 100},  # NEED TO UPDATE FOR PROD
+    "obsv": {"p": 98.2, "s": 105},  # NEED TO UPDATE FOR PROD
 }
 
 MIN_EMAIL_DISTANCE = 1000
@@ -94,3 +126,10 @@ LON_ZOOM_RANGE = np.array(
         360.0,
     ]
 )
+
+
+TEST_ATCF_ID = "TEST_ATCF_ID"
+TEST_MONITOR_ID = "TEST_MONITOR_ID"
+TEST_FCAST_MONITOR_ID = "TEST_FCAST_MONITOR_ID"
+TEST_OBSV_MONITOR_ID = "TEST_OBSV_MONITOR_ID"
+TEST_STORM_NAME = "TEST_STORM_NAME"

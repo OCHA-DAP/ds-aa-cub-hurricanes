@@ -1,0 +1,135 @@
+name: Daily Hurricane Report
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC (adjust timezone as needed)
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Report.qmd'
+      - 'pipelines/email_with_embedded_images.py'
+      - 'src/**'
+      - '.github/workflows/daily-hurricane-report.yml'
+
+jobs:
+  generate-and-send-report:
+    runs-on: ubuntu-latest
+    env:
+      DSCI_AZ_BLOB_DEV_SAS: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS }}
+      DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
+      DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
+      DSCI_AWS_EMAIL_HOST: ${{ secrets.DSCI_AWS_EMAIL_HOST }}
+      DSCI_AWS_EMAIL_PORT: ${{ secrets.DSCI_AWS_EMAIL_PORT }}
+      DSCI_AWS_EMAIL_PASSWORD: ${{ secrets.DSCI_AWS_EMAIL_PASSWORD }}
+      DSCI_AWS_EMAIL_USERNAME: ${{ secrets.DSCI_AWS_EMAIL_USERNAME }}
+      DSCI_AWS_EMAIL_ADDRESS: ${{ secrets.DSCI_AWS_EMAIL_ADDRESS }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Set up Quarto
+      uses: quarto-dev/quarto-actions/setup@v2
+      with:
+        version: pre-release
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgdal-dev \
+          gdal-bin \
+          libproj-dev \
+          proj-data \
+          proj-bin \
+          libgeos-dev \
+          libspatialindex-dev \
+          libcurl4-openssl-dev \
+          libssl-dev \
+          libxml2-dev \
+          libfontconfig1-dev \
+          libcairo2-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
+          libfreetype6-dev \
+          libpng-dev \
+          libtiff5-dev \
+          libjpeg-dev
+          
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          venv
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-venv-
+          ${{ runner.os }}-pip-
+          
+    - name: Create virtual environment and install dependencies
+      run: |
+        # Create virtual environment
+        python -m venv venv
+        source venv/bin/activate
+        
+        # Upgrade pip and install build tools
+        python -m pip install --upgrade pip
+        pip install wheel setuptools
+        
+        # Install requirements if they exist
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+        
+        if [ -f requirements-dev.txt ]; then
+          pip install -r requirements-dev.txt
+        fi
+        
+        # Install package in development mode if pyproject.toml exists
+        if [ -f pyproject.toml ]; then
+          pip install -e .
+        fi
+        
+        # Install Jupyter kernel in the virtual environment
+        python -m ipykernel install --user --name=ds-aa-cub-hurricanes --display-name="ds-aa-cub-hurricanes"
+        
+    - name: Verify Quarto installation
+      run: |
+        source venv/bin/activate
+        quarto --version
+        quarto check
+        
+    - name: Generate and Send Hurricane Report
+      env:
+        # Set PYTHONPATH for Python module imports
+        PYTHONPATH: ${{ github.workspace }}
+        
+      run: |
+        source venv/bin/activate
+        echo "📊📧 Rendering Quarto document and sending Hurricane Report Email..."
+        python pipelines/email_with_embedded_images.py
+        
+    - name: Upload Report as Artifact
+      if: always()  # Always upload, even if email fails
+      uses: actions/upload-artifact@v4
+      with:
+        name: hurricane-report-${{ github.run_number }}
+        path: |
+          Report.html
+          temp_nhc_outlook.png
+        retention-days: 30
+        
+    - name: Cleanup temporary files
+      if: always()
+      run: |
+        # Clean up any temporary files
+        rm -f temp_nhc_outlook.png
+        echo "🧹 Cleanup completed"
