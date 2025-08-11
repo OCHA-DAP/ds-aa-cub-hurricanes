@@ -318,3 +318,14 @@ display(
     .format({"Total Affected": "{:,}"})
 )
 ```
+
+## Data for email scatter plot
+
+Just quickly adding this for easy reference - later. Should clean up where this goes.
+```{python}
+blob_name = (
+      f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
+)
+
+df_stats_raw = stratus.load_parquet_from_blob(blob_name)
+```

@@ -1,0 +1,521 @@
+
+## Email Set Up Prep
+
+### Test Plots
+
+Under current configuration emails need some plots on blob to grab. Therefore this chap/notebook creates those plots using `TEST_STORM` variable (under the hood)
+
+#### Test Map Plot
+
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+
+```{python}
+
+```
+
+## Rainfall Aggregation Validation
+
+Validate that the on-the-fly rainfall calculations in monitoring_utils produce the same results as the pre-computed values in `zma_stats_imerg_quantiles.parquet`. This comparison is limited to storms that meet the monitoring criteria (ZMA intersection + wind threshold).
+
+```{python}
+import pandas as pd
+import numpy as np
+import ocha_stratus as stratus
+from src.datasources import nhc, ibtracs
+from src.monitoring.monitoring_utils import (
+    CubaHurricaneMonitor,
+    IMERGRasterProcessor,
+)
+from src.constants import PROJECT_PREFIX, THRESHS
+
+print("🔍 Rainfall Aggregation Validation")
+print("=" * 50)
+
+# Load pre-computed aggregations from exploration
+blob_name = (
+    f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_imerg_quantiles.parquet"
+)
+print(f"📊 Loading pre-computed aggregations from: {blob_name}")
+try:
+    df_precomputed = stratus.load_parquet_from_blob(blob_name)
+    print(f"✅ Loaded {len(df_precomputed)} storms from pre-computed data")
+    print(
+        f"   Date range: {df_precomputed['valid_time_min'].min().date()} to {df_precomputed['valid_time_max'].max().date()}"
+    )
+except Exception as e:
+    print(f"❌ Error loading pre-computed data: {e}")
+    df_precomputed = None
+
+# Load historical observational tracks from IBTrACS (same as used in imerg_aggregation.md)
+print(f"\n🌀 Loading historical observational tracks from IBTrACS...")
+try:
+    # Load the same historical data used to create the pre-computed aggregations
+    ibtracs_blob_name = (
+        f"{PROJECT_PREFIX}/processed/ibtracs/zma_tracks_2000-2024.parquet"
+    )
+    obsv_tracks = stratus.load_parquet_from_blob(ibtracs_blob_name)
+
+    # Load storm metadata to get SID to ATCF mapping (following your approach)
+    print("📋 Loading SID to ATCF mapping...")
+    df_storms = ibtracs.load_storms()
+
+    # Filter to relevant storms and get SID-ATCF mapping
+    storm_mapping = df_storms[["sid", "atcf_id", "name"]].drop_duplicates()
+    storm_mapping = storm_mapping[
+        storm_mapping["sid"].notna() & storm_mapping["atcf_id"].notna()
+    ]
+
+    # Merge tracks with storm mapping to get ATCF IDs
+    obsv_tracks = obsv_tracks.merge(storm_mapping, on="sid", how="left")
+
+    print(
+        f"✅ Loaded {len(obsv_tracks)} track points from {obsv_tracks['sid'].nunique()} storms"
+    )
+    print(
+        f"   Date range: {obsv_tracks['valid_time'].min().date()} to {obsv_tracks['valid_time'].max().date()}"
+    )
+    print(
+        f"   Storms with ATCF mapping: {obsv_tracks['atcf_id'].notna().sum()}/{len(obsv_tracks)}"
+    )
+
+    # Rename columns to match what monitoring_utils expects
+    obsv_tracks = obsv_tracks.rename(
+        columns={"valid_time": "lastUpdate", "wind_speed": "intensity"}
+    )
+
+    # Keep original SID for exact matching with pre-computed data
+    obsv_tracks["original_sid"] = obsv_tracks["sid"].copy()
+
+except Exception as e:
+    print(f"❌ Error loading IBTrACS historical data: {e}")
+    print("   Falling back to recent NHC data...")
+    obsv_tracks = nhc.load_recent_glb_obsv()
+    obsv_tracks = obsv_tracks[obsv_tracks["basin"] == "al"]
+    obsv_tracks = obsv_tracks.rename(columns={"id": "atcf_id"})
+    obsv_tracks["original_sid"] = None  # No SID for recent NHC data
+    print(
+        f"✅ Loaded {len(obsv_tracks)} recent track points from {obsv_tracks['atcf_id'].nunique()} storms"
+    )
+
+print(f"\n🎯 Applying monitoring criteria to identify qualifying storms...")
+print(f"   Wind threshold: {THRESHS['obsv']['s']} kt")
+print(f"   Must intersect ZMA")
+
+# Create monitor instance to use existing methods
+monitor = CubaHurricaneMonitor()
+qualifying_storms = []
+raster_processor = IMERGRasterProcessor(quantile=0.8)
+
+# monitor._filter_by_zma
+# monitor.filter
+# Check each storm against monitoring criteria
+print(f"\n🔄 Processing storms to find qualifying ones...")
+for i, (sid, group) in enumerate(
+    obsv_tracks.groupby("sid")
+):  # Group by SID instead of atcf_id
+    if i >= 10:  # Limit to first 10 storms for testing
+        print(f"   Limiting to first 10 storms for validation...")
+        break
+
+    print(f"   Checking {sid}...")
+
+    try:
+        # First, apply wind threshold filter (cheap operation)
+        max_wind = group["intensity"].max()
+        if max_wind < THRESHS["obsv"]["s"]:
+            print(
+                f"     ❌ {sid}: Wind {max_wind:.1f} kt < {THRESHS['obsv']['s']} kt (pre-filter)"
+            )
+            continue
+
+        print(f"     ✅ {sid}: Passes wind threshold ({max_wind:.1f} kt)")
+
+        # Quick boolean check: does this storm have ANY track points in ZMA? (cheap operation)
+        group_clean = monitor._remove_track_duplicates(
+            group.sort_values("lastUpdate"), "lastUpdate"
+        )
+
+        # Create minimal GeoDataFrame just for ZMA intersection check
+        gdf_simple = monitor._create_track_geodataframe(group_clean)
+        has_zma_intersection = not monitor._filter_by_zma(gdf_simple).empty
+
+        if not has_zma_intersection:
+            print(f"     ❌ {sid}: No ZMA intersection (pre-filter)")
+            continue
+
+        print(f"     ✅ {sid}: Has ZMA intersection, processing full track...")
+
+        # Now do the expensive interpolation only for storms that pass both filters
+        df_interp = monitor._interpolate_track(
+            group_clean,
+            "lastUpdate",
+            ["latitude", "longitude", "intensity", "pressure"],
+        )
+
+        # Create full GeoDataFrame and get ZMA-intersecting segments
+        gdf = monitor._create_track_geodataframe(df_interp)
+        gdf_zma = monitor._filter_by_zma(gdf)
+
+        print(
+            f"     ✅ {sid}: QUALIFIES (wind={max_wind:.1f} kt, ZMA intersection)"
+        )
+
+        # Store storm info for comparison - use original group data for dates
+        storm_start = group["lastUpdate"].min()
+        storm_end = group["lastUpdate"].max()
+        
+        # Debug output to check date values
+        print(f"     Debug: storm_start = {storm_start}, storm_end = {storm_end}")
+        print(f"     Debug: date range = {storm_start.date() if pd.notna(storm_start) else 'NaT'} to {storm_end.date() if pd.notna(storm_end) else 'NaT'}")
+
+        qualifying_storms.append(
+            {
+                "sid": sid,
+                "atcf_id": (
+                    group["atcf_id"].iloc[0]
+                    if "atcf_id" in group.columns
+                    else None
+                ),  # Keep ATCF ID for reference
+                "storm_start": storm_start,
+                "storm_end": storm_end,
+                "max_wind": max_wind,
+                "min_dist": gdf["distance"].min(),
+            }
+        )
+
+    except Exception as e:
+        print(f"     ⚠️ {sid}: Error processing - {e}")
+
+print(f"\n📊 Summary:")
+print(
+    f"   Total storms processed: {min(10, obsv_tracks['atcf_id'].nunique())}"
+)
+print(f"   Qualifying storms: {len(qualifying_storms)}")
+
+if len(qualifying_storms) > 0:
+    print(
+        f"\n🔄 Running on-the-fly rainfall calculations for qualifying storms..."
+    )
+
+    validation_results = []
+
+    for storm_info in qualifying_storms[:3]:  # Limit to first 3 for speed
+        sid = storm_info["sid"]
+        atcf_id = storm_info["atcf_id"]
+        storm_start = storm_info["storm_start"]
+        storm_end = storm_info["storm_end"]
+
+        print(f"   Processing {sid} (ATCF: {atcf_id})...")
+
+        # Extend period by 1 day on each side (same as monitoring_utils)
+        analysis_start = storm_start - pd.Timedelta(days=1)
+        analysis_end = storm_end + pd.Timedelta(days=1)
+
+        print(f"     Storm period: {storm_start.date()} to {storm_end.date()}")
+        print(
+            f"     Analysis period: {analysis_start.date()} to {analysis_end.date()}"
+        )
+
+        try:
+            # Calculate rainfall using monitoring_utils method
+            storm_rainfall_df = (
+                raster_processor.calculate_rainfall_for_storm_period(
+                    analysis_start, analysis_end
+                )
+            )
+
+            if storm_rainfall_df.empty:
+                print(f"     ⚠️ No rainfall data for {sid}")
+                continue
+
+            # Get max rainfall for the period (same as monitoring_utils)
+            max_rainfall = storm_rainfall_df["roll2_sum"].max()
+
+            print(f"     On-the-fly calculation: {max_rainfall:.2f} mm")
+
+            validation_results.append(
+                {
+                    "sid": sid,
+                    "atcf_id": atcf_id,
+                    "storm_start": storm_start,
+                    "storm_end": storm_end,
+                    "onthefly_max_roll2": max_rainfall,
+                    "analysis_start": analysis_start,
+                    "analysis_end": analysis_end,
+                }
+            )
+
+        except Exception as e:
+            print(f"     ❌ Error calculating rainfall for {sid}: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    # Convert to DataFrame for easier comparison
+    df_validation = pd.DataFrame(validation_results)
+
+    if len(df_validation) > 0 and df_precomputed is not None:
+        print(f"\n🔍 Comparing with pre-computed values...")
+        print(f"   On-the-fly results: {len(df_validation)} storms")
+        print(f"   Pre-computed results: {len(df_precomputed)} storms")
+
+        # Note: This might need adjustment based on the actual SID format in precomputed data
+        print(f"\n📊 Validation results:")
+        for _, row in df_validation.iterrows():
+            print(
+                f"   {row['sid']} (ATCF: {row['atcf_id']}): On-the-fly max roll2 = {row['onthefly_max_roll2']:.2f} mm"
+            )
+
+            # Use exact SID matching with pre-computed data
+            original_sid = row["sid"]
+            potential_match = df_precomputed[
+                df_precomputed["sid"] == original_sid
+            ]
+
+            if len(potential_match) > 0:
+                precomputed_val = potential_match.iloc[0]["q80_roll2"]
+                diff = abs(row["onthefly_max_roll2"] - precomputed_val)
+                print(
+                    f"     Pre-computed q80_roll2 = {precomputed_val:.2f} mm"
+                )
+                print(f"     Difference = {diff:.2f} mm")
+                print(f"     ✅ Exact SID match: {original_sid}")
+            else:
+                print(f"     ❌ No exact SID match found for: {original_sid}")
+
+    print(f"\n✅ Validation complete!")
+    print(
+        f"📋 Note: This is a basic validation. Full comparison would require:"
+    )
+    print(f"   - Exact SID matching between datasets")
+    print(f"   - Same date ranges and quantile calculations")
+    print(f"   - Processing all storms, not just a subset")
+else:
+    print(f"\n⚠️  No qualifying storms found in the sample. Try:")
+    print(f"   - Increasing the storm limit (currently 10)")
+    print(f"   - Using more recent data")
+    print(f"   - Checking the wind/ZMA thresholds")
+```
+
+
+```{python}
+import sys
+
+sys.path.append("..")
+
+from src.email.plotting import (
+    create_plot,
+    update_plots,
+    create_scatter_plot,
+    create_map_plot,
+    create_map_plot_figure,
+)
+from src.email.utils import (
+    add_test_row_to_monitoring,
+    TEST_FCAST_MONITOR_ID,
+    TEST_OBSV_MONITOR_ID,
+)
+from src.monitoring import monitoring_utils
+import pandas as pd
+```
+
+
+
+```{python}
+# | eval: false
+
+# this would be run 1x once the maps are perfect
+print("Creating test MAP plots using premade functions...")
+
+# Create map plot for test observation data
+try:
+    create_map_plot(TEST_OBSV_MONITOR_ID, fcast_obsv="obsv")
+    print("✅ Test observation map plot created successfully")
+except Exception as e:
+    print(f"❌ Error creating test observation map plot: {e}")
+    import traceback
+
+    traceback.print_exc()
+
+# Create map plot for test forecast data
+try:
+    create_map_plot(TEST_FCAST_MONITOR_ID, fcast_obsv="fcast")
+    print("✅ Test forecast map plot created successfully")
+except Exception as e:
+    print(f"❌ Error creating test forecast map plot: {e}")
+    import traceback
+
+    traceback.print_exc()
+```
+
+#### Scatter Plots (On Hold)
+
+Note: Scatter plots are temporarily on hold because they require a stats file (`stats_230km.csv`) that needs to be generated by a colleague first.
+
+## Preview Emails:
+
+Now that the plots have been made we can preview how the emails will look.
+
+```{python}
+
+from src.email.preview import preview_info_email
+
+print("🎯 Generating HTML email previews with test data...")
+
+# Generate forecast email preview with test data
+print("\\n📧 Creating FORECAST email preview with test data:")
+preview_info_email(
+    TEST_FCAST_MONITOR_ID, "fcast", save_to_file=True, with_tests=True
+)
+
+print("\\n📧 Creating OBSERVATION email preview with test data:")
+preview_info_email(
+    TEST_OBSV_MONITOR_ID, "obsv", save_to_file=True, with_tests=True
+)
+
+print("\\n✅ HTML preview files have been created!")
+print("\\n📂 Look for files named:")
+print("   - email_preview_TEST_FCAST_MONITOR_ID_fcast_info.html")
+print("   - email_preview_TEST_OBSV_MONITOR_ID_obsv_info.html")
+print(
+    "\\n🌐 Open these files in your browser to see how the emails will look!"
+)
+
+```
+
+# Create a map plot using a real monitor_id
+```{python}
+# Let's create a map plot using a real monitor_id from the actual data
+from src.email.utils import load_monitoring_data
+
+# Load real monitoring data to get a valid monitor_id
+print("📊 Loading real monitoring data to find a valid monitor_id...")
+df_fcast = load_monitoring_data("fcast", with_tests=False)
+
+# Get a recent monitor_id
+real_monitor_id = df_fcast["monitor_id"].iloc[0]
+print(f"🎯 Using real monitor_id: {real_monitor_id}")
+
+# Create map plot for this real monitor_id
+
+m1 = create_map_plot_figure(real_monitor_id, fcast_obsv="fcast")
+
+m1
+```
+
+## Set email_record.csv
+
+generate email_record with correct headers but no rows:
+
+```{python}
+import pandas as pd
+import ocha_stratus as stratus
+from src.constants import PROJECT_PREFIX
+
+print("📝 Creating empty email_record.csv file...")
+
+# Create empty DataFrame with correct column structure
+# Based on the email system usage: monitor_id, atcf_id, email_type
+empty_email_record = pd.DataFrame(columns=[
+    "monitor_id",
+    "atcf_id", 
+    "email_type"
+])
+
+print(f"📊 Empty email record structure:")
+print(f"   Columns: {list(empty_email_record.columns)}")
+print(f"   Shape: {empty_email_record.shape}")
+
+# Save to blob storage
+blob_name = f"{PROJECT_PREFIX}/email/email_record.csv"
+print(f"💾 Saving to blob: {blob_name}")
+
+try:
+    stratus.upload_csv_to_blob(empty_email_record, blob_name)
+    print("✅ Empty email_record.csv successfully created and uploaded to blob storage!")
+except Exception as e:
+    print(f"❌ Error uploading email record: {e}")
+
+# Verify the file was created by trying to load it
+try:
+    test_load = stratus.load_csv_from_blob(blob_name)
+    print(f"✅ Verification: Successfully loaded email_record.csv from blob")
+    print(f"   Loaded shape: {test_load.shape}")
+    print(f"   Loaded columns: {list(test_load.columns)}")
+except Exception as e:
+    print(f"⚠️  Verification failed: {e}")
+```
+
+
+```{python}
+from src.email import update_emails, utils
+```
+```{python}
+# | eval: false
+
+import traceback
+import os
+
+import pandas as pd
+import pytz
+
+from src.monitoring import monitoring_utils
+
+from src.utils import blob
+from src.constants import *
+from src.email import plotting
+```
+
+```{python, tc1}
+# | eval: false
+
+df_monitoring = monitoring_utils.load_existing_monitoring_points("fcast")
+```
+
+```{python, tc2}
+#| eval: false
+
+df_monitoring.iloc[-20:]
+```
+
+```{python}
+update_emails.update_fcast_info_emails(verbose=True)
+```
+
+```{python}
+update_emails.update_obsv_info_emails()
+```
+
+```{python}
+MIN_EMAIL_DISTANCE = 1000
+```
+
+```{python}
+df_existing_email_record = utils.load_email_record()
+df_existing_email_record
+```
+
+```python
+MONITOR_ID_TO_DROP = "al042024_fcast_2024-08-08T15:00:00"
+```
+
+```python
+df_existing_email_record = df_existing_email_record[
+    df_existing_email_record["monitor_id"] != MONITOR_ID_TO_DROP
+]
+df_existing_email_record
+```
+
+```python
+blob_name = f"{blob.PROJECT_PREFIX}/email/email_record.csv"
+blob.upload_csv_to_blob(blob_name, df_existing_email_record)
+```
+
+```python
+
+```

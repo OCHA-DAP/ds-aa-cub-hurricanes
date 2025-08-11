@@ -1,0 +1,384 @@
+# Cuba Hurricane Monitoring
+
+This module provides a modular, class-based approach to monitoring NHC (National Hurricane Center) hurricane tracks for Cuba. It includes optional rainfall processing (IMERG) with a clean, extensible architecture that supports multiple data sources.
+
+## Features
+
+- **Clean Class-Based Design**: Uses `CubaHurricaneMonitor` class for organized functionality
+- **NHC Data Focus**: Processes both observational and forecast hurricane tracks
+- **Rainfall Integration**: Optional IMERG rainfall processing for enhanced monitoring
+- **Modular Architecture**: Pluggable rainfall processors for different data sources
+- **Backfilling Support**: Can reprocess historical data with `clobber` parameter
+- **Distance Threshold Analysis**: Identifies tracks that pass within specified distance of Cuba
+- **Duplicate Handling**: Removes duplicate track entries intelligently
+- **Atlantic Basin Focus**: Filters for Atlantic basin storms relevant to Cuba
+
+## Files
+
+- `monitoring_utils.py`: Main monitoring class with modular rainfall processing
+- This notebook: Usage examples and documentation
+
+## Quick Start
+```{python}
+%load_ext jupyter_black
+%load_ext autoreload
+%autoreload 2
+```
+
+
+## New Method
+
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Initialize monitor with IMERG raster rainfall processing (80th percentile)
+monitor = create_cuba_hurricane_monitor(rainfall_source="raster")
+
+# Alternative: Original IMERG processing
+# monitor = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# Alternative: Wind-only monitoring (no rainfall)
+# monitor = create_cuba_hurricane_monitor(rainfall_source=None)
+```
+
+## Process Both Forecast and Observational Data
+
+```{python}
+# Process forecast data (wind-only)
+print("Processing forecast data...")
+df_fcast = monitor.prepare_monitoring_data("fcast", clobber=False)
+
+# Process observational data with raster-based rainfall analysis
+print("Processing observational data with raster rainfall...")
+
+# First, check what existing data we have
+df_existing = monitor._load_existing_monitoring("obsv")
+print(f"Existing observational data: {len(df_existing)} records")
+
+# IMPORTANT: Raster processing only processes storms that meet wind/distance criteria
+# This is by design for efficiency (expensive raster operations)
+# Only storms with wind ≥100kt AND distance <230km get processed
+print("Note: Raster processing only includes storms meeting wind (≥100kt) + distance (<230km) criteria")
+
+df_obsv = monitor.prepare_monitoring_data_with_raster("obsv", clobber=False, quantile=0.8)
+
+print(f"✓ Forecast records: {len(df_fcast)}")
+print(f"✓ Observational records (meeting criteria): {len(df_obsv)}")
+
+# For comparison, get ALL storms using wind-only processing
+print("\nFor comparison - ALL storms using wind-only processing:")
+df_obsv_all = monitor.prepare_monitoring_data("obsv", clobber=False)
+print(f"✓ All observational storms: {len(df_obsv_all)}")
+
+# Show summary of triggered storms
+if not df_obsv.empty:
+    triggered = df_obsv[df_obsv.get("obsv_trigger", False)]
+    print(f"✓ Storms that triggered observational criteria: {len(triggered)}")
+    
+    if len(triggered) > 0:
+        print("\nTriggered storms:")
+        for _, row in triggered.iterrows():
+            issue_time_str = row['issue_time'].strftime('%Y-%m-%d %H:%M')
+            print(f"  {row['atcf_id']} ({row['name']}) at {issue_time_str}: "
+                  f"wind={row['obsv_s']:.0f}kt, rain={row['obsv_p']:.1f}mm")
+    else:
+        print("No storms met trigger criteria")
+        
+        # Show some sample data to understand what we have
+        print(f"\nSample of available data (first 3 records):")
+        sample_cols = ['atcf_id', 'name', 'issue_time', 'obsv_trigger']
+        available_cols = [col for col in sample_cols if col in df_obsv.columns]
+        print(df_obsv[available_cols].head(3))
+else:
+    print("No storms met the wind/distance criteria for raster processing")
+    print("This is expected behavior - raster processing is selective for efficiency")
+
+if not df_fcast.empty:
+    # Check forecast triggers
+    action_triggered = df_fcast[df_fcast.get("action_trigger", False)]
+    readiness_triggered = df_fcast[df_fcast.get("readiness_trigger", False)]
+    print(f"✓ Action trigger forecasts: {len(action_triggered)}")
+    print(f"✓ Readiness trigger forecasts: {len(readiness_triggered)}")
+else:
+    print("No forecast data found")
+
+```{python}
+df_fcast = monitor.prepare_monitoring_data("fcast", clobber=False)
+
+# NEW: You can now specify date ranges for targeted analysis!
+# Option 1: Use from_date (original functionality)
+df_obsv = monitor.prepare_monitoring_data("obsv",
+    from_date="2025-07-01",
+    clobber=False)
+
+# Option 2: Use date_range for specific periods (NEW!)
+# Example: Focus on a specific month when you know there was activity
+df_september = monitor.prepare_monitoring_data("obsv",
+    date_range=("2024-07-01", "2024-07-30"),
+    clobber=False
+    )
+df_july = monitor.prepare_monitoring_data("obsv",
+    date_range=("2024-07-01", "2024-07-30"),
+    clobber=False
+    )
+
+df_july[df_july["status"]=="monitored"]
+
+n
+    # Filter out records where rainfall_relevant is "None"
+df_september_filtered = df_september[df_september["rainfall_relevant"] != "None"]
+
+obsv_tracks
+print(f"Forecast records: {len(df_fcast)}")
+print(f"Observational (from_date): {len(df_obsv)}")
+print(f"September 2024 only: {len(df_september)}")
+
+# Get the last date of observational data
+df_obsv.sort_values("issue_time", ascending=False)
+df_obsv[df_obsv["atcf_id"]=="al042024"]
+
+
+#  obsv_tracks = nhc.load_recent_glb_obsv()
+# obsv_tracks_sorted = obsv_tracks.sort_values('lastUpdate', ascending=False)
+
+```
+
+```{python}
+
+# a function that returns nhc observational tracks - give the distance
+# and the speed withing ZMA
+df_tracks = monitor.process_observational_tracks()
+df_tracks[df_tracks["min_dist"]<250]
+# If any breach of thresholds 
+```
+
+## Workflow to Update Data
+
+### Option 1: Using Raster IMERG (Recommended for Analysis)
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor with IMERG raster rainfall processing (80th percentile)
+monitor = create_cuba_hurricane_monitor(rainfall_source="imerg_raster")
+
+# Update monitoring data
+monitor.update_monitoring("obsv", clobber=False)
+monitor.update_monitoring("fcast", clobber=False)
+```
+
+### Option 2: Using Original IMERG (Faster Processing)
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor with original IMERG rainfall processing (zonal stats)
+monitor_original = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# Update monitoring data
+monitor_original.update_monitoring("obsv", clobber=False)
+monitor_original.update_monitoring("fcast", clobber=False)
+```
+
+### Option 3: Wind-Only Monitoring (No Rainfall)
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor without rainfall processing
+monitor_wind_only = create_cuba_hurricane_monitor(rainfall_source=None)
+
+# Update monitoring data (wind/distance only)
+monitor_wind_only.update_monitoring("obsv", clobber=False)
+monitor_wind_only.update_monitoring("fcast", clobber=False)
+```
+
+
+### Advanced Usage
+```{python}
+from src.monitoring.monitoring_utils import CubaHurricaneMonitor, IMERGRasterProcessor, IMERGProcessor
+
+# Direct instantiation with raster-based rainfall processor
+rainfall_processor = IMERGRasterProcessor(quantile=0.8)
+monitor = CubaHurricaneMonitor(rainfall_processor=rainfall_processor)
+
+# Alternative: Original IMERG processor
+# from src.monitoring.monitoring_utils import IMERGProcessor
+rainfall_processor = IMERGProcessor()
+monitor = CubaHurricaneMonitor(rainfall_processor=rainfall_processor)
+
+# Wind-only monitoring (no rainfall)
+monitor_wind_only = CubaHurricaneMonitor(rainfall_processor=None)
+```
+
+## Sub in IMERGRasterProcessor
+
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create monitor with new raster-based IMERG processing (80th percentile)
+monitor_raster = create_cuba_hurricane_monitor(
+    rainfall_source="imerg_raster", 
+    quantile=0.8
+)
+
+# Prepare data without saving for interactive inspection
+df_raster = monitor_raster.prepare_monitoring_data("obsv", clobber=False)
+
+print(f"Prepared {len(df_raster)} records using raster-based processing")
+print("\nFirst few records:")
+print(df_raster.head())
+
+print("\nData columns:")
+print(df_raster.columns.tolist())
+
+print("\nRainfall data summary:")
+if 'obsv_p' in df_raster.columns:
+    print(df_raster['obsv_p'].describe())
+```
+
+
+
+## Using the Original IMERG Processor
+
+The original IMERG processor uses pre-aggregated zonal statistics data rather than raster processing. This is faster but may be less precise than the raster-based approach.
+
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor, IMERGProcessor
+
+# Create monitor with original IMERG processor (uses zonal stats)
+monitor_original = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# Alternative: Direct instantiation
+# rainfall_processor = IMERGProcessor()
+# monitor_original = CubaHurricaneMonitor(rainfall_processor=rainfall_processor)
+
+# Process data with original IMERG
+df_original = monitor_original.prepare_monitoring_data("obsv", clobber=False)
+
+print(f"Original IMERG processor results: {len(df_original)} records")
+print("\nFirst few records:")
+print(df_original.head())
+
+if not df_original.empty and 'obsv_p' in df_original.columns:
+    print("\nRainfall data summary (original IMERG):")
+    print(df_original['obsv_p'].describe())
+```
+
+### Comparing Original vs Raster IMERG Processing
+
+```{python}
+from src.monitoring.monitoring_utils import create_cuba_hurricane_monitor
+
+# Create both types of monitors
+monitor_original = create_cuba_hurricane_monitor(rainfall_source="imerg")
+monitor_raster = create_cuba_hurricane_monitor(rainfall_source="imerg_raster")
+
+print("=== COMPARING ORIGINAL vs RASTER IMERG PROCESSING ===")
+
+# Process same time period with both processors
+from_date = "2024-07-01"  # Adjust as needed
+
+print(f"\nProcessing observational data from {from_date}...")
+
+# Original IMERG (zonal stats)
+df_original = monitor_original.prepare_monitoring_data(
+    "obsv", 
+    from_date=from_date, 
+    clobber=False
+)
+
+# Raster IMERG (quantile-based)
+df_raster = monitor_raster.prepare_monitoring_data(
+    "obsv", 
+    from_date=from_date, 
+    clobber=False
+)
+
+print(f"\nResults:")
+print(f"Original IMERG: {len(df_original)} records")
+print(f"Raster IMERG: {len(df_raster)} records")
+
+# Compare rainfall data if available
+if not df_original.empty and not df_raster.empty:
+    # Find storms present in both datasets
+    common_storms = set(df_original['atcf_id'].unique()) & set(df_raster['atcf_id'].unique())
+    
+    if common_storms:
+        print(f"\nCommon storms in both datasets: {len(common_storms)}")
+        
+        # Compare rainfall values for common storms
+        if 'obsv_p' in df_original.columns and 'obsv_p' in df_raster.columns:
+            comparison_data = []
+            
+            for storm_id in list(common_storms)[:5]:  # Show first 5 storms
+                orig_max = df_original[df_original['atcf_id'] == storm_id]['obsv_p'].max()
+                raster_max = df_raster[df_raster['atcf_id'] == storm_id]['obsv_p'].max()
+                
+                storm_name = df_original[df_original['atcf_id'] == storm_id]['name'].iloc[0]
+                
+                comparison_data.append({
+                    'storm_id': storm_id,
+                    'name': storm_name,
+                    'original_max_rainfall': orig_max,
+                    'raster_max_rainfall': raster_max,
+                    'difference': raster_max - orig_max if pd.notna(orig_max) and pd.notna(raster_max) else None
+                })
+            
+            import pandas as pd
+            comparison_df = pd.DataFrame(comparison_data)
+            print(f"\nRainfall comparison for sample storms:")
+            print(comparison_df.round(2))
+            
+            # Summary statistics
+            valid_comparisons = comparison_df.dropna(subset=['difference'])
+            if not valid_comparisons.empty:
+                print(f"\nSummary of differences (raster - original):")
+                print(f"Mean difference: {valid_comparisons['difference'].mean():.2f} mm")
+                print(f"Std difference: {valid_comparisons['difference'].std():.2f} mm")
+                print(f"Range: {valid_comparisons['difference'].min():.2f} to {valid_comparisons['difference'].max():.2f} mm")
+    else:
+        print("No common storms found between datasets")
+else:
+    print("One or both datasets are empty")
+```
+
+### When to Use Original vs Raster IMERG
+
+**Original IMERG Processor (`rainfall_source="imerg"`):**
+- ✅ **Faster processing** - Uses pre-computed zonal statistics
+- ✅ **Lower memory usage** - No raster data loading
+- ✅ **Simpler implementation** - Direct database queries
+- ❌ **Less spatial precision** - Based on country-level aggregation
+- ❌ **Limited customization** - Fixed aggregation method
+
+**Raster IMERG Processor (`rainfall_source="imerg_raster"`):**
+- ✅ **Higher spatial precision** - Pixel-level processing within Cuba boundary
+- ✅ **Customizable aggregation** - Adjustable quantile thresholds
+- ✅ **More accurate for extreme events** - Better captures localized heavy rainfall
+- ❌ **Slower processing** - Downloads and processes raster data
+- ❌ **Higher memory usage** - Loads large raster datasets
+
+```{python}
+# Example: Choose processor based on your needs
+
+# For rapid operational monitoring (speed priority):
+monitor_fast = create_cuba_hurricane_monitor(rainfall_source="imerg")
+
+# For detailed analysis (accuracy priority):
+monitor_detailed = create_cuba_hurricane_monitor(
+    rainfall_source="imerg_raster", 
+    quantile=0.8  # 80th percentile threshold
+)
+
+# For research with extreme rainfall focus:
+monitor_extreme = create_cuba_hurricane_monitor(
+    rainfall_source="imerg_raster", 
+    quantile=0.95  # 95th percentile threshold
+)
+
+print("Processor selection complete")
+print("- monitor_fast: Original IMERG (zonal stats)")
+print("- monitor_detailed: Raster IMERG (80th percentile)")
+print("- monitor_extreme: Raster IMERG (95th percentile)")
+```
+
+
+

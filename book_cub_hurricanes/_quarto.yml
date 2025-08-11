@@ -1,7 +1,8 @@
 project:
   type: book
 
-jupyter: ds-aa-cub-hurricanes
+jupyter:
+  kernel: ds-aa-cub-hurricanes
 
 book:
   title: "Anticipatory Action - Cuba Hurricanes"
@@ -20,6 +21,7 @@ book:
     - chirps_gefs.qmd
     - chirps_gefs_raster_processing.qmd
     - summary.qmd
+    - appendix_check_quantile_calc.qmd
     - references.qmd
 
 bibliography: references.bib
