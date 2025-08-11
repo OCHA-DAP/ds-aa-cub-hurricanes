@@ -65,7 +65,7 @@ D_THRESH = 230
 THRESHS = {
     "readiness": {"s": 120, "lt_days": 5},
     "action": {"s": 120, "lt_days": 3},
-    "obsv": {"p": 98.2, "s": 105},  # NEED TO UPDATE FOR PROD
+    "obsv": {"p": 96.2, "s": 105},  # NEED TO UPDATE FOR PROD
 }
 
 MIN_EMAIL_DISTANCE = 1000
