@@ -51,6 +51,12 @@ df_ibtracs = stratus.load_parquet_from_blob(blob_name)
 ```
 
 ```python
+iso3 = "cub"
+iso3_upper = iso3.upper()
+f"https://data.worldpop.org/GIS/Population/Global_2000_2020_1km_UNadj/2020/{iso3_upper}/{iso3}_ppp_2020_1km_Aggregated_UNadj.tif"
+```
+
+```python
 df_agg_zma = (
     df_ibtracs.groupby("sid")
     .agg(
