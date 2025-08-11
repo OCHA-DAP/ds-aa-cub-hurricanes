@@ -1,13 +1,10 @@
----
-title: index
----
-
 # Preface {.unnumbered}
 
-This is a Quarto book.
+This book documents the technical analysis conducted to develop an anticipatory action (AA) framework for hurricane response in Cuba. The analysis centers on identifying optimal trigger combinations that balance forecast-based early action with observational confirmation, targeting a 3.7-year return period to ensure appropriate activation frequency while maximizing humanitarian impact.
 
-To learn more about Quarto books visit <https://quarto.org/docs/books>.
+The core methodology involves systematic optimization of trigger parameters across multiple dimensions: wind speed thresholds for storms within Cuba's Zone of Maximum Attention (ZMA), rainfall aggregation methods (mean and various quantiles), and rainfall thresholds based on two-day precipitation sums. The analysis integrates historical storm track data from IBTrACS, satellite rainfall observations from IMERG, forecast data from CHIRPS-GEFS, and humanitarian impact records from EM-DAT and CERF funding databases covering the period 2000-2024.
 
-```{python}
-1 + 1
-```
+The optimization process evaluates millions of trigger combinations to identify those that would have captured the most impactful historical events while maintaining the target return period. Key outputs include detailed comparisons of balanced trigger approaches (equal forecast and observational activation), high-impact combinations (maximizing affected populations), and high-CERF combinations (maximizing historical funding capture), providing evidence-based options for AA framework implementation.
+
+The analysis supports AA framework development by providing quantitative evidence for trigger threshold selection, demonstrating the trade-offs between different approaches, and offering detailed visualizations of how specific trigger combinations would have performed historically. This technical foundation enables informed decision-making about trigger design and helps ensure the AA framework effectively balances early action capabilities with appropriate activation frequency.
+

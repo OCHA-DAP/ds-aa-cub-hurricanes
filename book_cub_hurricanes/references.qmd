@@ -5,4 +5,5 @@ title: references
 # References {.unnumbered}
 
 ::: {#refs}
+<!-- References will be automatically inserted here -->
 :::

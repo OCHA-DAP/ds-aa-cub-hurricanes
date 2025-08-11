@@ -1,7 +1,8 @@
 project:
   type: book
 
-jupyter: ds-aa-cub-hurricanes
+jupyter:
+  kernel: ds-aa-cub-hurricanes
 
 book:
   title: "Anticipatory Action - Cuba Hurricanes"
@@ -13,11 +14,14 @@ book:
     - zma.qmd
     - ibtracs.qmd
     - imerg.qmd
-    - chirps_gefs.qmd
     - combine_imerg_ibtracs.qmd
     - plot_optimization.qmd
     - era5_soil_moisture.qmd
+    - threestage_trig_plot.qmd
+    - chirps_gefs.qmd
+    - chirps_gefs_raster_processing.qmd
     - summary.qmd
+    - appendix_check_quantile_calc.qmd
     - references.qmd
 
 bibliography: references.bib
