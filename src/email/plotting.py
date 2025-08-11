@@ -326,7 +326,7 @@ def create_2d_plot(stats, monitoring_point):
     rain_col = "q80_roll2"
     s_thresh = THRESHS["obsv"]["s"]
     rain_thresh = THRESHS["obsv"]["p"]
-    rain_ymax = 190
+    rain_ymax = 270
     rain_source_str = "IMERG"
     fcast_obsv_es = "observaciones"
     no_pass_text = "no ha pasado"
