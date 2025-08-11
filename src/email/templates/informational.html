@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="font-size:10px;padding: 6px 10px 6px 10px;background-color:#CCCCCC;color:#FFFFFF">
+  <p style="margin:0;">
+    Este email es puramente informativo y no sirve como aviso oficial para el marco de acción anticipatoria. Los avisos
+    oficiales de activación son enviados por otro email. Este email tampoco constituye un pronóstico oficial. El <a
+      href="https://www.insmet.cu/">Comunicado de actividad ciclónica</a> publicado por el Instituto de Meteorología de
+    Cuba es la fuente oficial para información local. En el marco del Programa de Ciclones Tropicales de la Organización
+    Meteorológica Mundial, RSMC Miami, gestionado por el Centro Nacional de Huracanes de NOAA, está encargado de
+    monitorear los ciclones tropicales en la región; <a href="https://www.nhc.noaa.gov/cyclones/">sus pronósticos de
+      ciclones</a> son autoritativos.
+  </p>
+</div>
+<div>
+  <p>Estimados colegas,</p>
+  <p>
+    Las {{ fcast_obsv }}s para {{ name }} de {{ pub_time }}, {{ pub_date }} (hora local Cuba) acaban de ser emitidas por
+    el Centro Nacional de Huracanes de NOAA, operador del Centro Meteorológico Regional Especializado (RSMC) Miami
+
+    {% if fcast_obsv == "pronóstico" %}
+    .
+    {% elif fcast_obsv == "observación" %}
+    , y por NASA (IMERG).
+    {% endif %}
+  </p>
+  <p>
+    {% if fcast_obsv == "pronóstico" %}
+    Activador de preparación : <b>{{ readiness }}</b><br>
+    Activador de acción : <b>{{ action }}</b>
+    {% else %}
+    Activador observacional : <b>{{ obsv }}</b>
+    {% endif %}
+  </p>
+  <p>
+    Un mapa de las {{ fcast_obsv }}s se presenta a continuación.
+  </p>
+  <img src="cid:{{ map_cid }}" width="600" />
+  <p>
+    Un gráfico comparando estas {{ fcast_obsv }}s con ciclones históricos se presenta a continuación.
+  </p>
+  <img src="cid:{{ scatter_cid }}" width="600" />
+
+  <p>
+    El código utilizado para producir esta alerta está disponible en GitHub <a
+      href="https://github.com/OCHA-DAP/ds-aa-cub-hurricanes">aquí</a>.
+  </p>
+  <p>Saludos cordiales,</p>
+  <p>Centro de Datos Humanitarios OCHA</p>
+</div>
+{% endblock content %}

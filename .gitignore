@@ -15,7 +15,11 @@ __pycache__
 temp
 .Rproj.user
 
-*.png
+
+book_cub_hurricanes/**/*.png
 
 book_cub_hurricanes/_book/*
 book_cub_hurricanes/_freeze/*
+
+scrap_copilot/*
+src/haiti_email/*
