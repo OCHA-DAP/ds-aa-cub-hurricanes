@@ -489,9 +489,6 @@ def create_2d_plot(stats, monitoring_point):
 
 def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     # Check if statistics file exists first, before loading data
-    blob_name = (
-        f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
-    )
     blob_name = f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_stats.parquet"
 
     try:
