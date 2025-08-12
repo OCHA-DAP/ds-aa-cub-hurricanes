@@ -1,3 +1,33 @@
+"""
+NOTE FOR ANALYSTS: Environment variable testing pattern
+Uncomment the block below to test FORCE_ALERT functionality locally
+This patches the environment to simulate alert conditions without modifying global env vars
+
+Usage:
+1. Uncomment the entire block below
+2. Run in notebook/script to test alert functionality
+3. Expected outputs are marked with comments
+
+from unittest.mock import patch
+import importlib
+import os
+
+with patch.dict(os.environ, {"FORCE_ALERT": "true"}):
+    import src.constants
+    importlib.reload(src.constants)
+
+    print("env var:", os.getenv("FORCE_ALERT"))                  # Should print: true
+    print("reloaded:", src.constants.FORCE_ALERT)                # Should print: True ✅
+
+    from src.email import utils
+    importlib.reload(utils)  # must reload downstream module that imported it
+    from src.email.utils import (
+        load_monitoring_data,
+        open_static_image,
+        create_dummy_storm_tracks)
+    df_monitoring = utils.load_monitoring_data("obsv")
+"""
+
 import io
 import json
 from typing import Literal
@@ -7,6 +37,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytz
 from matplotlib import pyplot as plt
+import ocha_stratus as stratus
 
 from src.constants import (
     CERF_SIDS,
@@ -25,7 +56,6 @@ from src.email.utils import (
     open_static_image,
     create_dummy_storm_tracks,
 )
-import ocha_stratus as stratus
 
 
 def get_plot_blob_name(monitor_id, plot_type: Literal["map", "scatter"]):
@@ -189,7 +219,7 @@ def create_1d_plot(stats, monitoring_point):
     y_positions = np.random.normal(0.5, 0.1, len(stats))
 
     ax.scatter(
-        stats["wind_speed_max"],
+        stats["wind_plot"],
         y_positions,
         s=stats["marker_size"],
         c=stats["color"],
@@ -203,7 +233,7 @@ def create_1d_plot(stats, monitoring_point):
     ):
         ax.annotate(
             txt.capitalize(),
-            (stats["wind_speed_max"][j] + 0.5, y_positions[j]),
+            (stats["wind_plot"][j] + 0.5, y_positions[j]),
             ha="left",
             va="center",
             fontsize=7,
@@ -343,7 +373,7 @@ def create_2d_plot(stats, monitoring_point):
     fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
 
     ax.scatter(
-        stats["wind_speed_max"],
+        stats["wind_plot"],
         stats[rain_col],
         s=stats["marker_size"],
         c=stats["color"],
@@ -356,7 +386,7 @@ def create_2d_plot(stats, monitoring_point):
     ):
         ax.annotate(
             txt.capitalize(),
-            (stats["wind_speed_max"][j] + 0.5, stats[rain_col][j]),
+            (stats["wind_plot"][j] + 0.5, stats[rain_col][j]),
             ha="left",
             va="center",
             fontsize=7,
@@ -390,9 +420,9 @@ def create_2d_plot(stats, monitoring_point):
     ax.axvline(x=s_thresh, color="lightgray", linewidth=0.5)
     ax.axhline(y=rain_thresh, color="lightgray", linewidth=0.5)
     ax.fill_between(
-        np.arange(s_thresh, 200, 1),
+        np.arange(s_thresh, rain_ymax, 1),
         rain_thresh,
-        200,
+        rain_ymax,
         color="gold",
         alpha=0.2,
         zorder=-1,
@@ -462,6 +492,7 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     blob_name = (
         f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"
     )
+    blob_name = f"{PROJECT_PREFIX}/processed/fcast_obsv_combined_stats.parquet"
 
     try:
         stats = stratus.load_parquet_from_blob(blob_name)
@@ -473,21 +504,26 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     df_monitoring = load_monitoring_data(fcast_obsv)
     monitoring_point = df_monitoring.set_index("monitor_id").loc[monitor_id]
 
-    # Process stats data (common for both plot types)
-    stats["color"] = stats["cerf_str"].apply(
-        lambda x: "red" if x == "True" else "blue"
-    )
+    stats["color"] = stats["cerf"].apply(lambda x: "crimson" if x else "grey")
+    # stats["color"] = stats["cerf_str"].apply(
+    #     lambda x: "red" if x == "True" else "blue"
+    # )
+
     stats.rename(
         columns={"Total Affected": "affected_population"}, inplace=True
     )
-    stats["year"] = stats["valid_time_min"].dt.year
+    # stats.columns
+    # # stats["year"] = stats["valid_time_min"].dt.year
     stats["marker_size"] = stats["affected_population"] / 6e2
     stats["marker_size"] = stats["marker_size"].fillna(1)
 
     # Create plot based on fcast_obsv type
     if fcast_obsv == "fcast":
+        stats["wind_plot"] = stats["wind"]
         fig, ax = create_1d_plot(stats, monitoring_point)
     else:
+        stats["wind_plot"] = stats["wind_obsv"]
+        stats["q80_roll2"] = stats["q80_obsv"]
         fig, ax = create_2d_plot(stats, monitoring_point)
 
     # Common save logic
