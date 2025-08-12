@@ -386,7 +386,7 @@ class ChirpsGefsLoader:
                             "leadtime": [leadtime],
                         }
                     )
-                    
+
                     # CRITICAL: Rechunk after expand_dims to prevent
                     # chunk multiplication
                     if chunks:
@@ -410,31 +410,32 @@ class ChirpsGefsLoader:
         # OPTIMIZED: Single concat with chunk warning suppression
         # The "Increasing number of chunks" warning is cosmetic for our
         # use case - performance is actually good with our chunking strategy
-        
+
         # Sort arrays by issue_date, then leadtime for consistent structure
         lazy_arrays.sort(
             key=lambda x: (x.issue_date.values[0], x.leadtime.values[0])
         )
-        
+
         # Suppress the specific dask chunk multiplication warning
         # This warning appears because xarray creates coordinate chunks
         # for each new dimension added by expand_dims, but our actual
         # performance is optimal with the full spatial chunks we use
         import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
                 message=".*Increasing number of chunks.*",
-                category=UserWarning
+                category=UserWarning,
             )
-            
+
             # Single concat operation along forecast_time dimension
             combined_ds = xr.concat(lazy_arrays, dim="forecast_time")
-        
+
         # Apply final consistent chunking
         if chunks:
             combined_ds = combined_ds.chunk(chunks)
-        
+
         final_ds = combined_ds
 
         # Convert to Dataset if needed
@@ -445,7 +446,7 @@ class ChirpsGefsLoader:
         final_ds.attrs.update(
             {
                 "title": f"CHIRPS GEFS forecasts for "
-                         f"{self.config.region_name}",
+                f"{self.config.region_name}",
                 "source": "CHIRPS-GEFS v12",
                 "region": self.config.region_name,
                 "date_range": f"{start_date} to {end_date}"[0:70],
@@ -462,40 +463,42 @@ class ChirpsGefsLoader:
         return final_ds
 
 
-def load_cog_stack_optimized(container_client, blob_paths_with_coords,
-                             chunks=None, logger=None):
+def load_cog_stack_optimized(
+    container_client, blob_paths_with_coords, chunks=None, logger=None
+):
     """
     Load COG stack from Azure Blob Storage with optimized chunking.
-    
+
     Avoids dask chunk multiplication warnings by:
     1. Loading all COGs with consistent chunking from the start
     2. Using xr.open_mfdataset for efficient multi-file handling
     3. Avoiding multiple expand_dims operations that fragment chunks
-    
+
     Args:
         container_client: Azure ContainerClient from stratus.azure_blob
         blob_paths_with_coords: List of tuples
             (blob_path, issue_date, valid_date, leadtime)
         chunks: Chunk specification for dask arrays
         logger: Optional logger instance
-        
+
     Returns:
         xarray.Dataset: Optimized dataset with proper coordinate structure
     """
     import tempfile
     import os
     from contextlib import contextmanager
-    
+
     if logger is None:
         import logging
+
         logger = logging.getLogger(__name__)
-    
+
     @contextmanager
     def temp_cog_files(container_client, blob_paths):
         """Context manager to create temporary COG files from blob."""
         temp_files = []
         temp_dir = tempfile.mkdtemp()
-        
+
         try:
             for i, (blob_path, issue_date, valid_date, leadtime) in enumerate(
                 blob_paths
@@ -504,49 +507,50 @@ def load_cog_stack_optimized(container_client, blob_paths_with_coords,
                     # Download blob data
                     blob_client = container_client.get_blob_client(blob_path)
                     blob_data = blob_client.download_blob().readall()
-                    
+
                     # Create temporary file
-                    temp_file = os.path.join(
-                        temp_dir, f"temp_cog_{i:03d}.tif"
-                    )
-                    with open(temp_file, 'wb') as f:
+                    temp_file = os.path.join(temp_dir, f"temp_cog_{i:03d}.tif")
+                    with open(temp_file, "wb") as f:
                         f.write(blob_data)
-                    
+
                     temp_files.append(
                         (temp_file, issue_date, valid_date, leadtime)
                     )
-                    
+
                 except Exception as e:
                     logger.debug(f"Could not download {blob_path}: {e}")
                     continue
-            
+
             yield temp_files
-            
+
         finally:
             # Clean up temporary files
             import shutil
+
             try:
                 shutil.rmtree(temp_dir)
             except Exception:
                 pass
-    
+
     # Use temporary files approach for efficient multi-file loading
-    with temp_cog_files(container_client, blob_paths_with_coords) as temp_files:
+    with temp_cog_files(
+        container_client, blob_paths_with_coords
+    ) as temp_files:
         if not temp_files:
             return xr.Dataset()
-        
+
         # Create coordinate arrays for all files at once
         issue_dates = []
         valid_dates = []
         leadtimes = []
         file_paths = []
-        
+
         for temp_file, issue_date, valid_date, leadtime in temp_files:
             file_paths.append(temp_file)
             issue_dates.append(issue_date)
             valid_dates.append(valid_date)
             leadtimes.append(leadtime)
-        
+
         # Use xr.open_mfdataset for optimized multi-file loading
         # This avoids the chunk multiplication issues
         try:
@@ -556,67 +560,71 @@ def load_cog_stack_optimized(container_client, blob_paths_with_coords,
                 concat_dim="time",
                 combine="nested",
                 engine="rasterio",
-                decode_coords="all"
+                decode_coords="all",
             )
-            
+
             # Add coordinate information efficiently
-            ds = ds.assign_coords({
-                "issue_date": ("time", issue_dates),
-                "valid_date": ("time", valid_dates),
-                "leadtime": ("time", leadtimes)
-            })
-            
+            ds = ds.assign_coords(
+                {
+                    "issue_date": ("time", issue_dates),
+                    "valid_date": ("time", valid_dates),
+                    "leadtime": ("time", leadtimes),
+                }
+            )
+
             # Rename time dimension for clarity
             ds = ds.rename({"time": "forecast_time"})
-            
+
             # Convert to Dataset with proper variable name
-            if hasattr(ds, 'band_data'):
+            if hasattr(ds, "band_data"):
                 ds = ds.rename({"band_data": "precipitation"})
             elif len(ds.data_vars) == 1:
                 var_name = list(ds.data_vars)[0]
                 ds = ds.rename({var_name: "precipitation"})
-            
+
             return ds
-            
+
         except Exception as e:
             logger.warning(
                 f"xr.open_mfdataset failed: {e}, "
                 f"falling back to individual loading"
             )
-            
+
             # Fallback: individual file loading if multi-file fails
             arrays = []
             for temp_file, issue_date, valid_date, leadtime in temp_files:
                 try:
                     da = rxr.open_rasterio(temp_file, chunks=chunks)
                     da = da.squeeze(drop=True)
-                    
+
                     # Add coordinates without expand_dims to avoid
                     # chunking issues
-                    da = da.assign_coords({
-                        "issue_date": issue_date,
-                        "valid_date": valid_date,
-                        "leadtime": leadtime
-                    })
-                    
+                    da = da.assign_coords(
+                        {
+                            "issue_date": issue_date,
+                            "valid_date": valid_date,
+                            "leadtime": leadtime,
+                        }
+                    )
+
                     arrays.append(da)
-                    
+
                 except Exception as e:
                     logger.debug(f"Could not load {temp_file}: {e}")
                     continue
-            
+
             if arrays:
                 # Single concat operation with consistent chunking
                 combined = xr.concat(arrays, dim="forecast_time")
-                
+
                 # Apply consistent chunking to final result
                 if chunks:
                     combined = combined.chunk(chunks)
-                
+
                 # Convert to Dataset
                 if isinstance(combined, xr.DataArray):
                     combined = combined.to_dataset(name="precipitation")
-                
+
                 return combined
             else:
                 return xr.Dataset()
@@ -1145,7 +1153,6 @@ def process_chirps_gefs_for_region(
     """
     manager = ChirpsGefsManager(geometry, region_name, **config_kwargs)
     return manager.run_full_pipeline(download_recent_only=recent_only)
-
 
 
 def load_processed_chirps_gefs(variable_name: str = None):
