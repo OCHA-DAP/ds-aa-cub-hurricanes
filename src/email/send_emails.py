@@ -45,10 +45,18 @@ def prepare_email_data(
     issue_time_cuba = issue_time.astimezone(cuba_tz)
     pub_time = issue_time_cuba.strftime("%Hh%M")
     pub_date = issue_time_cuba.strftime("%-d %b %Y")
+
+    day = issue_time_cuba.strftime("%-d")
+    month = issue_time_cuba.strftime("%B")
+    year = issue_time_cuba.strftime("%Y")
+    time = issue_time_cuba.strftime("%Hh%M")
+
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
     activation_subject = "(SIN ACTIVACIÓN)"
+
+    pub_datetime_txt = f"{day} de {month} {year} a las {time}"
 
     if fcast_obsv == "fcast":
         readiness = (
@@ -71,6 +79,7 @@ def prepare_email_data(
         "cyclone_name": cyclone_name,
         "pub_time": pub_time,
         "pub_date": pub_date,
+        "pub_datetime_txt": pub_datetime_txt,
         "fcast_obsv_es": fcast_obsv_es,
         "activation_subject": activation_subject,
         "readiness": readiness,
