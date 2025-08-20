@@ -120,7 +120,7 @@ def create_info_email_content(
         f"{test_subject}Acción anticipatoria Cuba – información sobre "
         f"{email_data['fcast_obsv_es']} {email_data['cyclone_name']} "
         f"{email_data['pub_time']}, {email_data['pub_date']} "
-        f"{email_data['activation_subject']}"
+        # f"{email_data['activation_subject']}"
     )
 
     if for_preview:
