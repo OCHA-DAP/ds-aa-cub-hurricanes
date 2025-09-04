@@ -85,6 +85,7 @@ def prepare_email_data(
         "readiness": readiness,
         "action": action,
         "obsv": obsv,
+        "show_scatter_plot": False,  # Set to True to show the scatter plot
     }
 
 
@@ -279,13 +280,13 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":
         trigger_name_es = "preparación"
-        trigger_type_subj = "ALISTAMIENTO"
+        trigger_type_subj = "de ALISTAMIENTO"
     elif trigger_name == "action":
         trigger_name_es = "acción"
-        trigger_type_subj = trigger_name_es
+        trigger_type_subj = "de ACCIÓN"
     else:
         trigger_name_es = "observacional"
-        trigger_type_subj = trigger_name_es
+        trigger_type_subj = trigger_name_es.upper()
 
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
 
@@ -317,9 +318,8 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     msg = EmailMessage()
     msg.set_charset("utf-8")
     msg["Subject"] = (
-        f"{test_subject}Acción anticipatoria Cuba – "
-        f"Desencadenante de {trigger_type_subj} alcanzado para "
-        f"{cyclone_name}"
+        f"{test_subject}Acción anticipatoria Cuba – Disparador "
+        f"{trigger_type_subj} alcanzado"
     )
     msg["From"] = Address(
         "Centro de Datos Humanitarios OCHA",
