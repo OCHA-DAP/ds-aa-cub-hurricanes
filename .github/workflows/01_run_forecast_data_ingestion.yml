@@ -36,7 +36,7 @@ jobs:
       DSCI_AWS_EMAIL_PASSWORD: ${{ secrets.DSCI_AWS_EMAIL_PASSWORD }}
       DSCI_AWS_EMAIL_USERNAME: ${{ secrets.DSCI_AWS_EMAIL_USERNAME }}
       DSCI_AWS_EMAIL_ADDRESS: ${{ secrets.DSCI_AWS_EMAIL_ADDRESS }}
-      TEST_EMAIL: ${{ inputs.TEST_EMAIL || 'true' }}
+      TEST_EMAIL: ${{ inputs.TEST_EMAIL || 'falseq' }}
       DRY_RUN: ${{ inputs.DRY_RUN || 'false' }}
       FORCE_ALERT: ${{ inputs.FORCE_ALERT || 'false' }}
 
