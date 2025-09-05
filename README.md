@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/OCHA-DAP/ds-aa-cub-hurricanes/branch/main/graph/badge.svg)](https://codecov.io/gh/OCHA-DAP/ds-aa-cub-hurricanes)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![Status](https://img.shields.io/badge/status-under%20development-orange.svg)](https://github.com/OCHA-DAP/ds-aa-cub-hurricanes)
+[![Generic badge](https://img.shields.io/badge/STATUS-ENDORSED-%231EBFB3)](https://shields.io/)
 
 Analysis for Cuba Hurricanes Anticipatory Action framework.
 
