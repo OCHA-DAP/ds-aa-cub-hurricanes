@@ -14,7 +14,7 @@
 <div>
   <p>Estimados colegas,</p>
   <p>
-    Los {{ fcast_obsv }}s para {{ name }} del {{ pub_time }}, {{ pub_date }} (hora local Cuba), acaban de ser emitidos
+    Los {{ fcast_obsv }}s para {{ name }} del {{pub_datetime_txt}} (hora local Cuba), acaban de ser emitidos
     por
     el Centro Nacional de Huracanes de la NOAA, operador del Centro Meteorológico Regional Especializado (RSMC) de Miami
 
@@ -36,10 +36,12 @@
     Un mapa de los {{ fcast_obsv }}s se presenta a continuación.
   </p>
   <img src="cid:{{ map_cid }}" width="600" />
+  {% if show_scatter_plot %}
   <p>
     Un gráfico comparando estas {{ fcast_obsv }}s con ciclones históricos se presenta a continuación.
   </p>
   <img src="cid:{{ scatter_cid }}" width="600" />
+  {% endif %}
   <p>Este email es puramente informativo y no sirve como aviso oficial para el marco de acción anticipatoria. Los avisos
     oficiales de activación son enviados en otro email.
   </p>

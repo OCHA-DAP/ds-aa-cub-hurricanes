@@ -45,10 +45,18 @@ def prepare_email_data(
     issue_time_cuba = issue_time.astimezone(cuba_tz)
     pub_time = issue_time_cuba.strftime("%Hh%M")
     pub_date = issue_time_cuba.strftime("%-d %b %Y")
+
+    day = issue_time_cuba.strftime("%-d")
+    month = issue_time_cuba.strftime("%B")
+    year = issue_time_cuba.strftime("%Y")
+    time = issue_time_cuba.strftime("%Hh%M")
+
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
     activation_subject = "(SIN ACTIVACIÓN)"
+
+    pub_datetime_txt = f"{day} de {month} {year} a las {time}"
 
     if fcast_obsv == "fcast":
         readiness = (
@@ -71,11 +79,13 @@ def prepare_email_data(
         "cyclone_name": cyclone_name,
         "pub_time": pub_time,
         "pub_date": pub_date,
+        "pub_datetime_txt": pub_datetime_txt,
         "fcast_obsv_es": fcast_obsv_es,
         "activation_subject": activation_subject,
         "readiness": readiness,
         "action": action,
         "obsv": obsv,
+        "show_scatter_plot": False,  # Set to True to show the scatter plot
     }
 
 
@@ -120,7 +130,7 @@ def create_info_email_content(
         f"{test_subject}Acción anticipatoria Cuba – información sobre "
         f"{email_data['fcast_obsv_es']} {email_data['cyclone_name']} "
         f"{email_data['pub_time']}, {email_data['pub_date']} "
-        f"{email_data['activation_subject']}"
+        # f"{email_data['activation_subject']}"
     )
 
     if for_preview:
@@ -270,13 +280,13 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":
         trigger_name_es = "preparación"
-        trigger_type_subj = "ALISTAMIENTO"
+        trigger_type_subj = "de ALISTAMIENTO"
     elif trigger_name == "action":
         trigger_name_es = "acción"
-        trigger_type_subj = trigger_name_es
+        trigger_type_subj = "de ACCIÓN"
     else:
         trigger_name_es = "observacional"
-        trigger_type_subj = trigger_name_es
+        trigger_type_subj = trigger_name_es.upper()
 
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
 
@@ -308,9 +318,8 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     msg = EmailMessage()
     msg.set_charset("utf-8")
     msg["Subject"] = (
-        f"{test_subject}Acción anticipatoria Cuba – "
-        f"Desencadenante de {trigger_type_subj} alcanzado para "
-        f"{cyclone_name}"
+        f"{test_subject}Acción anticipatoria Cuba – Disparador "
+        f"{trigger_type_subj} alcanzado"
     )
     msg["From"] = Address(
         "Centro de Datos Humanitarios OCHA",
