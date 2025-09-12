@@ -26,8 +26,8 @@
   </p>
   <p>
     {% if fcast_obsv == "pronóstico" %}
-    Activador de alistamiento : <b>{{ readiness }}</b><br>
-    Activador de acción : <b>{{ action }}</b>
+    Disparador de alistamiento : <b>{{ readiness }}</b><br>
+    Disparador de acción : <b>{{ action }}</b>
     {% else %}
     Activador observacional : <b>{{ obsv }}</b>
     {% endif %}
@@ -83,8 +83,8 @@
   </p>
   <p>
     {% if fcast_obsv_en == "forecast" %}
-    Readiness trigger: <b>{{ readiness_en }}</b><br>
-    Action trigger: <b>{{ action_en }}</b>
+    Readiness threshold: <b>{{ readiness_en }}</b><br>
+    Action threshold: <b>{{ action_en }}</b>
     {% else %}
     Observational trigger: <b>{{ obsv_en }}</b>
     {% endif %}
