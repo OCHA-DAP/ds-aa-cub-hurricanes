@@ -60,19 +60,21 @@ def prepare_email_data(
 
     if fcast_obsv == "fcast":
         readiness = (
-            "ACTIVADO"
+            "ALCANZADO"
             if monitoring_point["readiness_trigger"]
-            else "NO ACTIVADO"
+            else "NO ALCANZADO"
         )
         action = (
-            "ACTIVADO" if monitoring_point["action_trigger"] else "NO ACTIVADO"
+            "ALCANZADO"
+            if monitoring_point["action_trigger"]
+            else "NO ALCANZADO"
         )
         obsv = ""
     else:
         readiness = ""
         action = ""
         obsv = (
-            "ACTIVADO" if monitoring_point["obsv_trigger"] else "NO ACTIVADO"
+            "ALCANZADO" if monitoring_point["obsv_trigger"] else "NO ALCANZADO"
         )
 
     return {
