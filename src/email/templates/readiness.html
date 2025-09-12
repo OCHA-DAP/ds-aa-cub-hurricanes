@@ -8,7 +8,7 @@
     Estimados/as colegas de OCHA ROLAC,
   </p>
   <p>Queremos informarles que se ha alcanzado el disparador de alistamiento del marco colectivo de acción anticipatoria
-    para huracanes en Cuba, conforme al pronóstico a 72 horas emitido a las {{ pub_time }}, {{ pub_date }} (hora local
+    para huracanes en Cuba, conforme al pronóstico a 120 horas emitido a las {{ pub_time }}, {{ pub_date }} (hora local
     de Cuba) por el Centro Nacional de Huracanes de NOAA.</p>
 
   <p>Se proporcionarán actualizaciones adicionales según corresponda.</p>
@@ -22,3 +22,26 @@
   </p>
 </div>
 {% endblock content %}
+
+{% block content_en %}
+<div>
+  <p>
+    Dear national authorities,<br>
+    Dear Resident Coordinator,<br>
+    Dear OCHA ROLAC colleagues,
+  </p>
+  <p>We want to inform you that the readiness trigger of the collective anticipatory action framework for hurricanes in
+    Cuba has been reached, according to the 120-hour forecast issued at {{ pub_time }}, {{ pub_date_en }} (Cuba local
+    time) by the NOAA National Hurricane Center.</p>
+
+  <p>Additional updates will be provided as appropriate.</p>
+
+  <p>Thank you for your continued commitment to anticipatory action.</p>
+  <p>
+    Sincerely,
+  </p>
+  <p>
+    OCHA Centre for Humanitarian Data
+  </p>
+</div>
+{% endblock content_en %}

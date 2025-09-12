@@ -114,27 +114,62 @@
                 </tr>
               </table>
               <div id="phl-typhoon-monitoring" class="section level1">
-                <h1>Cuba : seguimiento de huracanes</h1>
-                <div style="font-size:10px;padding: 6px 10px 6px 10px;background-color:#CCCCCC;color:#FFFFFF">
-                  <p style="margin:0;">
-                    Este es un mensaje automatizado producido por el Centro de Datos Humanitarios de OCHA para el <a
-                      href="https://reliefweb.int/report/fiji/fiji-tropical-cyclones-2023-anticipatory-action-framework">marco
-                      de acción anticipatoria de huracanes en Cuba</a>.
-                  </p>
-                </div>
                 <div id="anticipatory-action-typhoon-trigger-status" class="section level2">
-                  <h2>{{ name }} - {{ fcast_obsv }} {{ pub_time }} {{ pub_date }} (hora local Cuba)</h2>
-                  {% block content %} {% endblock content %}
-                  <hr>
+                  <!-- Spanish Version Section -->
+                  <div
+                    style="background-color: #f0f8ff; padding: 15px; border-left: 4px solid #0066cc; margin: 20px 0;">
+                    <h3 style="color: #0066cc; margin-top: 0;">Versión en español</h3>
+                    <h1>Cuba : seguimiento de huracanes</h1>
+                    <div style="font-size:10px;padding: 6px 10px 6px 10px;background-color:#CCCCCC;color:#FFFFFF">
+                      <p style="margin:0;">
+                        Este es un mensaje automatizado producido por el Centro de Datos Humanitarios de OCHA para el <a
+                          href="https://reliefweb.int/report/fiji/fiji-tropical-cyclones-2023-anticipatory-action-framework">marco
+                          de acción anticipatoria de huracanes en Cuba</a>.
+                      </p>
+                    </div>
+                    <h2>{{ name }} - {{ fcast_obsv }} {{ pub_time }} {{ pub_date }} (hora local Cuba)</h2>
+                    {% block content %} {% endblock content %}
+
+                    <hr>
+                    <div id="contact" class="section level2">
+                      <h2>Contacto</h2>
+                      <p>
+                        Contacte al Centro de Datos Humanitarios de OCHA a través de Raquel Peña, punto focal
+                        para acción anticipatoria en Cuba en <a href="mailto:raquel.pena@un.org"
+                          class="email">raquel.pena@un.org</a> para cualquier pregunta o comentario.
+                      </p>
+                      <hr>
+                    </div>
+                  </div>
                 </div>
-                <div id="contact" class="section level2">
-                  <h2>Contacto</h2>
-                  <p>
-                    Contacte al Centro de Datos Humanitarios de OCHA a través de Raquel Peña, punto focal
-                    para acción anticipatoria en Cuba en <a href="mailto:raquel.pena@un.org"
-                      class="email">raquel.pena@un.org</a> para cualquier pregunta o comentario.
-                  </p>
+
+                <!-- English Version Section -->
+                <div style="background-color: #f0f8ff; padding: 15px; border-left: 4px solid #0066cc; margin: 20px 0;">
+                  <h3 style="color: #0066cc; margin-top: 0;">English Version</h3>
+                  <h1>Cuba: Hurricane Monitoring</h1>
+                  <div style="font-size:10px;padding: 6px 10px 6px 10px;background-color:#CCCCCC;color:#FFFFFF">
+                    <p style="margin:0;">
+                      This is an automated message produced by the OCHA Centre for Humanitarian Data for the <a
+                        href="https://reliefweb.int/report/fiji/fiji-tropical-cyclones-2023-anticipatory-action-framework">Cuba
+                        hurricanes anticipatory action framework</a>.
+                    </p>
+                  </div>
+                  <h2>{{ name }} - {{ fcast_obsv_en }} {{ pub_time }} {{ pub_date_en }} (Cuba local time)</h2>
+                  {% block content_en %} {% endblock content_en %}
+
                   <hr>
+                  <div id="contact-en" class="section level2">
+                    <h2>Contact</h2>
+                    <p>
+                      Contact the OCHA Centre for Humanitarian Data through Raquel Peña, focal point
+                      for anticipatory action in Cuba at <a href="mailto:raquel.pena@un.org"
+                        class="email">raquel.pena@un.org</a> for any questions or comments.
+                    </p>
+                    <hr>
+                  </div>
+                </div>
+
+                <div id="footer-logos" class="section level2">
                   <table width="100%" align="center">
                     <tr>
                       <td align="center">
