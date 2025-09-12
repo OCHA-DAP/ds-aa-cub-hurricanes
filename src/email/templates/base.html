@@ -123,18 +123,24 @@
                   </p>
                 </div>
                 <div id="anticipatory-action-typhoon-trigger-status" class="section level2">
-                  <h2>{{ name }} - {{ fcast_obsv }} {{ pub_time }} {{ pub_date }} (hora local Cuba)</h2>
-                  {% block content %} {% endblock content %}
-                  <hr>
-                </div>
-                <div id="contact" class="section level2">
-                  <h2>Contacto</h2>
-                  <p>
-                    Contacte al Centro de Datos Humanitarios de OCHA a través de Raquel Peña, punto focal
-                    para acción anticipatoria en Cuba en <a href="mailto:raquel.pena@un.org"
-                      class="email">raquel.pena@un.org</a> para cualquier pregunta o comentario.
-                  </p>
-                  <hr>
+                  <!-- Spanish Version Section -->
+                  <div
+                    style="background-color: #f0f8ff; padding: 15px; border-left: 4px solid #0066cc; margin: 20px 0;">
+                    <h3 style="color: #0066cc; margin-top: 0;">Versión en español</h3>
+                    <h2>{{ name }} - {{ fcast_obsv }} {{ pub_time }} {{ pub_date }} (hora local Cuba)</h2>
+                    {% block content %} {% endblock content %}
+
+                    <hr>
+                    <div id="contact" class="section level2">
+                      <h2>Contacto</h2>
+                      <p>
+                        Contacte al Centro de Datos Humanitarios de OCHA a través de Raquel Peña, punto focal
+                        para acción anticipatoria en Cuba en <a href="mailto:raquel.pena@un.org"
+                          class="email">raquel.pena@un.org</a> para cualquier pregunta o comentario.
+                      </p>
+                      <hr>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- English Version Section -->
@@ -143,6 +149,7 @@
                   <h2>{{ name }} - {{ fcast_obsv_en }} {{ pub_time }} {{ pub_date_en }} (Cuba local time)</h2>
                   {% block content_en %} {% endblock content_en %}
 
+                  <hr>
                   <div id="contact-en" class="section level2">
                     <h2>Contact</h2>
                     <p>
@@ -150,6 +157,7 @@
                       for anticipatory action in Cuba at <a href="mailto:raquel.pena@un.org"
                         class="email">raquel.pena@un.org</a> for any questions or comments.
                     </p>
+                    <hr>
                   </div>
                 </div>
 
