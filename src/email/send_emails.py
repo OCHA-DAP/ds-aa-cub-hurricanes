@@ -54,9 +54,13 @@ def prepare_email_data(
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
+    fcast_obsv_en = "observation" if fcast_obsv == "obsv" else "forecast"
     activation_subject = "(SIN ACTIVACIÓN)"
 
     pub_datetime_txt = f"{day} de {month} {year} a las {time}"
+
+    # English date formatting
+    pub_date_en = issue_time_cuba.strftime("%-d %B %Y")
 
     if fcast_obsv == "fcast":
         readiness = (
@@ -70,6 +74,17 @@ def prepare_email_data(
             else "NO ALCANZADO"
         )
         obsv = ""
+
+        # English versions
+        readiness_en = (
+            "REACHED"
+            if monitoring_point["readiness_trigger"]
+            else "NOT REACHED"
+        )
+        action_en = (
+            "REACHED" if monitoring_point["action_trigger"] else "NOT REACHED"
+        )
+        obsv_en = ""
     else:
         readiness = ""
         action = ""
@@ -77,16 +92,28 @@ def prepare_email_data(
             "ALCANZADO" if monitoring_point["obsv_trigger"] else "NO ALCANZADO"
         )
 
+        # English versions
+        readiness_en = ""
+        action_en = ""
+        obsv_en = (
+            "REACHED" if monitoring_point["obsv_trigger"] else "NOT REACHED"
+        )
+
     return {
         "cyclone_name": cyclone_name,
         "pub_time": pub_time,
         "pub_date": pub_date,
+        "pub_date_en": pub_date_en,
         "pub_datetime_txt": pub_datetime_txt,
         "fcast_obsv_es": fcast_obsv_es,
+        "fcast_obsv_en": fcast_obsv_en,
         "activation_subject": activation_subject,
         "readiness": readiness,
+        "readiness_en": readiness_en,
         "action": action,
+        "action_en": action_en,
         "obsv": obsv,
+        "obsv_en": obsv_en,
         "show_scatter_plot": False,  # Set to True to show the scatter plot
     }
 
@@ -152,10 +179,15 @@ def create_info_email_content(
         name=email_data["cyclone_name"],
         pub_time=email_data["pub_time"],
         pub_date=email_data["pub_date"],
+        pub_date_en=email_data["pub_date_en"],
         fcast_obsv=email_data["fcast_obsv_es"],
+        fcast_obsv_en=email_data["fcast_obsv_en"],
         readiness=email_data["readiness"],
+        readiness_en=email_data["readiness_en"],
         action=email_data["action"],
+        action_en=email_data["action_en"],
         obsv=email_data["obsv"],
+        obsv_en=email_data["obsv_en"],
         test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
         map_cid=map_cid,
@@ -278,19 +310,24 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     issue_time_cuba = issue_time.astimezone(cuba_tz)
     pub_time = issue_time_cuba.strftime("%Hh%M")
     pub_date = issue_time_cuba.strftime("%-d %b %Y")
+    pub_date_en = issue_time_cuba.strftime("%-d %B %Y")
     for en_mo, es_mo in SPANISH_MONTHS.items():
         pub_date = pub_date.replace(en_mo, es_mo)
     if trigger_name == "readiness":
         trigger_name_es = "preparación"
+        trigger_name_en = "readiness"
         trigger_type_subj = "de ALISTAMIENTO"
     elif trigger_name == "action":
         trigger_name_es = "acción"
+        trigger_name_en = "action"
         trigger_type_subj = "de ACCIÓN"
     else:
         trigger_name_es = "observacional"
+        trigger_name_en = "observational"
         trigger_type_subj = trigger_name_es.upper()
 
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
+    fcast_obsv_en = "observation" if fcast_obsv == "obsv" else "forecast"
 
     distribution_list = get_distribution_list()
     valid_distribution_list = distribution_list[
@@ -352,7 +389,10 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         name=cyclone_name,
         pub_time=pub_time,
         pub_date=pub_date,
+        pub_date_en=pub_date_en,
         fcast_obsv=fcast_obsv_es,
+        fcast_obsv_en=fcast_obsv_en,
+        trigger_name_en=trigger_name_en,
         test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
         chd_banner_cid=chd_banner_cid[1:-1],

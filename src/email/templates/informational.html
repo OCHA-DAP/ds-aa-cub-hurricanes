@@ -53,3 +53,56 @@
   <p>Centro de Datos Humanitarios OCHA</p>
 </div>
 {% endblock content %}
+
+{% block content_en %}
+<div style="font-size:10px;padding: 6px 10px 6px 10px;background-color:#CCCCCC;color:#FFFFFF">
+  <p style="margin:0;">
+    This email does not constitute an official forecast. The <a href="https://www.insmet.cu/">Cuban Institute of
+      Meteorology</a> is the official source for local information. Under the World Meteorological Organization's
+    Tropical Cyclone Programme, RSMC Miami, managed by NOAA's National Hurricane Center, is responsible for monitoring
+    tropical cyclones in the region; <a href="https://www.nhc.noaa.gov/cyclones/">their cyclone forecasts</a> are
+    authoritative.
+  </p>
+</div>
+<div>
+  <p>Dear colleagues,</p>
+  <p>
+    The {{ fcast_obsv_en }}s for {{ name }} from {{pub_datetime_txt}} (Cuba local time), have just been issued
+    by
+    the NOAA National Hurricane Center, operator of the Miami Regional Specialized Meteorological Centre (RSMC)
+
+    {% if fcast_obsv_en == "forecast" %}
+    .
+    {% elif fcast_obsv_en == "observation" %}
+    , and by NASA (IMERG).
+    {% endif %}
+  </p>
+  <p>
+    {% if fcast_obsv_en == "forecast" %}
+    Readiness trigger: <b>{{ readiness_en }}</b><br>
+    Action trigger: <b>{{ action_en }}</b>
+    {% else %}
+    Observational trigger: <b>{{ obsv_en }}</b>
+    {% endif %}
+  </p>
+  <p>
+    A map of the {{ fcast_obsv_en }}s is presented below.
+  </p>
+  <img src="cid:{{ map_cid }}" width="600" />
+  {% if show_scatter_plot %}
+  <p>
+    A graph comparing these {{ fcast_obsv_en }}s with historical cyclones is presented below.
+  </p>
+  <img src="cid:{{ scatter_cid }}" width="600" />
+  {% endif %}
+  <p>This email is purely informational and does not serve as an official notice for the anticipatory action framework.
+    Official activation notices are sent in another email.
+  </p>
+  <p>
+    The code used to produce this alert is available on GitHub <a
+      href="https://github.com/OCHA-DAP/ds-aa-cub-hurricanes">here</a>.
+  </p>
+  <p>Best regards,</p>
+  <p>OCHA Centre for Humanitarian Data</p>
+</div>
+{% endblock content_en %}
