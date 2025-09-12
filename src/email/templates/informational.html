@@ -35,12 +35,16 @@
   <p>
     Un mapa de los {{ fcast_obsv }}s se presenta a continuación.
   </p>
-  <img src="cid:{{ map_cid }}" width="600" />
+  <div style="text-align: center; margin: 0 auto;">
+    <img src="cid:{{ map_cid }}" width="600" style="display: block; margin: 0 auto;" />
+  </div>
   {% if show_scatter_plot %}
   <p>
     Un gráfico comparando estas {{ fcast_obsv }}s con ciclones históricos se presenta a continuación.
   </p>
-  <img src="cid:{{ scatter_cid }}" width="600" />
+  <div style="text-align: center; margin: 0 auto;">
+    <img src="cid:{{ scatter_cid }}" width="600" style="display: block; margin: 0 auto;" />
+  </div>
   {% endif %}
   <p>Este email es puramente informativo y no sirve como aviso oficial para el marco de acción anticipatoria. Los avisos
     oficiales de activación son enviados en otro email.
@@ -88,12 +92,16 @@
   <p>
     A map of the {{ fcast_obsv_en }}s is presented below.
   </p>
-  <img src="cid:{{ map_cid }}" width="600" />
+  <div style="text-align: center; margin: 0 auto;">
+    <img src="cid:{{ map_cid }}" width="600" style="display: block; margin: 0 auto;" />
+  </div>
   {% if show_scatter_plot %}
   <p>
     A graph comparing these {{ fcast_obsv_en }}s with historical cyclones is presented below.
   </p>
-  <img src="cid:{{ scatter_cid }}" width="600" />
+  <div style="text-align: center; margin: 0 auto;">
+    <img src="cid:{{ scatter_cid }}" width="600" style="display: block; margin: 0 auto;" />
+  </div>
   {% endif %}
   <p>This email is purely informational and does not serve as an official notice for the anticipatory action framework.
     Official activation notices are sent in another email.
