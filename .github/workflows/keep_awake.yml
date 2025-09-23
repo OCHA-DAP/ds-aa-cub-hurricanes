@@ -23,5 +23,5 @@ jobs:
 
         - name: Commit and Push Changes
           run: |
-            git commit --allow-empty -m "Keep repo awake"
+            git commit --allow-empty -m "Keep repo awake [skip ci]"
             git push origin keep-awake
