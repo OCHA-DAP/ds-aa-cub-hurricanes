@@ -6,7 +6,7 @@ on:
         TEST_EMAIL:
           required: true
           type: choice
-          default: "true"
+          default: "false"
           options:
             - "true"
             - "false"
