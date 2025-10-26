@@ -4,8 +4,8 @@ from src.constants import MIN_EMAIL_DISTANCE
 from src.email.send_emails import send_info_email, send_trigger_email
 from src.email.utils import (
     FORCE_ALERT,
-    load_monitoring_data,
     load_email_record_with_test_filtering,
+    load_monitoring_data,
     save_email_record,
 )
 
@@ -244,7 +244,7 @@ def update_fcast_trigger_emails():
                 ) in group.set_index("monitor_id").iterrows():
                     if (
                         row[f"{trigger_name}_trigger"]
-                        and not row["past_cutoff"]
+                        # and not row["past_cutoff"]
                     ):
                         try:
                             print(
