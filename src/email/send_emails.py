@@ -6,11 +6,12 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from typing import Literal
 
+import ocha_stratus as stratus
 import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
-from src.constants import SPANISH_MONTHS, DRY_RUN, FORCE_ALERT
+from src.constants import DRY_RUN, FORCE_ALERT, SPANISH_MONTHS
 from src.email.plotting import get_plot_blob_name
 from src.email.utils import (
     EMAIL_ADDRESS,
@@ -25,7 +26,6 @@ from src.email.utils import (
     is_valid_email,
     load_monitoring_data,
 )
-import ocha_stratus as stratus
 
 
 def prepare_email_data(
@@ -86,15 +86,15 @@ def prepare_email_data(
         )
         obsv_en = ""
     else:
-        readiness = ""
-        action = ""
+        readiness = ""  # noqa
+        action = ""  # noqa
         obsv = (
             "ALCANZADO" if monitoring_point["obsv_trigger"] else "NO ALCANZADO"
         )
 
         # English versions
-        readiness_en = ""
-        action_en = ""
+        readiness_en = ""  # noqa
+        action_en = ""  # noqa
         obsv_en = (
             "REACHED" if monitoring_point["obsv_trigger"] else "NOT REACHED"
         )
@@ -110,8 +110,8 @@ def prepare_email_data(
         "activation_subject": activation_subject,
         "readiness": "ALCANZADO",
         "readiness_en": "REACHED",
-        "action": action,
-        "action_en": action_en,
+        "action": "ALCANZADO",
+        "action_en": "REACHED",
         "obsv": obsv,
         "obsv_en": obsv_en,
         "show_scatter_plot": False,  # Set to True to show the scatter plot
