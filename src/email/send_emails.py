@@ -166,13 +166,11 @@ def create_info_email_content(
         # For preview, use placeholder CIDs that will be replaced later
         map_cid = "PREVIEW_MAP_PLACEHOLDER"
         scatter_cid = "PREVIEW_SCATTER_PLACEHOLDER"
-        chd_banner_cid = "PREVIEW_BANNER_PLACEHOLDER"
         ocha_logo_cid = "PREVIEW_LOGO_PLACEHOLDER"
     else:
         # For real emails, generate proper CIDs
         map_cid = make_msgid(domain="humdata.org")[1:-1]
         scatter_cid = make_msgid(domain="humdata.org")[1:-1]
-        chd_banner_cid = make_msgid(domain="humdata.org")[1:-1]
         ocha_logo_cid = make_msgid(domain="humdata.org")[1:-1]
 
     html_str = template.render(
@@ -192,7 +190,6 @@ def create_info_email_content(
         email_disclaimer=EMAIL_DISCLAIMER,
         map_cid=map_cid,
         scatter_cid=scatter_cid,
-        chd_banner_cid=chd_banner_cid,
         ocha_logo_cid=ocha_logo_cid,
     )
     text_str = html2text(html_str)
@@ -207,7 +204,6 @@ def create_info_email_content(
         "cids": {
             "map": map_cid,
             "scatter": scatter_cid,
-            "chd_banner": chd_banner_cid,
             "ocha_logo": ocha_logo_cid,
         },
     }
@@ -269,8 +265,8 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
 
     # Add static images using the CIDs from email content
     for filename, cid_key in zip(
-        ["centre_banner.png", "ocha_logo_wide.png"],
-        ["chd_banner", "ocha_logo"],
+        ["ocha_logo_wide.png"],
+        ["ocha_logo"],
     ):
         img_path = STATIC_DIR / filename
         with open(img_path, "rb") as img:
@@ -382,7 +378,6 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         for _, row in cc_list.iterrows()
     ]
 
-    chd_banner_cid = make_msgid(domain="humdata.org")
     ocha_logo_cid = make_msgid(domain="humdata.org")
 
     html_str = template.render(
@@ -395,17 +390,13 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
         trigger_name_en=trigger_name_en,
         test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
-        chd_banner_cid=chd_banner_cid[1:-1],
         ocha_logo_cid=ocha_logo_cid[1:-1],
     )
     text_str = html2text(html_str)
     msg.set_content(text_str)
     msg.add_alternative(html_str, subtype="html")
 
-    for filename, cid in zip(
-        ["centre_banner.png", "ocha_logo_wide.png"],
-        [chd_banner_cid, ocha_logo_cid],
-    ):
+    for filename, cid in zip(["ocha_logo_wide.png"], [ocha_logo_cid]):
         img_path = STATIC_DIR / filename
         with open(img_path, "rb") as img:
             msg.get_payload()[1].add_related(
