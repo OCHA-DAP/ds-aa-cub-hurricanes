@@ -396,10 +396,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str):
     msg.set_content(text_str)
     msg.add_alternative(html_str, subtype="html")
 
-    for filename, cid in zip(
-        ["ocha_logo_wide.png"],
-        [ocha_logo_cid],
-    ):
+    for filename, cid in zip(["ocha_logo_wide.png"], [ocha_logo_cid]):
         img_path = STATIC_DIR / filename
         with open(img_path, "rb") as img:
             msg.get_payload()[1].add_related(
