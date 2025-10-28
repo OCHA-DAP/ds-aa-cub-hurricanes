@@ -33,28 +33,28 @@ import json
 from typing import Literal
 
 import numpy as np
+import ocha_stratus as stratus
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
 from matplotlib import pyplot as plt
-import ocha_stratus as stratus
 
 from src.constants import (
     CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
-    SPANISH_MONTHS,
+    FORCE_ALERT,
     LON_ZOOM_RANGE,
     MIN_EMAIL_DISTANCE,
     PROJECT_PREFIX,
+    SPANISH_MONTHS,
     THRESHS,
-    FORCE_ALERT,
 )
 from src.datasources import codab, nhc, zma
 from src.email.utils import (
+    create_dummy_storm_tracks,
     load_monitoring_data,
     open_static_image,
-    create_dummy_storm_tracks,
 )
 
 
@@ -797,11 +797,11 @@ def create_map_plot_figure(
                 source=f"data:image/png;base64,{encoded_legend}",
                 xref="paper",
                 yref="paper",
-                x=0.01,
+                x=0.99,
                 y=0.01,
                 sizex=0.3,
                 sizey=0.3 / aspect,
-                xanchor="left",
+                xanchor="right",
                 yanchor="bottom",
                 opacity=0.7,
             )
