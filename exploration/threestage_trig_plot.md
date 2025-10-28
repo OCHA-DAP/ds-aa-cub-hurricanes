@@ -827,3 +827,35 @@ plot_selected_threshs(321972)
 ```python
 disp_selected_threshs(321972)
 ```
+
+## Melissa
+
+Plotting Melissa on the Option 4 plot to show how extreme the rainfall forecast is.
+
+```python
+CHD_GREEN = "#1bb580"
+```
+
+```python
+current_rain = 142.38818
+current_wind = 130
+fig, axs = plot_selected_threshs(321972)
+axs[0].scatter(
+    [current_wind],
+    [current_rain],
+    marker="x",
+    color=CHD_GREEN,
+    linewidths=3,
+    s=100,
+)
+axs[0].annotate(
+    "   Melissa  ",
+    (current_wind, current_rain),
+    va="center",
+    ha="right",
+    color=CHD_GREEN,
+    fontweight="bold",
+)
+axs[1].remove()
+axs[0].set_title("Rainfall vs. wind speed forecast")
+```
