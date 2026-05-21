@@ -1738,7 +1738,7 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
         )
 
         _trigger_time = None
-        _peak_obsv_time = None
+        _arrival_time = None
         _lead_hrs = None
 
         if not _fcast_s.empty:
@@ -1763,24 +1763,30 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
             if not _met.empty:
                 _trigger_time = _met["issued_time"].min()
 
-        if not _obsv_s.empty:
-            _pos = _obsv_s[_obsv_s["obsv_exp"] > 0]
-            if not _pos.empty:
-                _peak_obsv_time = _pos.loc[
-                    _pos["obsv_exp"].idxmax(), "valid_time"
-                ]
+        # Storm arrival = time of largest jump in observed 64kt exposure
+        _arrival_time = None
+        if not _obsv_s.empty and len(_obsv_s) > 1:
+            _obsv_s = _obsv_s.copy()
+            _obsv_s["_diff"] = _obsv_s["obsv_exp"].diff()
+            _max_diff_idx = _obsv_s["_diff"].idxmax()
+            if (
+                _max_diff_idx is not None
+                and _obsv_s.loc[_max_diff_idx, "_diff"] > 0
+            ):
+                _arrival_time = _obsv_s.loc[_max_diff_idx, "valid_time"]
+        elif not _obsv_s.empty:
+            # Only one obs record — use it directly
+            _arrival_time = _obsv_s.iloc[0]["valid_time"]
 
-        if _trigger_time is not None and _peak_obsv_time is not None:
-            _delta = pd.Timestamp(_peak_obsv_time) - pd.Timestamp(
-                _trigger_time
-            )
+        if _trigger_time is not None and _arrival_time is not None:
+            _delta = pd.Timestamp(_arrival_time) - pd.Timestamp(_trigger_time)
             _lead_hrs = _delta.total_seconds() / 3600
 
         _rows.append(
             {
                 "Storm": _label,
                 "Trigger issued_time": _trigger_time,
-                "Peak 64kt obs time": _peak_obsv_time,
+                "Arrival time (max Δ obs 64kt)": _arrival_time,
                 "Lead time": _lead_hrs,
             }
         )
@@ -1805,7 +1811,7 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
         _df_lt.style.format(
             {
                 "Trigger issued_time": _fmt_time,
-                "Peak 64kt obs time": _fmt_time,
+                "Arrival time (max Δ obs 64kt)": _fmt_time,
                 "Lead time": _fmt_lead,
             }
         )
