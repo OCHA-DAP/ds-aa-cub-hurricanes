@@ -1057,7 +1057,7 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
     _opt = _opt.merge(
         df_old_trig[["sid", "q80_obsv", "fcast_trig", "obsv_trig"]],
         on="sid",
-        how="left",
+        how="outer",  # ensure all old-triggered storms are present
     )
     _opt = _opt.merge(
         df_impact[["sid", "Total Affected", "Amount in US$"]],
@@ -1065,6 +1065,8 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
         how="left",
     )
     _opt = _opt.drop_duplicates("sid")
+    # Re-apply 2002+ filter after outer merge (old_trig parquet covers 2000+)
+    _opt = _opt[_opt["sid"].str[:4].astype(int) >= 2002]
     for _c in [
         "exp_34",
         "exp_50",
@@ -1414,6 +1416,8 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
         )
         _show = (
             _any_triggered
+            | _opt["fcast_trig_old"]
+            | _opt["obsv_trig_old"]
             | (_opt["Total Affected"].fillna(0) > 0)
             | _opt["has_cerf"]
         )
