@@ -1014,7 +1014,7 @@ def trigger_corr_table(df_rain_opt, mo, pd, plt):
 
 @app.cell
 def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
-    _n = 11  # RP ≈ 2.4 yrs over 2000-2025
+    _n = 10  # RP ≈ 2.6 yrs over 2002-2025
 
     # ── Build base data frame ─────────────────────────────────────────────  # noqa: E501
     _exp_pivot = (
