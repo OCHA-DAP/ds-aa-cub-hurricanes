@@ -350,7 +350,7 @@ def load_codab(load_codab_from_blob):
 
 
 @app.cell
-def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
+def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
     _n = 9
 
     _exp_pivot = (
@@ -367,6 +367,26 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
         if _c not in _exp_pivot.columns:
             _exp_pivot[_c] = 0
 
+    _texp_pivot = (
+        df_total_exp.pivot_table(
+            index="sid",
+            columns="wind_speed_kt",
+            values="max_total_exposure",
+            aggfunc="max",
+        )
+        .rename(
+            columns={
+                34: "total_34",
+                50: "total_50",
+                64: "total_64",
+            }
+        )
+        .reset_index()
+    )
+    for _c in ["total_34", "total_50", "total_64"]:
+        if _c not in _texp_pivot.columns:
+            _texp_pivot[_c] = 0
+
     def _get_thresh(col: str) -> float:
         _vals = _exp_pivot[col].fillna(0).sort_values(ascending=False)
         return float(_vals.iloc[_n - 1]) if _n <= len(_vals) else 0.0
@@ -382,6 +402,9 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
 
     _meta = df_exp[["sid", "season", "name"]].drop_duplicates("sid")
     _df = _meta.merge(_exp_pivot, on="sid", how="outer")
+    _df = _df.merge(_texp_pivot, on="sid", how="left")
+    for _c in ["total_34", "total_50", "total_64"]:
+        _df[_c] = _df[_c].fillna(0)
     _df = _df.merge(df_impact, on="sid", how="outer")
     _df = _df.drop_duplicates(subset=["sid"])
     _df["season"] = pd.to_numeric(
@@ -444,8 +467,11 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
             [
                 "Storm",
                 "exp_34",
+                "total_34",
                 "exp_50",
+                "total_50",
                 "exp_64",
+                "total_64",
                 "trig_34",
                 "trig_50",
                 "trig_64",
@@ -456,7 +482,14 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
             ]
         ]
         .rename(
-            columns={"exp_34": "34 kt", "exp_50": "50 kt", "exp_64": "64 kt"}
+            columns={
+                "exp_34": "34 kt obsv",
+                "total_34": "34 kt total",
+                "exp_50": "50 kt obsv",
+                "total_50": "50 kt total",
+                "exp_64": "64 kt obsv",
+                "total_64": "64 kt total",
+            }
         )
         .reset_index(drop=True)
     )
@@ -464,15 +497,17 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
     def _style_row(row):
         _styles = [""] * len(row)
         _idx = list(row.index)
-        for _col, _trig in [
-            ("34 kt", "trig_34"),
-            ("50 kt", "trig_50"),
-            ("64 kt", "trig_64"),
+        for _obsv_col, _total_col, _trig in [
+            ("34 kt obsv", "34 kt total", "trig_34"),
+            ("50 kt obsv", "50 kt total", "trig_50"),
+            ("64 kt obsv", "64 kt total", "trig_64"),
         ]:
             if _trig in _idx and row[_trig]:
-                _styles[_idx.index(_col)] = (
-                    "background-color: gold; font-weight: bold"
-                )
+                for _c in [_obsv_col, _total_col]:
+                    if _c in _idx:
+                        _styles[_idx.index(_c)] = (
+                            "background-color: gold; font-weight: bold"
+                        )
         return _styles
 
     def _style_check(val):
@@ -496,18 +531,20 @@ def trigger_table(df_exp, df_impact, df_old_trig, mo, pd):
         .bar(subset=["Total Affected"], color="#b39ddb", vmin=0)
         .format(
             {
-                "34 kt": lambda x: (
-                    f"{int(x):,}" if pd.notna(x) and x > 0 else "—"
-                ),
-                "50 kt": lambda x: (
-                    f"{int(x):,}" if pd.notna(x) and x > 0 else "—"
-                ),
-                "64 kt": lambda x: (
-                    f"{int(x):,}" if pd.notna(x) and x > 0 else "—"
-                ),
+                c: lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "—"
+                for c in [
+                    "34 kt obsv",
+                    "34 kt total",
+                    "50 kt obsv",
+                    "50 kt total",
+                    "64 kt obsv",
+                    "64 kt total",
+                ]
+            }
+            | {
                 "Total Affected": lambda x: (
                     f"{x:,.0f}" if pd.notna(x) else "—"
-                ),
+                )
             }
         )
         .hide(axis="columns", subset=["trig_34", "trig_50", "trig_64"])
