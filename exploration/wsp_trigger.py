@@ -1664,5 +1664,172 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
     return
 
 
+@app.cell
+def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
+    mo.stop(
+        not len(df_rain_opt) or "64x" not in rain_opt_thresh,
+        mo.md("64x option not yet computed."),
+    )
+    _exp_thresh = rain_opt_thresh["64x"]["exp_thresh"]
+    _triggered = df_rain_opt[df_rain_opt["combined_64x"]].copy()
+    mo.stop(_triggered.empty, mo.md("No storms triggered by 64x option."))
+
+    _sids = _triggered["sid"].tolist()
+    _sid_ph = ", ".join(f"'{s}'" for s in _sids)
+    _engine = stratus.get_engine(stage="dev")
+    with _engine.connect() as _conn:
+        _df_atcf = pd.read_sql(
+            text(
+                f"SELECT sid, atcf_id FROM storms.ibtracs_storms"
+                f" WHERE sid IN ({_sid_ph})"
+            ),
+            _conn,
+        )
+        _atcf_list = _df_atcf["atcf_id"].tolist()
+        if _atcf_list:
+            _atcf_ph = ", ".join(f"'{a}'" for a in _atcf_list)
+            _df_fcast_all = pd.read_sql(
+                text(
+                    f"""
+                    SELECT atcf_id, issued_time, pop_exposed AS fcast_exp
+                    FROM storms.nhc_tracks_fcast_exposure
+                    WHERE atcf_id IN ({_atcf_ph})
+                      AND iso3 = 'CUB' AND admin_level = 0
+                      AND wind_speed_kt = 64
+                    ORDER BY atcf_id, issued_time
+                    """
+                ),
+                _conn,
+            )
+            _df_obsv_all = pd.read_sql(
+                text(
+                    f"""
+                    SELECT atcf_id, valid_time, pop_exposed AS obsv_exp
+                    FROM storms.nhc_tracks_obsv_exposure
+                    WHERE atcf_id IN ({_atcf_ph})
+                      AND iso3 = 'CUB' AND admin_level = 0
+                      AND wind_speed_kt = 64
+                    ORDER BY atcf_id, valid_time
+                    """
+                ),
+                _conn,
+            )
+        else:
+            _df_fcast_all = pd.DataFrame(
+                columns=["atcf_id", "issued_time", "fcast_exp"]
+            )
+            _df_obsv_all = pd.DataFrame(
+                columns=["atcf_id", "valid_time", "obsv_exp"]
+            )
+    _engine.dispose()
+
+    _df_fcast_all = _df_fcast_all.merge(_df_atcf, on="atcf_id", how="left")
+    _df_obsv_all = _df_obsv_all.merge(_df_atcf, on="atcf_id", how="left")
+
+    _rows = []
+    for _, _storm in _triggered.iterrows():
+        _sid = _storm["sid"]
+        _label = _storm["Storm"]
+        _fcast_s = _df_fcast_all[_df_fcast_all["sid"] == _sid].sort_values(
+            "issued_time"
+        )
+        _obsv_s = _df_obsv_all[_df_obsv_all["sid"] == _sid].sort_values(
+            "valid_time"
+        )
+
+        _trigger_time = None
+        _peak_obsv_time = None
+        _lead_hrs = None
+
+        if not _fcast_s.empty:
+            _fcast_s = _fcast_s.copy()
+            if not _obsv_s.empty:
+                _os = _obsv_s.assign(_cm=lambda x: x["obsv_exp"].cummax())
+                _m = pd.merge_asof(
+                    _fcast_s[["issued_time", "fcast_exp"]],
+                    _os[["valid_time", "_cm"]].rename(
+                        columns={"valid_time": "issued_time"}
+                    ),
+                    on="issued_time",
+                    direction="backward",
+                )
+                _fcast_s["total_exp"] = (
+                    _m["fcast_exp"].values + _m["_cm"].fillna(0).values
+                )
+            else:
+                _fcast_s["total_exp"] = _fcast_s["fcast_exp"]
+
+            _met = _fcast_s[_fcast_s["total_exp"] >= _exp_thresh]
+            if not _met.empty:
+                _trigger_time = _met["issued_time"].min()
+
+        if not _obsv_s.empty:
+            _pos = _obsv_s[_obsv_s["obsv_exp"] > 0]
+            if not _pos.empty:
+                _peak_obsv_time = _pos.loc[
+                    _pos["obsv_exp"].idxmax(), "valid_time"
+                ]
+
+        if _trigger_time is not None and _peak_obsv_time is not None:
+            _delta = pd.Timestamp(_peak_obsv_time) - pd.Timestamp(
+                _trigger_time
+            )
+            _lead_hrs = _delta.total_seconds() / 3600
+
+        _rows.append(
+            {
+                "Storm": _label,
+                "Trigger issued_time": _trigger_time,
+                "Peak 64kt obs time": _peak_obsv_time,
+                "Lead time": _lead_hrs,
+            }
+        )
+
+    _df_lt = pd.DataFrame(_rows).sort_values(
+        "Lead time", ascending=False, na_position="last"
+    )
+
+    def _fmt_time(x):
+        if x is None or (hasattr(x, "__class__") and pd.isna(x)):
+            return "—"
+        return pd.Timestamp(x).strftime("%Y-%m-%d %H:%M")
+
+    def _fmt_lead(x):
+        if x is None or (hasattr(x, "__class__") and pd.isna(x)):
+            return "no obs data"
+        days = int(x) // 24
+        hrs = int(x) % 24
+        return f"{days}d {hrs}h" if days else f"{hrs}h"
+
+    _styled = (
+        _df_lt.style.format(
+            {
+                "Trigger issued_time": _fmt_time,
+                "Peak 64kt obs time": _fmt_time,
+                "Lead time": _fmt_lead,
+            }
+        )
+        .set_properties(**{"text-align": "center"})
+        .set_properties(subset=["Storm"], **{"text-align": "left"})
+        .set_table_styles(
+            [{"selector": "th", "props": [("text-align", "center")]}]
+        )
+        .hide(axis="index")
+    )
+    mo.output.replace(
+        mo.vstack(
+            [
+                mo.md(
+                    f"**64 kt exposure-only trigger** — threshold:"
+                    f" {_exp_thresh:,} people exposed  \n"
+                    "Lead time = peak observed 64kt time − earliest trigger"
+                    " issued_time"
+                ),
+                mo.Html(_styled.to_html()),
+            ]
+        )
+    )
+
+
 if __name__ == "__main__":
     app.run()
