@@ -1728,16 +1728,10 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
             & df_rain_opt["max_obs_rain"].notna()
         ].copy()
 
-        def _color_point(row, wkt=_wkt):
-            if row["has_cerf"]:
-                return "crimson"
-            if row.get(f"combined_{wkt}", False):
-                if row.get(f"exp_trig_{wkt}", False):
-                    return "gold"
-                return "darkorange"
-            return "#aaaaaa"
-
-        _colors = [_color_point(r) for _, r in _sub.iterrows()]
+        _colors = [
+            "crimson" if r["has_cerf"] else "#aaaaaa"
+            for _, r in _sub.iterrows()
+        ]
         _max_aff = df_rain_opt["Total Affected"].max()
         _sizes = [
             (
@@ -1796,14 +1790,12 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
 
     _legend_patches = [
         mpatches.Patch(color="crimson", label="CERF"),
-        mpatches.Patch(color="gold", label="Exp triggered"),
-        mpatches.Patch(color="darkorange", label="Rain triggered"),
-        mpatches.Patch(color="#aaaaaa", label="Not triggered"),
+        mpatches.Patch(color="#aaaaaa", label="No CERF"),
     ]
     _fig.legend(
         handles=_legend_patches,
         loc="upper center",
-        ncol=4,
+        ncol=2,
         fontsize=9,
         bbox_to_anchor=(0.5, 1.02),
     )
