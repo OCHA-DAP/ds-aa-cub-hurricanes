@@ -238,17 +238,26 @@ def load_old_trigger(PROJECT_PREFIX, pd, stratus, text):
 
 
 @app.cell
-def load_fcast_exposure(pd, stratus, text):
+def load_total_exposure(pd, stratus, text):
     _engine = stratus.get_engine(stage="dev")
     with _engine.connect() as _conn:
-        _df_raw = pd.read_sql(
+        _df_fcast = pd.read_sql(
             text(
                 """
-                SELECT atcf_id,
-                       issued_time AS issue_time,
-                       wind_speed_kt,
-                       pop_exposed
+                SELECT atcf_id, issued_time, wind_speed_kt,
+                       pop_exposed AS fcast_exp
                 FROM storms.nhc_tracks_fcast_exposure
+                WHERE iso3 = 'CUB' AND admin_level = 0
+            """
+            ),
+            _conn,
+        )
+        _df_obsv = pd.read_sql(
+            text(
+                """
+                SELECT atcf_id, valid_time, wind_speed_kt,
+                       pop_exposed AS obsv_exp
+                FROM storms.nhc_tracks_obsv_exposure
                 WHERE iso3 = 'CUB' AND admin_level = 0
             """
             ),
@@ -258,34 +267,73 @@ def load_fcast_exposure(pd, stratus, text):
             text("SELECT sid, atcf_id FROM storms.ibtracs_storms"),
             _conn,
         )
-        if _df_raw.empty:
-            _df_fallback = pd.read_sql(
-                text(
-                    """
-                    SELECT sid, wind_speed_kt, pop_exposed
-                    FROM storms.ibtracs_wind_exposure
-                    WHERE iso3 = 'CUB' AND admin_level = 0
+        _df_ibtracs = pd.read_sql(
+            text(
                 """
-                ),
-                _conn,
-            )
-        else:
-            _df_fallback = None
+                SELECT sid, wind_speed_kt,
+                       pop_exposed AS max_total_exposure
+                FROM storms.ibtracs_wind_exposure
+                WHERE iso3 = 'CUB' AND admin_level = 0
+            """
+            ),
+            _conn,
+        )
     _engine.dispose()
 
-    if not _df_raw.empty:
-        _df_raw = _df_raw.merge(_df_sid, on="atcf_id", how="left")
-        # No cutoff filter — use max forecast exposure across all issuances
-        df_fcast_exp = (
-            _df_raw.groupby(["sid", "wind_speed_kt"])["pop_exposed"]
-            .max()
-            .reset_index()
-            .dropna(subset=["sid"])
-        )
-    else:
-        df_fcast_exp = _df_fallback
+    _df_fcast = _df_fcast.merge(_df_sid, on="atcf_id", how="left").dropna(
+        subset=["sid"]
+    )
+    _df_obsv = _df_obsv.merge(_df_sid, on="atcf_id", how="left").dropna(
+        subset=["sid"]
+    )
 
-    return (df_fcast_exp,)
+    # For each (sid, wind_speed_kt): max(fcast_t + cumulative_obsv_t)
+    _results = []
+    for (_sid_v, _wkt), _fg in _df_fcast.groupby(["sid", "wind_speed_kt"]):
+        _og = _df_obsv[
+            (_df_obsv["sid"] == _sid_v) & (_df_obsv["wind_speed_kt"] == _wkt)
+        ]
+        _fs = _fg.sort_values("issued_time")
+        if _og.empty:
+            _max_total = float(_fs["fcast_exp"].max())
+        else:
+            _os = _og.sort_values("valid_time").assign(
+                _cm=lambda x: x["obsv_exp"].cummax()
+            )
+            _m = pd.merge_asof(
+                _fs[["issued_time", "fcast_exp"]],
+                _os[["valid_time", "_cm"]].rename(
+                    columns={"valid_time": "issued_time"}
+                ),
+                on="issued_time",
+                direction="backward",
+            )
+            _max_total = float((_m["fcast_exp"] + _m["_cm"].fillna(0)).max())
+        _results.append(
+            {
+                "sid": _sid_v,
+                "wind_speed_kt": _wkt,
+                "max_total_exposure": _max_total,
+            }
+        )
+
+    _df_nhc = (
+        pd.DataFrame(_results)
+        if _results
+        else pd.DataFrame(
+            columns=["sid", "wind_speed_kt", "max_total_exposure"]
+        )
+    )
+    _nhc_sids = set(_df_nhc["sid"].unique()) if not _df_nhc.empty else set()
+    _df_fill = _df_ibtracs[~_df_ibtracs["sid"].isin(_nhc_sids)]
+    df_total_exp = pd.concat(
+        [_df_nhc, _df_fill] if not _df_nhc.empty else [_df_fill],
+        ignore_index=True,
+    )
+    df_total_exp = df_total_exp[
+        df_total_exp["sid"].str[:4].astype(int) >= 2002
+    ]
+    return (df_total_exp,)
 
 
 @app.cell
@@ -520,7 +568,7 @@ def storm_selector(df_exp, mo, pd):
 @app.cell
 def storm_map(
     df_exp,
-    df_fcast_exp,
+    df_total_exp,
     df_monitors,
     df_old_trig,
     gdf_cub,
@@ -571,11 +619,71 @@ def storm_map(
                 _con,
                 params={"atcf_id": _atcf_id},
             )
+            _df_oexp_ts = pd.read_sql(
+                text(
+                    """
+                    SELECT valid_time, wind_speed_kt, pop_exposed
+                    FROM storms.nhc_tracks_obsv_exposure
+                    WHERE UPPER(atcf_id) = UPPER(:atcf_id)
+                      AND iso3 = 'CUB' AND admin_level = 0
+                    ORDER BY valid_time
+                """
+                ),
+                _con,
+                params={"atcf_id": _atcf_id},
+            )
         else:
             _df_fexp_ts = pd.DataFrame(
                 columns=["issued_time", "wind_speed_kt", "pop_exposed"]
             )
+            _df_oexp_ts = pd.DataFrame(
+                columns=["valid_time", "wind_speed_kt", "pop_exposed"]
+            )
     _dev_engine.dispose()
+
+    # Compute total exposure time series: fcast_t + cumulative_obsv_t
+    _df_total_ts_list = []
+    for _wt in [34, 50, 64]:
+        _f = _df_fexp_ts[_df_fexp_ts["wind_speed_kt"] == _wt].sort_values(
+            "issued_time"
+        )
+        if _f.empty:
+            continue
+        _o = (
+            _df_oexp_ts[_df_oexp_ts["wind_speed_kt"] == _wt]
+            if not _df_oexp_ts.empty
+            else pd.DataFrame()
+        )
+        if _o.empty:
+            _f = _f.copy()
+            _f["total_exp"] = _f["pop_exposed"]
+        else:
+            _os = _o.sort_values("valid_time").assign(
+                _cm=lambda x: x["pop_exposed"].cummax()
+            )
+            _m = pd.merge_asof(
+                _f[["issued_time", "pop_exposed"]],
+                _os[["valid_time", "_cm"]].rename(
+                    columns={"valid_time": "issued_time"}
+                ),
+                on="issued_time",
+                direction="backward",
+            )
+            _f = _f.copy()
+            _f["total_exp"] = (
+                _m["pop_exposed"].values + _m["_cm"].fillna(0).values
+            )
+        _f["wind_speed_kt"] = _wt
+        _df_total_ts_list.append(
+            _f[["issued_time", "wind_speed_kt", "total_exp"]]
+        )
+    _df_total_ts = (
+        pd.concat(_df_total_ts_list, ignore_index=True)
+        if _df_total_ts_list
+        else pd.DataFrame(
+            columns=["issued_time", "wind_speed_kt", "total_exp"]
+        )
+    )
 
     _row = df_exp[df_exp["sid"] == _sid]
     _name = (
@@ -684,33 +792,31 @@ def storm_map(
     _ax_map.set_title(_title, fontsize=11)
     _ax_map.set_axis_off()
 
-    # ── Forecast exposure evolution ────────────────────────────────────────
-    # Max forecast exposure per wind speed for this storm (from df_fcast_exp)
-    _fexp_by_wt = (
-        df_fcast_exp[df_fcast_exp["sid"] == _sid]
-        .set_index("wind_speed_kt")["pop_exposed"]
+    # ── Total exposure evolution ───────────────────────────────────────────
+    # Max total exposure per wind speed for this storm (fallback reference)
+    _total_by_wt = (
+        df_total_exp[df_total_exp["sid"] == _sid]
+        .set_index("wind_speed_kt")["max_total_exposure"]
         .to_dict()
-        if _sid in df_fcast_exp["sid"].values
+        if _sid in df_total_exp["sid"].values
         else {}
     )
 
-    if not _df_fexp_ts.empty:
-        # Full time-series available (nhc_tracks_fcast_exposure has CUB data)
+    if not _df_total_ts.empty:
         for _wt in _WIND_SPEEDS:
-            _sub = _df_fexp_ts[
-                _df_fexp_ts["wind_speed_kt"] == _wt
+            _sub = _df_total_ts[
+                _df_total_ts["wind_speed_kt"] == _wt
             ].sort_values("issued_time")
             if not _sub.empty:
                 _ax_exp.plot(
                     _sub["issued_time"],
-                    _sub["pop_exposed"],
+                    _sub["total_exp"],
                     color=_WKT_COLORS[_wt],
                     marker="o",
                     markersize=3,
                     linewidth=1.2,
-                    label=f"{_wt} kt fcast",
+                    label=f"{_wt} kt",
                 )
-        # Observed exposure reference lines
         for _wt in _WIND_SPEEDS:
             if _wt in _exp_by_wt:
                 _ax_exp.axhline(
@@ -720,33 +826,22 @@ def storm_map(
                     linewidth=1.5,
                     alpha=0.8,
                 )
-    elif _fexp_by_wt:
-        # No time-series — show max forecast exposure as dashed lines
+    elif _total_by_wt:
         for _wt in _WIND_SPEEDS:
-            if _wt in _fexp_by_wt:
+            if _wt in _total_by_wt:
                 _ax_exp.axhline(
-                    _fexp_by_wt[_wt],
+                    _total_by_wt[_wt],
                     color=_WKT_COLORS[_wt],
                     linestyle="--",
                     linewidth=1.5,
                     alpha=0.9,
-                    label=f"{_wt} kt fcast max: {int(_fexp_by_wt[_wt]):,}",
+                    label=f"{_wt} kt max: {int(_total_by_wt[_wt]):,}",
                 )
-            if _wt in _exp_by_wt:
-                _ax_exp.axhline(
-                    _exp_by_wt[_wt],
-                    color=_WKT_COLORS[_wt],
-                    linestyle=":",
-                    linewidth=1.5,
-                    alpha=0.8,
-                    label=f"{_wt} kt obsv: {int(_exp_by_wt[_wt]):,}",
-                )
-        _ax_exp.set_xlabel("No time-series — max fcast (--) vs observed (:)")
     else:
         _ax_exp.text(
             0.5,
             0.5,
-            "No forecast exposure data",
+            "No exposure data",
             transform=_ax_exp.transAxes,
             ha="center",
             va="center",
@@ -761,7 +856,7 @@ def storm_map(
             label="Storm time",
         )
     _ax_exp.set_title(
-        "Forecast exposure evolution (dotted = observed)", fontsize=9
+        "Total exposure evolution (fcast + cumul. observed)", fontsize=9
     )
     _ax_exp.set_ylabel("Pop. exposed")
     _ax_exp.tick_params(axis="x", labelsize=7, rotation=20)
@@ -872,12 +967,9 @@ def corr_plots(df_triggers, plt, thresh):
 @app.cell
 def trigger_corr_table(df_rain_opt, mo, pd, plt):
     _cols = {
-        "fcast_exp_34": "Fcast exp 34",
-        "fcast_exp_50": "Fcast exp 50",
-        "fcast_exp_64": "Fcast exp 64",
-        "exp_34": "Obsv exp 34",
-        "exp_50": "Obsv exp 50",
-        "exp_64": "Obsv exp 64",
+        "total_exp_34": "Total exp 34",
+        "total_exp_50": "Total exp 50",
+        "total_exp_64": "Total exp 64",
         "max_obs_rain": "Obs rain (q80)",
         "fcast_trig_old": "Old fcast",
         "obsv_trig_old": "Old obsv",
@@ -921,10 +1013,10 @@ def trigger_corr_table(df_rain_opt, mo, pd, plt):
 
 
 @app.cell
-def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
+def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
     _n = 11  # RP ≈ 2.4 yrs over 2000-2025
 
-    # ── Build base data frame ─────────────────────────────────────────────
+    # ── Build base data frame ─────────────────────────────────────────────  # noqa: E501
     _exp_pivot = (
         df_exp.pivot_table(
             index="sid",
@@ -939,29 +1031,29 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         if _c not in _exp_pivot.columns:
             _exp_pivot[_c] = 0
 
-    _fexp_pivot = (
-        df_fcast_exp.pivot_table(
+    _texp_pivot = (
+        df_total_exp.pivot_table(
             index="sid",
             columns="wind_speed_kt",
-            values="pop_exposed",
+            values="max_total_exposure",
             aggfunc="max",
         )
         .rename(
             columns={
-                34: "fcast_exp_34",
-                50: "fcast_exp_50",
-                64: "fcast_exp_64",
+                34: "total_exp_34",
+                50: "total_exp_50",
+                64: "total_exp_64",
             }
         )
         .reset_index()
     )
-    for _c in ["fcast_exp_34", "fcast_exp_50", "fcast_exp_64"]:
-        if _c not in _fexp_pivot.columns:
-            _fexp_pivot[_c] = 0
+    for _c in ["total_exp_34", "total_exp_50", "total_exp_64"]:
+        if _c not in _texp_pivot.columns:
+            _texp_pivot[_c] = 0
 
     _meta = df_exp[["sid", "season", "name"]].drop_duplicates("sid")
     _opt = _meta.merge(_exp_pivot, on="sid", how="outer")
-    _opt = _opt.merge(_fexp_pivot, on="sid", how="outer")
+    _opt = _opt.merge(_texp_pivot, on="sid", how="outer")
     _opt = _opt.merge(
         df_old_trig[["sid", "q80_obsv", "fcast_trig", "obsv_trig"]],
         on="sid",
@@ -977,9 +1069,9 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         "exp_34",
         "exp_50",
         "exp_64",
-        "fcast_exp_34",
-        "fcast_exp_50",
-        "fcast_exp_64",
+        "total_exp_34",
+        "total_exp_50",
+        "total_exp_64",
     ]:
         _opt[_c] = _opt[_c].fillna(0)
     _opt["season"] = pd.to_numeric(
@@ -1006,44 +1098,36 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         return f"{_nm} ({_yr})"
 
     _opt["Storm"] = _opt.apply(_storm_label_opt, axis=1)
-
-    # Old combined trigger
     _opt["old_combined"] = _opt["fcast_trig_old"] | _opt["obsv_trig_old"]
 
-    # Lookup dicts for speed
     _cerf_lookup = dict(zip(_opt["sid"], _opt["has_cerf"]))
     _affected_lookup = dict(zip(_opt["sid"], _opt["Total Affected"].fillna(0)))
 
-    # ── Double sweep ──────────────────────────────────────────────────────
+    # ── 1D sweep: total exposure OR observed rainfall ─────────────────────  # noqa: E501
     _results = []
-    for _wkt, _fcol, _ocol in [
-        (34, "fcast_exp_34", "exp_34"),
-        (50, "fcast_exp_50", "exp_50"),
-        (64, "fcast_exp_64", "exp_64"),
+    for _wkt, _tcol in [
+        (34, "total_exp_34"),
+        (50, "total_exp_50"),
+        (64, "total_exp_64"),
     ]:
-        _exp_f_vals = sorted(_opt[_fcol].dropna().unique())
-        _exp_o_vals = sorted(_opt[_ocol].dropna().unique())
-
-        for _e_thresh_f in _exp_f_vals:
-            _pool_fcast = _opt[_opt[_fcol] >= _e_thresh_f]
-            _n_f = len(_pool_fcast)
-            if _n_f > _n:
+        _exp_vals = sorted(_opt[_tcol].dropna().unique())
+        for _e_thresh in _exp_vals:
+            _exp_sids = set(_opt[_opt[_tcol] >= _e_thresh]["sid"])
+            _n_exp = len(_exp_sids)
+            if _n_exp > _n:
                 continue
-            _n_o = _n - _n_f
-            _fcast_sids_set = set(_pool_fcast["sid"])
-            _not_fcast = _opt[~_opt["sid"].isin(_fcast_sids_set)]
-
-            if _n_o == 0:
-                _combined_sids = frozenset(_fcast_sids_set)
+            _n_rain = _n - _n_exp
+            _not_exp = _opt[~_opt["sid"].isin(_exp_sids)]
+            if _n_rain == 0:
+                _combined_sids = frozenset(_exp_sids)
                 _results.append(
                     {
                         "wkt": _wkt,
-                        "exp_thresh_f": _e_thresh_f,
-                        "exp_thresh_o": None,
+                        "exp_thresh": _e_thresh,
                         "r_obs_exact": None,
                         "r_obs": None,
-                        "n_fcast": _n_f,
-                        "n_obsv": 0,
+                        "n_exp": _n_exp,
+                        "n_rain": 0,
                         "cerf_count": sum(
                             1
                             for _s in _combined_sids
@@ -1054,55 +1138,48 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
                             for _s in _combined_sids
                         ),
                         "_combined_sids": _combined_sids,
-                        "_fcast_sids": frozenset(_fcast_sids_set),
+                        "_exp_sids": frozenset(_exp_sids),
                     }
                 )
             else:
-                for _e_thresh_o in _exp_o_vals:
-                    _obs_eligible = _not_fcast[
-                        _not_fcast[_ocol] >= _e_thresh_o
-                    ]
-                    if len(_obs_eligible) < _n_o:
-                        continue
-                    _oe_s = _obs_eligible[
-                        _obs_eligible["max_obs_rain"].notna()
-                    ].sort_values("max_obs_rain", ascending=False)
-                    if len(_oe_s) < _n_o:
-                        continue
-                    _r_obs = float(_oe_s.iloc[_n_o - 1]["max_obs_rain"])
-                    _obs_new_sids = set(
-                        _obs_eligible[
-                            _obs_eligible["max_obs_rain"].notna()
-                            & (_obs_eligible["max_obs_rain"] >= _r_obs)
-                        ]["sid"]
-                    )
-                    if len(_obs_new_sids) != _n_o:
-                        continue
-                    _combined_sids = frozenset(_fcast_sids_set | _obs_new_sids)
-                    if len(_combined_sids) != _n:
-                        continue
-                    _results.append(
-                        {
-                            "wkt": _wkt,
-                            "exp_thresh_f": _e_thresh_f,
-                            "exp_thresh_o": _e_thresh_o,
-                            "r_obs_exact": _r_obs,
-                            "r_obs": round(_r_obs, 1),
-                            "n_fcast": _n_f,
-                            "n_obsv": _n_o,
-                            "cerf_count": sum(
-                                1
-                                for _s in _combined_sids
-                                if _cerf_lookup.get(_s, False)
-                            ),
-                            "total_affected": sum(
-                                _affected_lookup.get(_s, 0)
-                                for _s in _combined_sids
-                            ),
-                            "_combined_sids": _combined_sids,
-                            "_fcast_sids": frozenset(_fcast_sids_set),
-                        }
-                    )
+                _sorted = _not_exp[
+                    _not_exp["max_obs_rain"].notna()
+                ].sort_values("max_obs_rain", ascending=False)
+                if len(_sorted) < _n_rain:
+                    continue
+                _r_obs = float(_sorted.iloc[_n_rain - 1]["max_obs_rain"])
+                _rain_sids = set(
+                    _not_exp[
+                        _not_exp["max_obs_rain"].notna()
+                        & (_not_exp["max_obs_rain"] >= _r_obs)
+                    ]["sid"]
+                )
+                if len(_rain_sids) != _n_rain:
+                    continue
+                _combined_sids = frozenset(_exp_sids | _rain_sids)
+                if len(_combined_sids) != _n:
+                    continue
+                _results.append(
+                    {
+                        "wkt": _wkt,
+                        "exp_thresh": _e_thresh,
+                        "r_obs_exact": _r_obs,
+                        "r_obs": round(_r_obs, 1),
+                        "n_exp": _n_exp,
+                        "n_rain": _n_rain,
+                        "cerf_count": sum(
+                            1
+                            for _s in _combined_sids
+                            if _cerf_lookup.get(_s, False)
+                        ),
+                        "total_affected": sum(
+                            _affected_lookup.get(_s, 0)
+                            for _s in _combined_sids
+                        ),
+                        "_combined_sids": _combined_sids,
+                        "_exp_sids": frozenset(_exp_sids),
+                    }
+                )
 
     df_rain_opt = _opt.copy()
     rain_opt_thresh = {}
@@ -1112,26 +1189,18 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
     else:
         _df_res = pd.DataFrame(_results)
 
-        # Best per (wkt, n_fcast): max CERF → max affected → min thresh
         _df_options = (
             _df_res.sort_values(
-                [
-                    "wkt",
-                    "n_fcast",
-                    "cerf_count",
-                    "total_affected",
-                    "exp_thresh_f",
-                ],
+                ["wkt", "n_exp", "cerf_count", "total_affected", "exp_thresh"],
                 ascending=[True, True, False, False, True],
             )
-            .groupby(["wkt", "n_fcast"], sort=True)
+            .groupby(["wkt", "n_exp"], sort=True)
             .first()
             .reset_index()
         )
-        # Best overall per wkt
         _df_best = (
             _df_res.sort_values(
-                ["wkt", "cerf_count", "total_affected", "exp_thresh_f"],
+                ["wkt", "cerf_count", "total_affected", "exp_thresh"],
                 ascending=[True, False, False, True],
             )
             .groupby("wkt", sort=True)
@@ -1139,37 +1208,29 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
             .reset_index()
         )
 
-        _best_keys = set(zip(_df_best["wkt"], _df_best["n_fcast"]))
+        _best_keys = set(zip(_df_best["wkt"], _df_best["n_exp"]))
         _df_options["best"] = [
-            (r["wkt"], r["n_fcast"]) in _best_keys
+            (r["wkt"], r["n_exp"]) in _best_keys
             for _, r in _df_options.iterrows()
         ]
 
-        # Apply best triggers to base dataframe
         for _, _brow in _df_best.iterrows():
             _wkt = int(_brow["wkt"])
-            _opt[f"fcast_trig_{_wkt}"] = _opt["sid"].isin(_brow["_fcast_sids"])
+            _opt[f"exp_trig_{_wkt}"] = _opt["sid"].isin(_brow["_exp_sids"])
             _opt[f"combined_{_wkt}"] = _opt["sid"].isin(
                 _brow["_combined_sids"]
             )
-
         for _wkt in [34, 50, 64]:
-            if f"fcast_trig_{_wkt}" not in _opt.columns:
-                _opt[f"fcast_trig_{_wkt}"] = False
+            if f"exp_trig_{_wkt}" not in _opt.columns:
+                _opt[f"exp_trig_{_wkt}"] = False
             if f"combined_{_wkt}" not in _opt.columns:
                 _opt[f"combined_{_wkt}"] = False
 
-        # Build best_thresh dict
         _best_thresh = {}
         for _, _r in _df_best.iterrows():
             _wkt = int(_r["wkt"])
             _best_thresh[_wkt] = {
-                "exp_f": int(_r["exp_thresh_f"]),
-                "exp_o": (
-                    int(_r["exp_thresh_o"])
-                    if pd.notna(_r["exp_thresh_o"])
-                    else 0
-                ),
+                "exp_thresh": int(_r["exp_thresh"]),
                 "r_obs": (
                     float(_r["r_obs_exact"])
                     if pd.notna(_r["r_obs_exact"])
@@ -1178,54 +1239,42 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
             }
         rain_opt_thresh = _best_thresh
 
-        # Condition columns (using exact thresholds to avoid rounding issues)
         _bool_hide = []
-        for _wkt, _fcol, _ocol in [
-            (34, "fcast_exp_34", "exp_34"),
-            (50, "fcast_exp_50", "exp_50"),
-            (64, "fcast_exp_64", "exp_64"),
+        for _wkt, _tcol in [
+            (34, "total_exp_34"),
+            (50, "total_exp_50"),
+            (64, "total_exp_64"),
         ]:
             _t = _best_thresh.get(_wkt, {})
-            _ef = _t.get("exp_f", float("inf"))
-            _eo = _t.get("exp_o", float("inf"))
+            _et = _t.get("exp_thresh", float("inf"))
             _ro = _t.get("r_obs")
-            _opt[f"_fexp_flag_{_wkt}"] = _opt[_fcol] >= _ef
-            _opt[f"_oexp_flag_{_wkt}"] = _opt[_ocol] >= _eo
-            _opt[f"_obs_rf_{_wkt}"] = (
+            _opt[f"_exp_flag_{_wkt}"] = _opt[_tcol] >= _et
+            _opt[f"_rain_flag_{_wkt}"] = (
                 (_opt["max_obs_rain"] >= _ro)
                 if _ro is not None
                 else pd.Series(False, index=_opt.index)
             )
-            # For Cuba: forecast trigger = just exposure (no rainfall)
-            _opt[f"{_wkt} fexp"] = _opt[f"_fexp_flag_{_wkt}"].map(
+            _opt[f"{_wkt} exp"] = _opt[f"_exp_flag_{_wkt}"].map(
                 {True: "✓", False: "—"}
             )
-            _opt[f"{_wkt} oexp"] = _opt[f"_oexp_flag_{_wkt}"].map(
-                {True: "✓", False: "—"}
-            )
-            _opt[f"{_wkt} obs"] = _opt[f"_obs_rf_{_wkt}"].map(
-                {True: "✓", False: "—"}
-            )
-            _opt[f"{_wkt} kt"] = _opt[f"fcast_trig_{_wkt}"].map(
+            _opt[f"{_wkt} rain"] = _opt[f"_rain_flag_{_wkt}"].map(
                 {True: "✓", False: "—"}
             )
             _opt[f"{_wkt}+O"] = _opt[f"combined_{_wkt}"].map(
                 {True: "✓", False: "—"}
             )
             _bool_hide += [
-                f"_fexp_flag_{_wkt}",
-                f"_oexp_flag_{_wkt}",
-                f"_obs_rf_{_wkt}",
-                f"fcast_trig_{_wkt}",
+                f"_exp_flag_{_wkt}",
+                f"_rain_flag_{_wkt}",
+                f"exp_trig_{_wkt}",
                 f"combined_{_wkt}",
             ]
 
         df_rain_opt = _opt
 
-        # ── Summary table ─────────────────────────────────────────────────
+        # ── Summary table ─────────────────────────────────────────────────  # noqa: E501
         _n_yrs = int(_opt["season"].max() - _opt["season"].min() + 1)
         _rp = (_n_yrs + 1) / _n
-
         _old_fcast_sids = set(_opt.loc[_opt["fcast_trig_old"], "sid"])
         _old_obsv_sids = set(
             _opt.loc[_opt["obsv_trig_old"] & ~_opt["fcast_trig_old"], "sid"]
@@ -1243,12 +1292,11 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         _summary_rows = [
             {
                 "Trigger": "Old option 1b",
-                "Wind kt": "ZMA ≥120 (f) / ≥105 (o)",
-                "Fcast exp thresh": "—",
-                "Obs exp thresh": "—",
-                "Obs rain (q80) mm": "≥96.2",
-                "# Fcast": len(_old_fcast_sids),
-                "# Obs": len(_old_obsv_sids),
+                "Wind kt": "ZMA ≥120/≥105",
+                "Exp thresh": "—",
+                "Rain thresh (q80) mm": "≥96.2",
+                "# Exp": len(_old_fcast_sids),
+                "# Rain": len(_old_obsv_sids),
                 "CERF storms": _cerf_old,
                 "Total Affected": _aff_old,
                 "RP yrs": round(_rp_old, 1),
@@ -1260,17 +1308,12 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
                 {
                     "Trigger": f"New {_wkt_b} kt ★",
                     "Wind kt": f"{_wkt_b}",
-                    "Fcast exp thresh": f"{int(_r['exp_thresh_f']):,}",
-                    "Obs exp thresh": (
-                        f"{int(_r['exp_thresh_o']):,}"
-                        if pd.notna(_r["exp_thresh_o"])
-                        else "—"
-                    ),
-                    "Obs rain (q80) mm": (
+                    "Exp thresh": f"{int(_r['exp_thresh']):,}",
+                    "Rain thresh (q80) mm": (
                         f"{_r['r_obs']:.1f}" if pd.notna(_r["r_obs"]) else "—"
                     ),
-                    "# Fcast": int(_r["n_fcast"]),
-                    "# Obs": int(_r["n_obsv"]),
+                    "# Exp": int(_r["n_exp"]),
+                    "# Rain": int(_r["n_rain"]),
                     "CERF storms": int(_r["cerf_count"]),
                     "Total Affected": int(_r["total_affected"]),
                     "RP yrs": round(_rp, 1),
@@ -1303,15 +1346,14 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
             .hide(axis="index")
         )
 
-        # ── Options table ─────────────────────────────────────────────────
+        # ── Options table ─────────────────────────────────────────────────  # noqa: E501
         _df_opts_disp = _df_options[
             [
                 "wkt",
-                "n_fcast",
-                "exp_thresh_f",
-                "exp_thresh_o",
+                "n_exp",
+                "exp_thresh",
                 "r_obs",
-                "n_obsv",
+                "n_rain",
                 "cerf_count",
                 "total_affected",
                 "best",
@@ -1321,28 +1363,21 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         _df_opts_disp = _df_opts_disp.rename(
             columns={
                 "wkt": "Wind kt",
-                "n_fcast": "# Fcast",
-                "exp_thresh_f": "Fcast exp",
-                "exp_thresh_o": "Obs exp",
-                "r_obs": "Obs rain mm",
-                "n_obsv": "# Obs",
+                "n_exp": "# Exp",
+                "exp_thresh": "Exp thresh",
+                "r_obs": "Rain mm",
+                "n_rain": "# Rain",
                 "cerf_count": "CERF",
                 "total_affected": "Total Aff.",
             }
         ).drop(columns=["best"])
-
         _styled_opts = (
             _df_opts_disp.style.format(
                 {
-                    "Fcast exp": lambda x: (
+                    "Exp thresh": lambda x: (
                         f"{int(x):,}" if pd.notna(x) else "—"
                     ),
-                    "Obs exp": lambda x: (
-                        f"{int(x):,}" if pd.notna(x) else "—"
-                    ),
-                    "Obs rain mm": lambda x: (
-                        f"{x:.1f}" if pd.notna(x) else "—"
-                    ),
+                    "Rain mm": lambda x: (f"{x:.1f}" if pd.notna(x) else "—"),
                     "Total Aff.": lambda x: (
                         f"{int(x):,}" if pd.notna(x) else "—"
                     ),
@@ -1355,7 +1390,7 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
             .hide(axis="index")
         )
 
-        # ── Storm conditions table ────────────────────────────────────────
+        # ── Storm conditions table ────────────────────────────────────────  # noqa: E501
         def _cerf_str_opt(row):
             if pd.notna(row.get("Amount in US$")) and row["Amount in US$"] > 0:
                 return f"${row['Amount in US$']:,.0f}"
@@ -1370,9 +1405,8 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         _opt["Old obsv."] = _opt["obsv_trig_old"].map({True: "✓", False: "—"})
 
         _cond_cols = [
-            f"{w} {c}" for w in [34, 50, 64] for c in ["fexp", "oexp", "obs"]
+            f"{w} {c}" for w in [34, 50, 64] for c in ["exp", "rain"]
         ]
-        _kt_cols = [f"{w} kt" for w in [34, 50, 64]]
         _comb_cols = [f"{w}+O" for w in [34, 50, 64]]
 
         _any_triggered = _opt[[f"combined_{w}" for w in [34, 50, 64]]].any(
@@ -1387,20 +1421,14 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
             _opt[_show][
                 [
                     "Storm",
-                    "34 fexp",
-                    "34 oexp",
-                    "34 obs",
-                    "34 kt",
+                    "34 exp",
+                    "34 rain",
                     "34+O",
-                    "50 fexp",
-                    "50 oexp",
-                    "50 obs",
-                    "50 kt",
+                    "50 exp",
+                    "50 rain",
                     "50+O",
-                    "64 fexp",
-                    "64 oexp",
-                    "64 obs",
-                    "64 kt",
+                    "64 exp",
+                    "64 rain",
                     "64+O",
                     *_bool_hide,
                     "old_combined",
@@ -1421,13 +1449,6 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
                 else "color: #ddd"
             )
 
-        def _st(val):
-            return (
-                "background-color: gold; font-weight: bold"
-                if val == "✓"
-                else "color: #ccc"
-            )
-
         def _sco(val):
             return (
                 "background-color: #ffa040; color: white; font-weight: bold"
@@ -1444,14 +1465,16 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
 
         def _scerf(val):
             if isinstance(val, str) and val.startswith("$"):
-                return "background-color: crimson; color: white; font-weight: bold"
+                return (
+                    "background-color: crimson;"
+                    " color: white; font-weight: bold"
+                )
             if val == "—":
                 return "background-color: #cce5ff; color: #555"
             return "color: #aaa"
 
         _styled_storms = (
             _storm_table.style.map(_sc, subset=_cond_cols)
-            .map(_st, subset=_kt_cols)
             .map(_sco, subset=_comb_cols)
             .map(_sch, subset=["Old fcast.", "Old obsv."])
             .map(_scerf, subset=["CERF"])
@@ -1477,9 +1500,7 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
                     _rp_note,
                     mo.md("### Summary"),
                     mo.Html(_styled_summary.to_html()),
-                    mo.md(
-                        "### All options (best per wind level + fcast count)"
-                    ),
+                    mo.md("### All options (best per wind level + exp count)"),
                     mo.Html(_styled_opts.to_html()),
                     mo.md("### Storm conditions"),
                     mo.Html(_styled_storms.to_html()),
@@ -1493,100 +1514,89 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
 @app.cell
 def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
     mo.stop(not len(df_rain_opt) or not rain_opt_thresh)
-    _fig, _axes = plt.subplots(2, 3, figsize=(18, 10), dpi=120)
+    _fig, _axes = plt.subplots(1, 3, figsize=(15, 5), dpi=120)
 
     for _col_idx, _wkt in enumerate([34, 50, 64]):
         _t = rain_opt_thresh.get(_wkt, {})
-        _ef = _t.get("exp_f", 0)
-        _eo = _t.get("exp_o", 0)
+        _e_thresh = _t.get("exp_thresh", 0)
         _ro = _t.get("r_obs")
+        _ax = _axes[_col_idx]
+        _xcol = f"total_exp_{_wkt}"
+        _sub = df_rain_opt[
+            (df_rain_opt[_xcol].fillna(0) > 0)
+            & df_rain_opt["max_obs_rain"].notna()
+        ].copy()
 
-        for _row_idx, (_xcol, _exp_thresh, _row_label) in enumerate(
-            [
-                (f"fcast_exp_{_wkt}", _ef, "Fcast exp"),
-                (f"exp_{_wkt}", _eo, "Obs exp"),
-            ]
-        ):
-            _ax = _axes[_row_idx, _col_idx]
-            _sub = df_rain_opt[
-                (df_rain_opt[_xcol].fillna(0) > 0)
-                & df_rain_opt["max_obs_rain"].notna()
-            ].copy()
+        def _color_point(row, wkt=_wkt):
+            if row["has_cerf"]:
+                return "crimson"
+            if row.get(f"combined_{wkt}", False):
+                if row.get(f"exp_trig_{wkt}", False):
+                    return "gold"
+                return "darkorange"
+            return "#aaaaaa"
 
-            # Color by trigger type
-            def _color_point(row, wkt=_wkt):
-                if row["has_cerf"]:
-                    return "crimson"
-                if row.get(f"combined_{wkt}", False):
-                    if row.get(f"fcast_trig_{wkt}", False):
-                        return "gold"
-                    return "darkorange"
-                return "#aaaaaa"
-
-            _colors = [_color_point(r) for _, r in _sub.iterrows()]
-            _sizes = [
-                (
-                    max(
-                        20,
-                        (float(v) ** 0.5)
-                        * 500
-                        / (df_rain_opt["Total Affected"].max() ** 0.5),
-                    )
-                    if pd.notna(v) and v > 0
-                    else 20
+        _colors = [_color_point(r) for _, r in _sub.iterrows()]
+        _max_aff = df_rain_opt["Total Affected"].max()
+        _sizes = [
+            (
+                max(
+                    20,
+                    (float(v) ** 0.5) * 500 / (_max_aff**0.5),
                 )
-                for v in _sub["Total Affected"]
-            ]
+                if pd.notna(v) and v > 0
+                else 20
+            )
+            for v in _sub["Total Affected"]
+        ]
 
-            _ax.scatter(
-                _sub[_xcol],
-                _sub["max_obs_rain"],
-                c=_colors,
-                s=_sizes,
+        _ax.scatter(
+            _sub[_xcol],
+            _sub["max_obs_rain"],
+            c=_colors,
+            s=_sizes,
+            alpha=0.7,
+            edgecolors="none",
+            zorder=2,
+        )
+        for _, _row in _sub.iterrows():
+            _triggered = bool(_row.get(f"combined_{_wkt}", False))
+            _ax.annotate(
+                _row["Storm"],
+                xy=(_row[_xcol], _row["max_obs_rain"]),
+                ha="center",
+                va="center",
+                fontsize=6,
+                fontweight="bold" if _triggered else "normal",
+                zorder=3,
+            )
+        if _e_thresh:
+            _ax.axvline(
+                _e_thresh,
+                color="steelblue",
+                linewidth=1,
+                linestyle="--",
                 alpha=0.7,
-                edgecolors="none",
-                zorder=2,
             )
-            for _, _row in _sub.iterrows():
-                _triggered = bool(_row.get(f"combined_{_wkt}", False))
-                _ax.annotate(
-                    _row["Storm"],
-                    xy=(_row[_xcol], _row["max_obs_rain"]),
-                    ha="center",
-                    va="center",
-                    fontsize=6,
-                    fontweight="bold" if _triggered else "normal",
-                    zorder=3,
-                )
-            if _exp_thresh:
-                _ax.axvline(
-                    _exp_thresh,
-                    color="steelblue",
-                    linewidth=1,
-                    linestyle="--",
-                    alpha=0.7,
-                )
-            if _ro is not None:
-                _ax.axhline(
-                    _ro,
-                    color="darkorange",
-                    linewidth=1,
-                    linestyle="--",
-                    alpha=0.7,
-                )
-            _ax.set_xlabel(f"{_row_label} ({_wkt} kt)")
-            _ax.set_ylabel("Obs rain q80 (mm)" if _col_idx == 0 else "")
-            _ax.set_title(
-                f"{_wkt} kt — {'Fcast' if _row_idx == 0 else 'Obs'} exposure"
+        if _ro is not None:
+            _ax.axhline(
+                _ro,
+                color="darkorange",
+                linewidth=1,
+                linestyle="--",
+                alpha=0.7,
             )
-            _ax.grid(True, alpha=0.25, linestyle="--")
-            _ax.set_xlim(left=0)
-            _ax.set_ylim(bottom=0)
+        _ax.set_xlabel(f"Total exposure ({_wkt} kt)")
+        _ax.set_ylabel("Obs rain q80 (mm)" if _col_idx == 0 else "")
+        _ax.set_title(f"{_wkt} kt — total exp vs obs rain")
+        _ax.grid(True, alpha=0.25, linestyle="--")
+        _ax.set_xlim(left=0)
+        _ax.set_ylim(bottom=0)
 
     _legend_patches = [
         mpatches.Patch(color="crimson", label="CERF"),
-        mpatches.Patch(color="gold", label="Fcast trig"),
-        mpatches.Patch(color="darkorange", label="Obs trig"),
+        mpatches.Patch(color="gold", label="Exp triggered"),
+        mpatches.Patch(color="darkorange", label="Rain triggered"),
         mpatches.Patch(color="#aaaaaa", label="Not triggered"),
     ]
     _fig.legend(
@@ -1594,12 +1604,12 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
         loc="upper center",
         ncol=4,
         fontsize=9,
-        bbox_to_anchor=(0.5, 1.01),
+        bbox_to_anchor=(0.5, 1.02),
     )
     _fig.suptitle(
-        "Exposure vs. observed rainfall (q80 IMERG) — bubble size ∝ impact",
+        "Total exposure vs. observed rainfall (q80) — bubble size ∝ impact",
         fontsize=11,
-        y=1.04,
+        y=1.05,
     )
     plt.tight_layout()
     _fig
