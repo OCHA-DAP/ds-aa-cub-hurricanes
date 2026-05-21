@@ -397,14 +397,24 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
         64: _get_thresh("exp_64"),
     }
 
-    _n_years = int(df_exp["season"].max() - df_exp["season"].min() + 1)
-    _rp = (_n_years + 1) / _n
-
     _meta = df_exp[["sid", "season", "name"]].drop_duplicates("sid")
     _df = _meta.merge(_exp_pivot, on="sid", how="outer")
     _df = _df.merge(_texp_pivot, on="sid", how="left")
     for _c in ["total_34", "total_50", "total_64"]:
         _df[_c] = _df[_c].fillna(0)
+
+    def _get_thresh_total(col: str) -> float:
+        _vals = _df[col].fillna(0).sort_values(ascending=False)
+        return float(_vals.iloc[_n - 1]) if _n <= len(_vals) else 0.0
+
+    _thresh_total = {
+        34: _get_thresh_total("total_34"),
+        50: _get_thresh_total("total_50"),
+        64: _get_thresh_total("total_64"),
+    }
+
+    _n_years = int(df_exp["season"].max() - df_exp["season"].min() + 1)
+    _rp = (_n_years + 1) / _n
     _df = _df.merge(df_impact, on="sid", how="outer")
     _df = _df.drop_duplicates(subset=["sid"])
     _df["season"] = pd.to_numeric(
@@ -435,6 +445,9 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
     _df["trig_34"] = _df["exp_34"].fillna(0) >= _thresh[34]
     _df["trig_50"] = _df["exp_50"].fillna(0) >= _thresh[50]
     _df["trig_64"] = _df["exp_64"].fillna(0) >= _thresh[64]
+    _df["trig_total_34"] = _df["total_34"].fillna(0) >= _thresh_total[34]
+    _df["trig_total_50"] = _df["total_50"].fillna(0) >= _thresh_total[50]
+    _df["trig_total_64"] = _df["total_64"].fillna(0) >= _thresh_total[64]
 
     def _cerf_str(row):
         if pd.notna(row["Amount in US$"]) and row["Amount in US$"] > 0:
@@ -473,8 +486,11 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
                 "exp_64",
                 "total_64",
                 "trig_34",
+                "trig_total_34",
                 "trig_50",
+                "trig_total_50",
                 "trig_64",
+                "trig_total_64",
                 "Total Affected",
                 "CERF",
                 "Old fcast.",
@@ -483,12 +499,12 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
         ]
         .rename(
             columns={
-                "exp_34": "34 kt obsv",
-                "total_34": "34 kt total",
-                "exp_50": "50 kt obsv",
-                "total_50": "50 kt total",
-                "exp_64": "64 kt obsv",
-                "total_64": "64 kt total",
+                "exp_34": "34 kt final obsv",
+                "total_34": "34 kt max total fcast",
+                "exp_50": "50 kt final obsv",
+                "total_50": "50 kt max total fcast",
+                "exp_64": "64 kt final obsv",
+                "total_64": "64 kt max total fcast",
             }
         )
         .reset_index(drop=True)
@@ -497,17 +513,34 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
     def _style_row(row):
         _styles = [""] * len(row)
         _idx = list(row.index)
-        for _obsv_col, _total_col, _trig in [
-            ("34 kt obsv", "34 kt total", "trig_34"),
-            ("50 kt obsv", "50 kt total", "trig_50"),
-            ("64 kt obsv", "64 kt total", "trig_64"),
+        for _obsv_col, _trig_obsv, _total_col, _trig_total in [
+            (
+                "34 kt final obsv",
+                "trig_34",
+                "34 kt max total fcast",
+                "trig_total_34",
+            ),
+            (
+                "50 kt final obsv",
+                "trig_50",
+                "50 kt max total fcast",
+                "trig_total_50",
+            ),
+            (
+                "64 kt final obsv",
+                "trig_64",
+                "64 kt max total fcast",
+                "trig_total_64",
+            ),
         ]:
-            if _trig in _idx and row[_trig]:
-                for _c in [_obsv_col, _total_col]:
-                    if _c in _idx:
-                        _styles[_idx.index(_c)] = (
-                            "background-color: gold; font-weight: bold"
-                        )
+            if _trig_obsv in _idx and row[_trig_obsv] and _obsv_col in _idx:
+                _styles[_idx.index(_obsv_col)] = (
+                    "background-color: gold; font-weight: bold"
+                )
+            if _trig_total in _idx and row[_trig_total] and _total_col in _idx:
+                _styles[_idx.index(_total_col)] = (
+                    "background-color: #a8d8ea; font-weight: bold"
+                )
         return _styles
 
     def _style_check(val):
@@ -533,12 +566,12 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
             {
                 c: lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "—"
                 for c in [
-                    "34 kt obsv",
-                    "34 kt total",
-                    "50 kt obsv",
-                    "50 kt total",
-                    "64 kt obsv",
-                    "64 kt total",
+                    "34 kt final obsv",
+                    "34 kt max total fcast",
+                    "50 kt final obsv",
+                    "50 kt max total fcast",
+                    "64 kt final obsv",
+                    "64 kt max total fcast",
                 ]
             }
             | {
@@ -547,15 +580,28 @@ def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
                 )
             }
         )
-        .hide(axis="columns", subset=["trig_34", "trig_50", "trig_64"])
+        .hide(
+            axis="columns",
+            subset=[
+                "trig_34",
+                "trig_total_34",
+                "trig_50",
+                "trig_total_50",
+                "trig_64",
+                "trig_total_64",
+            ],
+        )
         .hide(axis="index")
     )
 
     _summary = mo.md(
         f"**Return period: {_rp:.1f} yrs** ({_n} storms / {_n_years} yrs)  \n"
-        f"Thresholds: **34 kt** ≥ {int(_thresh[34]):,} · "
+        f"Final obsv thresholds (gold): **34 kt** ≥ {int(_thresh[34]):,} · "
         f"**50 kt** ≥ {int(_thresh[50]):,} · "
-        f"**64 kt** ≥ {int(_thresh[64]):,} people exposed"
+        f"**64 kt** ≥ {int(_thresh[64]):,}  \n"
+        f"Max total fcast thresholds (blue): **34 kt** ≥ {int(_thresh_total[34]):,} · "
+        f"**50 kt** ≥ {int(_thresh_total[50]):,} · "
+        f"**64 kt** ≥ {int(_thresh_total[64]):,} people exposed"
     )
 
     mo.output.replace(mo.vstack([_summary, mo.Html(_styled.to_html())]))
