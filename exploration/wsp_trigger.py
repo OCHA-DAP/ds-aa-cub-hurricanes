@@ -1228,6 +1228,21 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
             if f"combined_{_wkt}" not in _opt.columns:
                 _opt[f"combined_{_wkt}"] = False
 
+        # Best pure 64kt exposure option (no rainfall component)
+        _df_64exp_only = _df_res[
+            (_df_res["wkt"] == 64) & (_df_res["n_rain"] == 0)
+        ]
+        _best_64x = None
+        if not _df_64exp_only.empty:
+            _best_64x = _df_64exp_only.sort_values(
+                ["cerf_count", "total_affected", "exp_thresh"],
+                ascending=[False, False, True],
+            ).iloc[0]
+            _opt["exp_trig_64x"] = _opt["sid"].isin(_best_64x["_exp_sids"])
+        else:
+            _opt["exp_trig_64x"] = False
+        _opt["combined_64x"] = _opt["exp_trig_64x"]
+
         _best_thresh = {}
         for _, _r in _df_best.iterrows():
             _wkt = int(_r["wkt"])
@@ -1238,6 +1253,11 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
                     if pd.notna(_r["r_obs_exact"])
                     else None
                 ),
+            }
+        if _best_64x is not None:
+            _best_thresh["64x"] = {
+                "exp_thresh": int(_best_64x["exp_thresh"]),
+                "r_obs": None,
             }
         rain_opt_thresh = _best_thresh
 
@@ -1271,6 +1291,13 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
                 f"exp_trig_{_wkt}",
                 f"combined_{_wkt}",
             ]
+
+        # 64x pure exposure condition columns
+        _et64x = _best_thresh.get("64x", {}).get("exp_thresh", float("inf"))
+        _opt["_exp_flag_64x"] = _opt["total_exp_64"] >= _et64x
+        _opt["64x exp"] = _opt["_exp_flag_64x"].map({True: "✓", False: "—"})
+        _opt["64x+O"] = _opt["combined_64x"].map({True: "✓", False: "—"})
+        _bool_hide += ["_exp_flag_64x", "exp_trig_64x", "combined_64x"]
 
         df_rain_opt = _opt
 
@@ -1318,6 +1345,21 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
                     "# Rain": int(_r["n_rain"]),
                     "CERF storms": int(_r["cerf_count"]),
                     "Total Affected": int(_r["total_affected"]),
+                    "RP yrs": round(_rp, 1),
+                }
+            )
+
+        if _best_64x is not None:
+            _summary_rows.append(
+                {
+                    "Trigger": "64 kt exp only ★",
+                    "Wind kt": "64",
+                    "Exp thresh": f"{int(_best_64x['exp_thresh']):,}",
+                    "Rain thresh (q80) mm": "—",
+                    "# Exp": int(_best_64x["n_exp"]),
+                    "# Rain": 0,
+                    "CERF storms": int(_best_64x["cerf_count"]),
+                    "Total Affected": int(_best_64x["total_affected"]),
                     "RP yrs": round(_rp, 1),
                 }
             )
@@ -1408,12 +1450,12 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
 
         _cond_cols = [
             f"{w} {c}" for w in [34, 50, 64] for c in ["exp", "rain"]
-        ]
-        _comb_cols = [f"{w}+O" for w in [34, 50, 64]]
+        ] + ["64x exp"]
+        _comb_cols = [f"{w}+O" for w in [34, 50, 64]] + ["64x+O"]
 
-        _any_triggered = _opt[[f"combined_{w}" for w in [34, 50, 64]]].any(
-            axis=1
-        )
+        _any_triggered = _opt[
+            [f"combined_{w}" for w in [34, 50, 64]] + ["combined_64x"]
+        ].any(axis=1)
         _show = (
             _any_triggered
             | _opt["fcast_trig_old"]
@@ -1434,6 +1476,8 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
                     "64 exp",
                     "64 rain",
                     "64+O",
+                    "64x exp",
+                    "64x+O",
                     *_bool_hide,
                     "old_combined",
                     "Total Affected",
