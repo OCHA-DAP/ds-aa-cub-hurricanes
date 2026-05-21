@@ -350,6 +350,33 @@ def load_codab(load_codab_from_blob):
 
 
 @app.cell
+def doc_wind_table(mo):
+    mo.md(
+        """
+## Wind exposure trigger table
+
+Shows population exposed to hurricane-force winds for all Cuba-affecting
+storms since 2002, at three wind speed levels (34 / 50 / 64 kt).
+
+Two exposure metrics are shown per wind level:
+
+| Column | Definition |
+|--------|-----------|
+| **X kt final obsv** | Final observed population exposure — last valid_time from NHC observed tracks (`nhc_tracks_obsv_exposure`), or IBTrACS for historical storms without NHC data |
+| **X kt max total fcast** | Maximum of **(forecast exposure + cumulative observed exposure)** across all NHC forecast issuances. At each `issued_time`, forecast exposure (what NHC predicts will be affected) is added to the largest observed exposure recorded up to that point, capturing the peak combined signal during the approach. |
+
+**Highlighting:** gold = storm triggers the *final obsv* threshold at n = 10
+(RP ≈ 2.6 yrs); blue = triggers the *max total fcast* threshold at n = 10.
+These are independent thresholds computed separately.
+
+**Old fcast. / Old obsv.** columns show whether each storm triggered under
+historical option 1b: forecast = ZMA wind ≥ 120 kt AND CHIRPS-GEFS q80 ≥ 35.7 mm;
+observational = ZMA wind ≥ 105 kt AND IMERG q80 ≥ 96.2 mm.
+        """
+    )
+
+
+@app.cell
 def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
     _n = 10
 
@@ -1096,6 +1123,49 @@ def trigger_corr_table(df_rain_opt, mo, pd, plt):
 
 
 @app.cell
+def doc_optimization(mo):
+    mo.md(
+        """
+## Trigger optimization
+
+Tests a simplified **OR trigger** with two indicators:
+
+1. **Total exposure** — max(forecast exposure + cumulative observed exposure)
+   at any NHC forecast issuance during the storm. Forecast and observed
+   exposure come from `nhc_tracks_fcast_exposure` and
+   `nhc_tracks_obsv_exposure` respectively (iso3 = CUB, admin_level = 0),
+   aligned in time via `pd.merge_asof`. For historical storms not in
+   those tables, `ibtracs_wind_exposure` is used as a fallback.
+
+2. **Observed rainfall** — q80 (80th percentile) 2-day IMERG rainfall
+   aggregated over Cuba during the storm period, from
+   `fcast_obsv_combined_stats.parquet`.
+
+A storm **triggers** if *either* indicator meets its threshold. Three wind
+levels are tested (34 / 50 / 64 kt) as separate options, plus a
+**64 kt exposure-only** option with no rainfall component.
+
+**How thresholds are determined:** for each wind level and exposure
+threshold, the rainfall threshold is set *deterministically* as the
+(n − n_exp)-th largest q80 value among storms not already triggered by
+exposure. This guarantees exactly n = 10 storms trigger overall (RP ≈
+2.6 yrs over 2002–2025). The best option per wind level maximises CERF
+storm count, then Total Affected, then minimises the exposure threshold.
+
+**Condition columns in the storm table:**
+
+| Column | Meaning |
+|--------|---------|
+| **X kt exp** | Total exposure ≥ optimised exposure threshold at this wind level |
+| **X kt rain** | Observed q80 ≥ optimised rainfall threshold |
+| **X kt+O** | Combined: either condition met (the actual trigger) |
+| **64x exp / 64x+O** | 64 kt exposure-only option — no rainfall component |
+| **Old fcast. / Old obsv.** | Historical option 1b trigger flags |
+        """
+    )
+
+
+@app.cell
 def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
     _n = 10  # RP ≈ 2.6 yrs over 2002-2025
 
@@ -1745,6 +1815,25 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
     plt.tight_layout()
     _fig
     return
+
+
+@app.cell
+def doc_leadtime(mo):
+    mo.md(
+        """
+## Lead time analysis — 64 kt exposure-only trigger
+
+For each storm triggered under the 64 kt exposure-only option, compares
+the earliest time the trigger would have been met against when the storm
+arrived at Cuba.
+
+| Column | Definition |
+|--------|-----------|
+| **Trigger issued_time** | Earliest NHC forecast issuance at which total 64 kt exposure (forecast + cumulative observed) first reached the optimised threshold |
+| **Arrival time (max Δ obs 64kt)** | `valid_time` of the largest single-step increase in observed 64 kt population exposure — the moment the storm was most actively sweeping through Cuba |
+| **Lead time** | Arrival time − trigger issued_time. Positive = trigger fired before arrival. "no obs data" = storm is in IBTrACS only, no NHC observed exposure time series available. |
+        """
+    )
 
 
 @app.cell
