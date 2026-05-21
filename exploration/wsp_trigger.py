@@ -1375,8 +1375,16 @@ def rain_trigger_opt(df_exp, df_fcast_exp, df_impact, df_old_trig, mo, pd):
         _kt_cols = [f"{w} kt" for w in [34, 50, 64]]
         _comb_cols = [f"{w}+O" for w in [34, 50, 64]]
 
+        _any_triggered = _opt[[f"combined_{w}" for w in [34, 50, 64]]].any(
+            axis=1
+        )
+        _show = (
+            _any_triggered
+            | (_opt["Total Affected"].fillna(0) > 0)
+            | _opt["has_cerf"]
+        )
         _storm_table = (
-            _opt[
+            _opt[_show][
                 [
                     "Storm",
                     "34 fexp",
