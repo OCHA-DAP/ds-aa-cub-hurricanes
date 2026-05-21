@@ -351,7 +351,7 @@ def load_codab(load_codab_from_blob):
 
 @app.cell
 def trigger_table(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
-    _n = 9
+    _n = 10
 
     _exp_pivot = (
         df_exp.pivot_table(
