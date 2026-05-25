@@ -965,6 +965,8 @@ df_stats_fcast_readiness_labelled["Readiness"] = (
 )
 ```
 
+
+
 ```{python}
 # Function to get trigger results with readiness analysis
 def get_action_obsv_trig_results(index, impact_col="Total Affected"):
@@ -1252,4 +1254,56 @@ trigger_breakdown
 ```
 
 
+## Historical record by window
 ```{python}
+# It seems something was wrong w/ dev db connection for ibtracs 2025-11-20 when I was running this so I had to do a hack to get # this notebook to run and get the `joint_rp_results` object I wanted loaded
+# As df_storms = ibtrac.load_storms() (ln 941) was not working - i did this instead to recreated it (and then proceeded):
+# cols = ["sid", "atcf_id"]
+# df_storm_lookup = df_stats[cols].drop_duplicates().copy()
+# df_storm_lookup["atcf_id"] = df_storm_lookup["atcf_id"].str.lower()
+
+df_joint_rp_results = joint_rp_results["df_with_any_trig"]
+df_trigger_bools = df_joint_rp_results[
+    ["year", "readiness_bool", "action_bool", "obsv_bool"]
+]
+
+# Collapse to unique years - any TRUE in a year becomes TRUE for that year
+df_trigger_bools_by_year = (
+    df_trigger_bools.groupby("year")
+    .agg({"readiness_bool": "any", "action_bool": "any", "obsv_bool": "any"})
+    .reset_index()
+)
+
+# Fill in all missing years from 2000-2024 with False
+all_years = pd.DataFrame({"year": range(2000, 2026)})
+df_trigger_bools_by_year = all_years.merge(
+    df_trigger_bools_by_year, on="year", how="left"
+).fillna(False)
+
+# Set all triggers to True for 2025
+df_trigger_bools_by_year.loc[
+    df_trigger_bools_by_year["year"] == 2025,
+    ["readiness_bool", "action_bool", "obsv_bool"],
+] = True
+
+```
+
+```{python}
+# | eval: false
+# | echo: true
+
+# write for financial risk transfer solution project
+df_trigger_bools_by_year_uid = df_trigger_bools_by_year.rename(
+    columns={
+        "readiness_bool": "cub_storms_v1_wt1",
+        "action_bool": "cub_storms_v1_wt2",
+        "obsv_bool": "cub_storms_v1_wt3",
+    }
+)
+df_trigger_bools_by_year_uid
+
+stratus.upload_csv_to_blob(
+    df_trigger_bools_by_year_uid,
+    "ds-aa-cerf-global-trigger-allocations/aa_historical/yearly/v4/cub_storms_v1.csv",
+)
+```
