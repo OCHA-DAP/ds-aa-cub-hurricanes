@@ -827,3 +827,59 @@ plot_selected_threshs(321972)
 ```python
 disp_selected_threshs(321972)
 ```
+
+## Melissa
+
+Plotting Melissa on the Option 4 plot to show how extreme the rainfall forecast is.
+
+```python
+CHD_GREEN = "#1bb580"
+```
+
+```python
+current_rain = 142.38818
+current_wind = 120
+fig, axs = plot_selected_threshs(321972)
+axs[0].scatter(
+    [current_wind],
+    [current_rain],
+    marker="x",
+    color=CHD_GREEN,
+    linewidths=3,
+    s=100,
+)
+axs[0].annotate(
+    "   Melissa  \n",
+    (current_wind, current_rain),
+    va="center",
+    ha="right",
+    color=CHD_GREEN,
+    fontweight="bold",
+)
+axs[0].annotate(
+    f"\n\n   forecast issued   \n   5pm EDT 2025-10-28   ",
+    (current_wind, current_rain),
+    va="center",
+    ha="right",
+    color=CHD_GREEN,
+    fontstyle="italic",
+    fontsize=7,
+)
+
+legend_text = "\n    Red text indicates CERF allocation\n\n"
+
+legend_text += (
+    "    Size of bubble proportional to\n"
+    "    total number of people affected [EM-DAT]"
+)
+axs[0].annotate(
+    legend_text,
+    (0, 155),
+    va="top",
+    fontsize=6,
+    fontstyle="italic",
+    color="grey",
+)
+axs[1].remove()
+axs[0].set_title("Cuba hurricanes historical rainfall vs. wind speed")
+```
