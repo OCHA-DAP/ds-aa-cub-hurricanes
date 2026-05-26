@@ -89,7 +89,6 @@ def load_obsv_exposure(pd, stratus, text):
 
     # Restrict to 2002 onwards (sid starts with year)
     df_exp_raw = df_exp_raw[df_exp_raw["sid"].str[:4].astype(int) >= 2002]
-
     return (df_exp_raw,)
 
 
@@ -337,7 +336,7 @@ def load_total_exposure(pd, stratus, text):
 
 
 @app.cell
-def load_monitors(PROJECT_PREFIX, pd, stratus):
+def load_monitors(PROJECT_PREFIX, stratus):
     _blob = f"{PROJECT_PREFIX}/processed/nhc/monitors_nhc_chirpsgefs.parquet"
     df_monitors = stratus.load_parquet_from_blob(_blob)
     return (df_monitors,)
@@ -351,29 +350,28 @@ def load_codab(load_codab_from_blob):
 
 @app.cell
 def doc_wind_table(mo):
-    mo.md(
-        """
-## Wind exposure trigger table
+    mo.md("""
+    ## Wind exposure trigger table
 
-Shows population exposed to hurricane-force winds for all Cuba-affecting
-storms since 2002, at three wind speed levels (34 / 50 / 64 kt).
+    Shows population exposed to hurricane-force winds for all Cuba-affecting
+    storms since 2002, at three wind speed levels (34 / 50 / 64 kt).
 
-Two exposure metrics are shown per wind level:
+    Two exposure metrics are shown per wind level:
 
-| Column | Definition |
-|--------|-----------|
-| **X kt final obsv** | Final observed population exposure — last valid_time from NHC observed tracks (`nhc_tracks_obsv_exposure`), or IBTrACS for historical storms without NHC data |
-| **X kt max total fcast** | Maximum of **(forecast exposure + cumulative observed exposure)** across all NHC forecast issuances. At each `issued_time`, forecast exposure (what NHC predicts will be affected) is added to the largest observed exposure recorded up to that point, capturing the peak combined signal during the approach. |
+    | Column | Definition |
+    |--------|-----------|
+    | **X kt final obsv** | Final observed population exposure — last valid_time from NHC observed tracks (`nhc_tracks_obsv_exposure`), or IBTrACS for historical storms without NHC data |
+    | **X kt max total fcast** | Maximum of **(forecast exposure + cumulative observed exposure)** across all NHC forecast issuances. At each `issued_time`, forecast exposure (what NHC predicts will be affected) is added to the largest observed exposure recorded up to that point, capturing the peak combined signal during the approach. |
 
-**Highlighting:** gold = storm triggers the *final obsv* threshold at n = 10
-(RP ≈ 2.6 yrs); blue = triggers the *max total fcast* threshold at n = 10.
-These are independent thresholds computed separately.
+    **Highlighting:** gold = storm triggers the *final obsv* threshold at n = 10
+    (RP ≈ 2.6 yrs); blue = triggers the *max total fcast* threshold at n = 10.
+    These are independent thresholds computed separately.
 
-**Old fcast. / Old obsv.** columns show whether each storm triggered under
-historical option 1b: forecast = ZMA wind ≥ 120 kt AND CHIRPS-GEFS q80 ≥ 35.7 mm;
-observational = ZMA wind ≥ 105 kt AND IMERG q80 ≥ 96.2 mm.
-        """
-    )
+    **Old fcast. / Old obsv.** columns show whether each storm triggered under
+    historical option 1b: forecast = ZMA wind ≥ 120 kt AND CHIRPS-GEFS q80 ≥ 35.7 mm;
+    observational = ZMA wind ≥ 105 kt AND IMERG q80 ≥ 96.2 mm.
+    """)
+    return
 
 
 @app.cell
@@ -678,9 +676,9 @@ def storm_selector(df_exp, mo, pd):
 @app.cell
 def storm_map(
     df_exp,
-    df_total_exp,
     df_monitors,
     df_old_trig,
+    df_total_exp,
     gdf_cub,
     gpd,
     mo,
@@ -1075,7 +1073,7 @@ def corr_plots(df_triggers, plt, thresh):
 
 
 @app.cell
-def trigger_corr_table(df_rain_opt, mo, pd, plt):
+def trigger_corr_table(df_rain_opt, plt):
     _cols = {
         "total_exp_34": "Total exp 34",
         "total_exp_50": "Total exp 50",
@@ -1120,53 +1118,53 @@ def trigger_corr_table(df_rain_opt, mo, pd, plt):
     )
     plt.tight_layout()
     _fig
+    return
 
 
 @app.cell
 def doc_optimization(mo):
-    mo.md(
-        """
-## Trigger optimization
+    mo.md("""
+    ## Trigger optimization
 
-Tests a simplified **OR trigger** with two indicators:
+    Tests a simplified **OR trigger** with two indicators:
 
-1. **Total exposure** — max(forecast exposure + cumulative observed exposure)
-   at any NHC forecast issuance during the storm. Forecast and observed
-   exposure come from `nhc_tracks_fcast_exposure` and
-   `nhc_tracks_obsv_exposure` respectively (iso3 = CUB, admin_level = 0),
-   aligned in time via `pd.merge_asof`. For historical storms not in
-   those tables, `ibtracs_wind_exposure` is used as a fallback.
+    1. **Total exposure** — max(forecast exposure + cumulative observed exposure)
+       at any NHC forecast issuance during the storm. Forecast and observed
+       exposure come from `nhc_tracks_fcast_exposure` and
+       `nhc_tracks_obsv_exposure` respectively (iso3 = CUB, admin_level = 0),
+       aligned in time via `pd.merge_asof`. For historical storms not in
+       those tables, `ibtracs_wind_exposure` is used as a fallback.
 
-2. **Observed rainfall** — q80 (80th percentile) 2-day IMERG rainfall
-   aggregated over Cuba during the storm period, from
-   `fcast_obsv_combined_stats.parquet`.
+    2. **Observed rainfall** — q80 (80th percentile) 2-day IMERG rainfall
+       aggregated over Cuba during the storm period, from
+       `fcast_obsv_combined_stats.parquet`.
 
-A storm **triggers** if *either* indicator meets its threshold. Three wind
-levels are tested (34 / 50 / 64 kt) as separate options, plus a
-**64 kt exposure-only** option with no rainfall component.
+    A storm **triggers** if *either* indicator meets its threshold. Three wind
+    levels are tested (34 / 50 / 64 kt) as separate options, plus a
+    **64 kt exposure-only** option with no rainfall component.
 
-**How thresholds are determined:** for each wind level and exposure
-threshold, the rainfall threshold is set *deterministically* as the
-(n − n_exp)-th largest q80 value among storms not already triggered by
-exposure. This guarantees exactly n = 10 storms trigger overall (RP ≈
-2.6 yrs over 2002–2025). The best option per wind level maximises CERF
-storm count, then Total Affected, then minimises the exposure threshold.
+    **How thresholds are determined:** for each wind level and exposure
+    threshold, the rainfall threshold is set *deterministically* as the
+    (n − n_exp)-th largest q80 value among storms not already triggered by
+    exposure. This guarantees exactly n = 10 storms trigger overall (RP ≈
+    2.6 yrs over 2002–2025). The best option per wind level maximises CERF
+    storm count, then Total Affected, then minimises the exposure threshold.
 
-**Condition columns in the storm table:**
+    **Condition columns in the storm table:**
 
-| Column | Meaning |
-|--------|---------|
-| **X kt exp** | Total exposure ≥ optimised exposure threshold at this wind level |
-| **X kt rain** | Observed q80 ≥ optimised rainfall threshold |
-| **X kt+O** | Combined: either condition met (the actual trigger) |
-| **64x exp / 64x+O** | 64 kt exposure-only option — no rainfall component |
-| **Old fcast. / Old obsv.** | Historical option 1b trigger flags |
-        """
-    )
+    | Column | Meaning |
+    |--------|---------|
+    | **X kt exp** | Total exposure ≥ optimised exposure threshold at this wind level |
+    | **X kt rain** | Observed q80 ≥ optimised rainfall threshold |
+    | **X kt+O** | Combined: either condition met (the actual trigger) |
+    | **64x exp / 64x+O** | 64 kt exposure-only option — no rainfall component |
+    | **Old fcast. / Old obsv.** | Historical option 1b trigger flags |
+    """)
+    return
 
 
 @app.cell
-def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
+def rain_trigger_opt(df_exp, df_impact, df_old_trig, df_total_exp, mo, pd):
     _n = 10  # RP ≈ 2.6 yrs over 2002-2025
 
     # ── Build base data frame ─────────────────────────────────────────────  # noqa: E501
@@ -1708,12 +1706,11 @@ def rain_trigger_opt(df_exp, df_total_exp, df_impact, df_old_trig, mo, pd):
                 ]
             )
         )
-
     return df_rain_opt, rain_opt_thresh
 
 
 @app.cell
-def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
+def rain_scatter(df_rain_opt, mo, mpatches, pd, plt, rain_opt_thresh):
     mo.stop(not len(df_rain_opt) or not rain_opt_thresh)
     _fig, _axes = plt.subplots(1, 3, figsize=(15, 5), dpi=120)
 
@@ -1811,21 +1808,20 @@ def rain_scatter(df_rain_opt, mpatches, mo, pd, plt, rain_opt_thresh):
 
 @app.cell
 def doc_leadtime(mo):
-    mo.md(
-        """
-## Lead time analysis — 64 kt exposure-only trigger
+    mo.md("""
+    ## Lead time analysis — 64 kt exposure-only trigger
 
-For each storm triggered under the 64 kt exposure-only option, compares
-the earliest time the trigger would have been met against when the storm
-arrived at Cuba.
+    For each storm triggered under the 64 kt exposure-only option, compares
+    the earliest time the trigger would have been met against when the storm
+    arrived at Cuba.
 
-| Column | Definition |
-|--------|-----------|
-| **Trigger issued_time** | Earliest NHC forecast issuance at which total 64 kt exposure (forecast + cumulative observed) first reached the optimised threshold |
-| **Arrival time (max Δ obs 64kt)** | `valid_time` of the largest single-step increase in observed 64 kt population exposure — the moment the storm was most actively sweeping through Cuba |
-| **Lead time** | Arrival time − trigger issued_time. Positive = trigger fired before arrival. "no obs data" = storm is in IBTrACS only, no NHC observed exposure time series available. |
-        """
-    )
+    | Column | Definition |
+    |--------|-----------|
+    | **Trigger issued_time** | Earliest NHC forecast issuance at which total 64 kt exposure (forecast + cumulative observed) first reached the optimised threshold |
+    | **Arrival time (max Δ obs 64kt)** | `valid_time` of the largest single-step increase in observed 64 kt population exposure — the moment the storm was most actively sweeping through Cuba |
+    | **Lead time** | Arrival time − trigger issued_time. Positive = trigger fired before arrival. "no obs data" = storm is in IBTrACS only, no NHC observed exposure time series available. |
+    """)
+    return
 
 
 @app.cell
@@ -1999,6 +1995,671 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
             ]
         )
     )
+    return
+
+
+@app.cell
+def load_max_fcast(pd, stratus, text):
+    """Max NHC forecast exposure per (sid, wind_speed_kt).
+
+    Takes max(pop_exposed) over all forecast issuances for each storm and
+    wind level. Represents the most-alarming forecast NHC ever issued.
+    Note: at each issuance, fcast_exp already bundles a snapshot of the
+    current observed position — fine for an operational metric, just be
+    aware when comparing against final_obsv.
+    """
+    _engine = stratus.get_engine(stage="dev")
+    with _engine.connect() as _conn:
+        _df_fcast = pd.read_sql(
+            text(
+                """
+                SELECT atcf_id, wind_speed_kt,
+                       MAX(pop_exposed) AS max_fcast_exp
+                FROM storms.nhc_tracks_fcast_exposure
+                WHERE iso3 = 'CUB' AND admin_level = 0
+                GROUP BY atcf_id, wind_speed_kt
+            """
+            ),
+            _conn,
+        )
+        _df_sid = pd.read_sql(
+            text("SELECT sid, atcf_id FROM storms.ibtracs_storms"),
+            _conn,
+        )
+    _engine.dispose()
+    df_max_fcast = _df_fcast.merge(_df_sid, on="atcf_id", how="left").dropna(
+        subset=["sid"]
+    )
+    df_max_fcast = df_max_fcast[["sid", "wind_speed_kt", "max_fcast_exp"]]
+    df_max_fcast = df_max_fcast[
+        df_max_fcast["sid"].str[:4].astype(int) >= 2002
+    ]
+    return (df_max_fcast,)
+
+
+@app.cell
+def doc_binary_corr(mo):
+    mo.md("""
+    ## Experiment 1 — Binary-only correlation heatmap
+
+    Every indicator is converted to a binary trigger flag before computing
+    Pearson r. Continuous metrics are thresholded at their **top-10 storm
+    value** (matching the n=10 return-period target). Old fcast / Old obsv
+    are already binary. This makes the correlation comparison
+    apples-to-apples (phi coefficient throughout) rather than mixing
+    binary triggers with continuous raw values.
+    """)
+    return
+
+
+@app.cell
+def binary_corr_heatmap(
+    df_exp,
+    df_impact,
+    df_max_fcast,
+    df_old_trig,
+    df_total_exp,
+    pd,
+    plt,
+):
+    _N = 10  # target storms (matches main optimisation)
+
+    _exp_pivot = (
+        df_exp.pivot_table(
+            index="sid",
+            columns="wind_speed_kt",
+            values="pop_exposed",
+            aggfunc="first",
+        )
+        .rename(
+            columns={
+                34: "final_obsv_34",
+                50: "final_obsv_50",
+                64: "final_obsv_64",
+            }
+        )
+        .reset_index()
+    )
+    _total_pivot = (
+        df_total_exp.pivot_table(
+            index="sid",
+            columns="wind_speed_kt",
+            values="max_total_exposure",
+            aggfunc="max",
+        )
+        .rename(
+            columns={
+                34: "total_exp_34",
+                50: "total_exp_50",
+                64: "total_exp_64",
+            }
+        )
+        .reset_index()
+    )
+    _fcast_pivot = (
+        df_max_fcast.pivot_table(
+            index="sid",
+            columns="wind_speed_kt",
+            values="max_fcast_exp",
+            aggfunc="max",
+        )
+        .rename(
+            columns={
+                34: "max_fcast_34",
+                50: "max_fcast_50",
+                64: "max_fcast_64",
+            }
+        )
+        .reset_index()
+    )
+    _df = (
+        _exp_pivot.merge(_total_pivot, on="sid", how="outer")
+        .merge(_fcast_pivot, on="sid", how="outer")
+    )
+    for _c in _df.columns:
+        if _c != "sid":
+            _df[_c] = _df[_c].fillna(0)
+    _df = _df[_df["sid"].str[:4].astype(int) >= 2002].copy()
+    _df = _df.merge(
+        df_old_trig[["sid", "fcast_trig", "obsv_trig", "q80_obsv"]],
+        on="sid",
+        how="left",
+    )
+    _df = _df.merge(df_impact[["sid", "Amount in US$"]], on="sid", how="left")
+    _df["has_cerf"] = (_df["Amount in US$"].fillna(0) > 0).astype(int)
+    _df["fcast_trig_old"] = (
+        _df["fcast_trig"].astype("boolean").fillna(False).astype(int)
+    )
+    _df["obsv_trig_old"] = (
+        _df["obsv_trig"].astype("boolean").fillna(False).astype(int)
+    )
+    _df["q80_obsv"] = _df["q80_obsv"].fillna(0)
+
+    def _binarize_topn(s, n):
+        _v = s[s > 0]
+        if _v.empty or n > len(_v):
+            return pd.Series(0, index=s.index, dtype=int)
+        _t = _v.sort_values(ascending=False).iloc[n - 1]
+        return (s >= _t).astype(int)
+
+    _bin = pd.DataFrame(
+        {
+            "final_obsv_34": _binarize_topn(_df["final_obsv_34"], _N),
+            "final_obsv_50": _binarize_topn(_df["final_obsv_50"], _N),
+            "final_obsv_64": _binarize_topn(_df["final_obsv_64"], _N),
+            "max_fcast_34": _binarize_topn(_df["max_fcast_34"], _N),
+            "max_fcast_50": _binarize_topn(_df["max_fcast_50"], _N),
+            "max_fcast_64": _binarize_topn(_df["max_fcast_64"], _N),
+            "total_exp_34": _binarize_topn(_df["total_exp_34"], _N),
+            "total_exp_50": _binarize_topn(_df["total_exp_50"], _N),
+            "total_exp_64": _binarize_topn(_df["total_exp_64"], _N),
+            "obs_rain": _binarize_topn(_df["q80_obsv"], _N),
+            "Old fcast": _df["fcast_trig_old"],
+            "Old obsv": _df["obsv_trig_old"],
+            "CERF": _df["has_cerf"],
+        }
+    )
+    _corr = _bin.corr().round(2)
+
+    _fig, _ax = plt.subplots(figsize=(11, 9), dpi=120)
+    _mat = _corr.values
+    _im = _ax.imshow(_mat, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+    _fig.colorbar(_im, ax=_ax, fraction=0.03, pad=0.02)
+    _labels = list(_corr.columns)
+    _ax.set_xticks(range(len(_labels)))
+    _ax.set_yticks(range(len(_labels)))
+    _ax.set_xticklabels(_labels, rotation=45, ha="right", fontsize=8)
+    _ax.set_yticklabels(_labels, fontsize=8)
+    for _i in range(len(_labels)):
+        for _j in range(len(_labels)):
+            _v = _mat[_i, _j]
+            _ax.text(
+                _j,
+                _i,
+                f"{_v:.2f}",
+                ha="center",
+                va="center",
+                fontsize=6.5,
+                color="white" if abs(_v) > 0.5 else "#333",
+            )
+    _ax.set_title(
+        "Binary triggers — Pearson r (all indicators thresholded at top-10)\n"
+        "phi coefficient throughout — apples-to-apples comparison",
+        fontsize=10,
+    )
+    plt.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def doc_two_d_opt(mo):
+    mo.md("""
+    ## Experiment 2 — 2D (θ_obs, θ_fcast) optimisation, 64 kt
+
+    Two independent triggers OR-combined:
+
+    - `final_obsv_64` ≥ **θ_obs** — cumulative observed exposure at storm end
+    - `max_fcast_64` ≥ **θ_fcast** — peak forecast exposure across all NHC
+      issuances
+
+    Searches the **constrained grid** (`θ_obs ≤ θ_fcast`) for all
+    combinations yielding exactly **n = 10** triggered storms. The
+    constraint reflects that observed-cumulative is typically ≤ peak
+    forecast for any given storm, so allowing θ_obs > θ_fcast just makes
+    the observed arm redundant.
+
+    Picks the **best** pair by (CERF caught → Total Affected → lowest
+    θ_fcast).
+    """)
+    return
+
+
+@app.cell
+def two_d_64kt_opt(df_exp, df_impact, df_max_fcast, mo, pd, plt):
+    _WKT = 64
+    _N = 10
+
+    _obs = (
+        df_exp[df_exp["wind_speed_kt"] == _WKT][["sid", "pop_exposed"]]
+        .rename(columns={"pop_exposed": "obs_64"})
+        .drop_duplicates("sid")
+    )
+    _fc = (
+        df_max_fcast[df_max_fcast["wind_speed_kt"] == _WKT][
+            ["sid", "max_fcast_exp"]
+        ]
+        .rename(columns={"max_fcast_exp": "fcast_64"})
+        .drop_duplicates("sid")
+    )
+    _df = pd.merge(_obs, _fc, on="sid", how="outer")
+    _df["obs_64"] = _df["obs_64"].fillna(0)
+    _df["fcast_64"] = _df["fcast_64"].fillna(0)
+    _df = _df[_df["sid"].str[:4].astype(int) >= 2002]
+    _df = _df.merge(
+        df_impact[["sid", "Amount in US$", "Total Affected"]],
+        on="sid",
+        how="left",
+    )
+    _df["has_cerf"] = (_df["Amount in US$"].fillna(0) > 0).astype(int)
+    _df["Total Affected"] = _df["Total Affected"].fillna(0)
+    _df = _df.merge(
+        df_exp[["sid", "name", "season"]].drop_duplicates("sid"),
+        on="sid",
+        how="left",
+    )
+
+    # Candidate thresholds = distinct positive values from each series
+    _fc_vals = sorted(set(_df.loc[_df["fcast_64"] > 0, "fcast_64"]))
+    _obs_vals = sorted(set(_df.loc[_df["obs_64"] > 0, "obs_64"]))
+
+    _results = []
+    for _tf in _fc_vals:
+        _f_sids = set(_df[_df["fcast_64"] >= _tf]["sid"])
+        if len(_f_sids) > _N:
+            continue
+        _not_f = _df[~_df["sid"].isin(_f_sids)]
+        for _to in _obs_vals:
+            if _to > _tf:  # constraint: θ_obs ≤ θ_fcast
+                continue
+            _o_sids = set(_not_f[_not_f["obs_64"] >= _to]["sid"])
+            _n_total = len(_f_sids) + len(_o_sids)
+            if _n_total != _N:
+                continue
+            _trig = _df[_df["sid"].isin(_f_sids | _o_sids)]
+            _results.append(
+                {
+                    "theta_obs": _to,
+                    "theta_fcast": _tf,
+                    "n_f": len(_f_sids),
+                    "n_o": len(_o_sids),
+                    "cerf": int(_trig["has_cerf"].sum()),
+                    "total_aff": int(_trig["Total Affected"].sum()),
+                    "_sids": frozenset(_f_sids | _o_sids),
+                }
+            )
+
+    mo.stop(
+        not _results,
+        mo.md(
+            "⚠ No (θ_obs, θ_fcast) combination satisfies n=10 with"
+            " θ_obs ≤ θ_fcast."
+        ),
+    )
+
+    _res = pd.DataFrame(_results)
+    _best = _res.sort_values(
+        ["cerf", "total_aff", "theta_fcast"],
+        ascending=[False, False, True],
+    ).iloc[0]
+
+    _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(16, 7), dpi=120)
+
+    # ── Left: storm scatter in (fcast, obs) plane ────────────────────────
+    _sub = _df[(_df["fcast_64"] > 0) | (_df["obs_64"] > 0)]
+    _colors = ["crimson" if r else "#aaa" for r in _sub["has_cerf"]]
+    _max_aff = max(_sub["Total Affected"].max(), 1)
+    _sizes = [
+        max(30, (v**0.5) * 500 / (_max_aff**0.5)) if v > 0 else 30
+        for v in _sub["Total Affected"]
+    ]
+    _ax1.scatter(
+        _sub["fcast_64"],
+        _sub["obs_64"],
+        c=_colors,
+        s=_sizes,
+        alpha=0.7,
+        edgecolors="none",
+    )
+    for _, _r in _sub.iterrows():
+        _nm = (
+            str(_r["name"]).strip().title()
+            if pd.notna(_r["name"])
+            else "?"
+        )
+        _yr = (
+            int(_r["season"])
+            if pd.notna(_r["season"])
+            else _r["sid"][:4]
+        )
+        _trig = (
+            _r["fcast_64"] >= _best["theta_fcast"]
+            or _r["obs_64"] >= _best["theta_obs"]
+        )
+        _ax1.annotate(
+            f"{_nm} ({_yr})",
+            xy=(_r["fcast_64"], _r["obs_64"]),
+            fontsize=6.5,
+            ha="center",
+            va="center",
+            fontweight="bold" if _trig else "normal",
+        )
+    _ax1.axvline(
+        _best["theta_fcast"],
+        color="steelblue",
+        linestyle="--",
+        linewidth=1,
+        label=f"θ_fcast = {int(_best['theta_fcast']):,}",
+    )
+    _ax1.axhline(
+        _best["theta_obs"],
+        color="darkorange",
+        linestyle="--",
+        linewidth=1,
+        label=f"θ_obs = {int(_best['theta_obs']):,}",
+    )
+    _maxv = max(_sub["fcast_64"].max(), _sub["obs_64"].max()) * 1.05
+    _ax1.plot(
+        [0, _maxv],
+        [0, _maxv],
+        color="#888",
+        linewidth=0.8,
+        linestyle=":",
+        label="y = x",
+    )
+    _ax1.set_xlabel("Max forecast exposure (64 kt)")
+    _ax1.set_ylabel("Final observed exposure (64 kt, cumulative)")
+    _ax1.set_title(
+        f"Best 2D thresholds  ·  CERF={int(_best['cerf'])}  ·  "
+        f"total_aff={int(_best['total_aff']):,}"
+    )
+    _ax1.legend(fontsize=8, loc="upper left")
+    _ax1.grid(alpha=0.25, linestyle="--")
+    _ax1.set_xlim(left=0)
+    _ax1.set_ylim(bottom=0)
+
+    # ── Right: feasible (θ_obs, θ_fcast) pairs coloured by CERF ──────────
+    _sc = _ax2.scatter(
+        _res["theta_fcast"],
+        _res["theta_obs"],
+        c=_res["cerf"],
+        cmap="viridis",
+        s=40,
+        alpha=0.85,
+        edgecolors="none",
+    )
+    _cb = plt.colorbar(_sc, ax=_ax2, fraction=0.03)
+    _cb.set_label("CERF storms caught", fontsize=9)
+    _ax2.scatter(
+        [_best["theta_fcast"]],
+        [_best["theta_obs"]],
+        marker="*",
+        s=400,
+        edgecolors="black",
+        facecolors="gold",
+        linewidths=1.2,
+        zorder=5,
+        label="best",
+    )
+    _ax2.plot(
+        [0, _maxv],
+        [0, _maxv],
+        color="#888",
+        linewidth=0.8,
+        linestyle=":",
+    )
+    _ax2.set_xlabel("θ_fcast")
+    _ax2.set_ylabel("θ_obs")
+    _ax2.set_title(
+        f"All feasible (θ_obs, θ_fcast) giving n={_N}"
+        "  ·  constraint θ_obs ≤ θ_fcast"
+    )
+    _ax2.legend(fontsize=8, loc="lower right")
+    _ax2.grid(alpha=0.25, linestyle="--")
+    _ax2.set_xlim(left=0)
+    _ax2.set_ylim(bottom=0)
+
+    plt.tight_layout()
+
+    _summary = mo.md(
+        f"**Best:** θ_fcast = **{int(_best['theta_fcast']):,}**, "
+        f"θ_obs = **{int(_best['theta_obs']):,}**  ·  "
+        f"n_fcast = {int(_best['n_f'])}, n_obs_only = {int(_best['n_o'])}  ·  "
+        f"CERF = **{int(_best['cerf'])}** caught, "
+        f"Total Affected = **{int(_best['total_aff']):,}**  \n"
+        f"Total feasible (θ_obs, θ_fcast) pairs: **{len(_res)}**"
+    )
+    mo.output.replace(mo.vstack([_summary, _fig]))
+    two_d_best = {
+        "theta_obs": int(_best["theta_obs"]),
+        "theta_fcast": int(_best["theta_fcast"]),
+        "cerf": int(_best["cerf"]),
+        "total_aff": int(_best["total_aff"]),
+        "n_f": int(_best["n_f"]),
+        "n_o": int(_best["n_o"]),
+        "sids": _best["_sids"],
+    }
+    return (two_d_best,)
+
+
+@app.cell
+def doc_compare(mo):
+    mo.md("""
+    ## Head-to-head — `64 exp` (combined obsv + fcast) vs `2-dimensional`
+
+    Both triggers fire on exactly **n = 10** storms (RP ≈ 2.6 yrs). The
+    question is *which 10*. Cells are colour-coded: yellow = both fire,
+    green = only `2-dimensional` fires, red = only `64 exp` fires.
+    """)
+    return
+
+
+@app.cell
+def compare_proposals(
+    df_exp,
+    df_impact,
+    df_max_fcast,
+    df_rain_opt,
+    mo,
+    pd,
+    rain_opt_thresh,
+    two_d_best,
+):
+    from great_tables import GT, html, loc, style
+
+    _WKT = 64
+    _et_64x = rain_opt_thresh.get("64x", {}).get("exp_thresh", None)
+    _sids_64x = set(df_rain_opt.loc[df_rain_opt["combined_64x"], "sid"])
+    _sids_2d = set(two_d_best["sids"])
+
+    _obs_64 = (
+        df_exp[df_exp["wind_speed_kt"] == _WKT][["sid", "pop_exposed"]]
+        .rename(columns={"pop_exposed": "obs_64"})
+        .drop_duplicates("sid")
+    )
+    _fc_64 = (
+        df_max_fcast[df_max_fcast["wind_speed_kt"] == _WKT][
+            ["sid", "max_fcast_exp"]
+        ]
+        .rename(columns={"max_fcast_exp": "fcast_64"})
+        .drop_duplicates("sid")
+    )
+    _meta = df_exp[["sid", "name", "season"]].drop_duplicates("sid")
+    _df = (
+        _meta.merge(_obs_64, on="sid", how="left")
+        .merge(_fc_64, on="sid", how="left")
+        .merge(
+            df_impact[["sid", "Total Affected", "Amount in US$"]],
+            on="sid",
+            how="left",
+        )
+    )
+    _df["obs_64"] = _df["obs_64"].fillna(0)
+    _df["fcast_64"] = _df["fcast_64"].fillna(0)
+    _df["Total Affected"] = _df["Total Affected"].fillna(0)
+    _df["has_cerf"] = _df["Amount in US$"].fillna(0) > 0
+    _df["fires_64x"] = _df["sid"].isin(_sids_64x)
+    _df["fires_2d"] = _df["sid"].isin(_sids_2d)
+    _df["status"] = "neither"
+    _df.loc[_df["fires_64x"] & _df["fires_2d"], "status"] = "both"
+    _df.loc[~_df["fires_64x"] & _df["fires_2d"], "status"] = "only_2d"
+    _df.loc[_df["fires_64x"] & ~_df["fires_2d"], "status"] = "only_64x"
+
+    _keep = (
+        _df["fires_64x"]
+        | _df["fires_2d"]
+        | _df["has_cerf"]
+        | (_df["Total Affected"] > 0)
+    )
+    _df = _df[_keep].copy()
+
+    def _label(r):
+        _nm = (
+            str(r["name"]).strip().title()
+            if pd.notna(r["name"])
+            else "Unnamed"
+        )
+        _yr = (
+            int(r["season"])
+            if pd.notna(r["season"])
+            else r["sid"][:4]
+        )
+        return f"{_nm} ({_yr})"
+
+    _df["Storm"] = _df.apply(_label, axis=1)
+    _df["CERF $"] = _df["Amount in US$"].apply(
+        lambda v: f"${v:,.0f}" if pd.notna(v) and v > 0 else "—"
+    )
+    _df["64 exp"] = _df["fires_64x"].map({True: "✓", False: "—"})
+    _df["2-dim obs"] = (
+        _df["obs_64"] >= two_d_best["theta_obs"]
+    ).map({True: "✓", False: "—"})
+    _df["2-dim fcast"] = (
+        _df["fcast_64"] >= two_d_best["theta_fcast"]
+    ).map({True: "✓", False: "—"})
+    _df = _df.sort_values(
+        ["fires_64x", "fires_2d", "Total Affected"],
+        ascending=[False, False, False],
+    ).reset_index(drop=True)
+
+    _tbl = _df[
+        [
+            "Storm",
+            "Total Affected",
+            "CERF $",
+            "obs_64",
+            "fcast_64",
+            "64 exp",
+            "2-dim obs",
+            "2-dim fcast",
+            "status",
+        ]
+    ]
+
+    _gt = (
+        GT(_tbl)
+        .tab_header(
+            title=html(
+                "Trigger comparison — <code>64 exp</code> (combined"
+                " observational + forecast) vs <code>2-dimensional</code>"
+                " (n = 10 storms each)"
+            ),
+            subtitle=html(
+                "Highlighted columns show which arm fires for each storm."
+            ),
+        )
+        .tab_spanner(
+            label=html("<b>2-dim</b> &nbsp;<i>OR</i>"),
+            columns=["2-dim obs", "2-dim fcast"],
+        )
+        .tab_spanner(label="64 kt exposure", columns=["obs_64", "fcast_64"])
+        .cols_label(
+            **{
+                "obs_64": "final obsv",
+                "fcast_64": "max fcast",
+                "CERF $": "CERF",
+                "64 exp": html(
+                    f"<b>64 exp</b><br>"
+                    f"<small>additive ≥<br>{int(_et_64x):,}</small>"
+                ),
+                "2-dim obs": html(
+                    f"<small>obs ≥<br>{two_d_best['theta_obs']:,}</small>"
+                ),
+                "2-dim fcast": html(
+                    f"<small>fcast ≥<br>{two_d_best['theta_fcast']:,}</small>"
+                ),
+            }
+        )
+        .fmt_number(
+            columns=["Total Affected", "obs_64", "fcast_64"],
+            decimals=0,
+            sep_mark=",",
+        )
+        .sub_zero(zero_text="—")
+        # Yellow: storm fires in BOTH triggers — highlight all firing cells
+        .tab_style(
+            style=style.fill(color="#fff9c4"),
+            locations=loc.body(
+                columns=["64 exp", "2-dim obs", "2-dim fcast"],
+                rows=lambda d: d["status"] == "both",
+            ),
+        )
+        # Green: storm fires only via 2-dim
+        .tab_style(
+            style=style.fill(color="#c8e6c9"),
+            locations=loc.body(
+                columns=["2-dim obs", "2-dim fcast"],
+                rows=lambda d: d["status"] == "only_2d",
+            ),
+        )
+        # Red: storm fires only via 64 exp
+        .tab_style(
+            style=style.fill(color="#ffcdd2"),
+            locations=loc.body(
+                columns=["64 exp"],
+                rows=lambda d: d["status"] == "only_64x",
+            ),
+        )
+        .tab_style(
+            style=[
+                style.fill(color="#b71c1c"),
+                style.text(color="white", weight="bold"),
+            ],
+            locations=loc.body(
+                columns=["CERF $"],
+                rows=lambda d: d["CERF $"].str.startswith("$").fillna(False),
+            ),
+        )
+        .cols_hide(columns=["status"])
+        .tab_options(
+            table_font_size="12px",
+            heading_title_font_size="14px",
+            heading_subtitle_font_size="11px",
+        )
+    )
+
+    _cerf_64x = int((_df["fires_64x"] & _df["has_cerf"]).sum())
+    _cerf_2d = int((_df["fires_2d"] & _df["has_cerf"]).sum())
+    _aff_64x = int(_df.loc[_df["fires_64x"], "Total Affected"].sum())
+    _aff_2d = int(_df.loc[_df["fires_2d"], "Total Affected"].sum())
+    _only_64x = sorted(
+        _df.loc[_df["status"] == "only_64x", "Storm"].tolist()
+    )
+    _only_2d = sorted(_df.loc[_df["status"] == "only_2d", "Storm"].tolist())
+    _both = sorted(_df.loc[_df["status"] == "both", "Storm"].tolist())
+    _total_cerf = int(_df["has_cerf"].sum())
+
+    _summary_md = mo.md(
+        f"""
+    **Summary**
+
+    | | `64 exp` (combined obsv + fcast) | `2-dimensional` |
+    |---|---|---|
+    | Trigger rule | additive (fcast + cumul. obsv) ≥ **{int(_et_64x):,}** | final_obsv ≥ **{two_d_best['theta_obs']:,}**  OR  max_fcast ≥ **{two_d_best['theta_fcast']:,}** |
+    | # storms triggered | {int(_df['fires_64x'].sum())} | {int(_df['fires_2d'].sum())} |
+    | # CERF caught (of {_total_cerf}) | **{_cerf_64x}** | **{_cerf_2d}** |
+    | Total Affected (sum) | {_aff_64x:,} | {_aff_2d:,} |
+
+    - **Both fire on:** {", ".join(_both) if _both else "—"}
+    - **Only `64 exp` fires on:** {", ".join(_only_64x) if _only_64x else "—"}
+    - **Only `2-dimensional` fires on:** {", ".join(_only_2d) if _only_2d else "—"}
+    """
+    )
+
+    mo.output.replace(
+        mo.vstack([_summary_md, mo.Html(_gt.as_raw_html())])
+    )
+    return
 
 
 if __name__ == "__main__":

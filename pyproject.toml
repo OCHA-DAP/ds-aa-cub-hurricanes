@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ds-aa-cub-hurricanes"
 version = "0.1.0"
@@ -29,7 +33,30 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "sqlalchemy>=2.0.0",
     "marimo>=0.10.0",
+    "auto-mix-prep>=0.2.0",
+    "great-tables>=0.21.0",
 ]
+
+[dependency-groups]
+dev = [
+    "black==24.3.0",
+    "flake8==7.1.1",
+    "isort==5.13.2",
+    "jupyter-black==0.3.4",
+    "pre-commit==3.8.0",
+    "jupytext==1.16.3",
+    "python-dotenv==1.0.1",
+    "pytest==8.3.2",
+    "pytest-cov==5.0.0",
+    "pytest-mock==3.12.0",
+    "pytest-xdist==3.6.0",
+    "coverage==7.6.1",
+    "ruff>=0.15.14",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
 
 [tool.marimo.runtime]
 output_max_bytes = 20_000_000
