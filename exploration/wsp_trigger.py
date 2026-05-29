@@ -245,7 +245,7 @@ def load_total_exposure(pd, stratus, text):
                 """
                 SELECT atcf_id, issued_time, wind_speed_kt,
                        pop_exposed AS fcast_exp
-                FROM storms.nhc_tracks_fcast_exposure
+                FROM storms.nhc_tracks_fcastonly_exposure
                 WHERE iso3 = 'CUB' AND admin_level = 0
             """
             ),
@@ -718,7 +718,7 @@ def storm_map(
                 text(
                     """
                     SELECT issued_time, wind_speed_kt, pop_exposed
-                    FROM storms.nhc_tracks_fcast_exposure
+                    FROM storms.nhc_tracks_fcastonly_exposure
                     WHERE UPPER(atcf_id) = UPPER(:atcf_id)
                       AND iso3 = 'CUB' AND admin_level = 0
                     ORDER BY issued_time
@@ -1130,7 +1130,7 @@ def doc_optimization(mo):
 
     1. **Total exposure** — max(forecast exposure + cumulative observed exposure)
        at any NHC forecast issuance during the storm. Forecast and observed
-       exposure come from `nhc_tracks_fcast_exposure` and
+       exposure come from `nhc_tracks_fcastonly_exposure` and
        `nhc_tracks_obsv_exposure` respectively (iso3 = CUB, admin_level = 0),
        aligned in time via `pd.merge_asof`. For historical storms not in
        those tables, `ibtracs_wind_exposure` is used as a fallback.
@@ -1852,7 +1852,7 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
                 text(
                     f"""
                     SELECT atcf_id, issued_time, pop_exposed AS fcast_exp
-                    FROM storms.nhc_tracks_fcast_exposure
+                    FROM storms.nhc_tracks_fcastonly_exposure
                     WHERE atcf_id IN ({_atcf_ph})
                       AND iso3 = 'CUB' AND admin_level = 0
                       AND wind_speed_kt = 64
@@ -2257,10 +2257,10 @@ def load_max_fcast(pd, stratus, text):
     """Max NHC forecast exposure per (sid, wind_speed_kt).
 
     Takes max(pop_exposed) over all forecast issuances for each storm and
-    wind level. Represents the most-alarming forecast NHC ever issued.
-    Note: at each issuance, fcast_exp already bundles a snapshot of the
-    current observed position — fine for an operational metric, just be
-    aware when comparing against final_obsv.
+    wind level, sourced from nhc_tracks_fcastonly_exposure (the
+    forecast-only variant, with the t = 0 observed-position snapshot
+    stripped — so it can be summed against cumulative observed without
+    double-counting).
     """
     _engine = stratus.get_engine(stage="dev")
     with _engine.connect() as _conn:
@@ -2269,7 +2269,7 @@ def load_max_fcast(pd, stratus, text):
                 """
                 SELECT atcf_id, wind_speed_kt,
                        MAX(pop_exposed) AS max_fcast_exp
-                FROM storms.nhc_tracks_fcast_exposure
+                FROM storms.nhc_tracks_fcastonly_exposure
                 WHERE iso3 = 'CUB' AND admin_level = 0
                 GROUP BY atcf_id, wind_speed_kt
             """
