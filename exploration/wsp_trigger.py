@@ -1999,6 +1999,260 @@ def trigger_leadtime(df_rain_opt, mo, pd, rain_opt_thresh, stratus, text):
 
 
 @app.cell
+def doc_compare_old_new(mo):
+    mo.md(
+        """
+    ## Head-to-head — `Old` option 1b vs `64 exp`
+
+    How does the proposed `64 exp` trigger compare to the historical
+    option 1b? Both fire on **n = 10** storms (RP ≈ 2.6 yrs) and both
+    catch **6 CERF** storms — headline numbers tie. The interesting
+    differences are *which* CERF storms each catches, since they swap one.
+
+    Old: ZMA wind threshold (forecast arm) OR ZMA wind + IMERG rainfall
+    (observational arm). New: single additive 64 kt exposure threshold.
+    """
+    )
+    return
+
+
+@app.cell
+def compare_old_vs_new(
+    df_exp,
+    df_impact,
+    df_max_fcast,
+    df_rain_opt,
+    mo,
+    pd,
+    rain_opt_thresh,
+):
+    from great_tables import GT as _GT
+    from great_tables import html as _html
+    from great_tables import loc as _loc
+    from great_tables import style as _style
+
+    _WKT = 64
+    _et_64x = rain_opt_thresh.get("64x", {}).get("exp_thresh", None)
+
+    _sids_new = set(df_rain_opt.loc[df_rain_opt["combined_64x"], "sid"])
+    _sids_old = set(
+        df_rain_opt.loc[
+            df_rain_opt["fcast_trig_old"] | df_rain_opt["obsv_trig_old"], "sid"
+        ]
+    )
+
+    _obs_64 = (
+        df_exp[df_exp["wind_speed_kt"] == _WKT][["sid", "pop_exposed"]]
+        .rename(columns={"pop_exposed": "obs_64"})
+        .drop_duplicates("sid")
+    )
+    _fc_64 = (
+        df_max_fcast[df_max_fcast["wind_speed_kt"] == _WKT][
+            ["sid", "max_fcast_exp"]
+        ]
+        .rename(columns={"max_fcast_exp": "fcast_64"})
+        .drop_duplicates("sid")
+    )
+    _meta = df_exp[["sid", "name", "season"]].drop_duplicates("sid")
+    _df = (
+        _meta.merge(_obs_64, on="sid", how="left")
+        .merge(_fc_64, on="sid", how="left")
+        .merge(
+            df_impact[["sid", "Total Affected", "Amount in US$"]],
+            on="sid",
+            how="left",
+        )
+        .merge(
+            df_rain_opt[["sid", "fcast_trig_old", "obsv_trig_old"]],
+            on="sid",
+            how="left",
+        )
+    )
+    _df["obs_64"] = _df["obs_64"].fillna(0)
+    _df["fcast_64"] = _df["fcast_64"].fillna(0)
+    _df["Total Affected"] = _df["Total Affected"].fillna(0)
+    _df["has_cerf"] = _df["Amount in US$"].fillna(0) > 0
+    _df["fcast_trig_old"] = (
+        _df["fcast_trig_old"].astype("boolean").fillna(False).astype(bool)
+    )
+    _df["obsv_trig_old"] = (
+        _df["obsv_trig_old"].astype("boolean").fillna(False).astype(bool)
+    )
+    _df["fires_new"] = _df["sid"].isin(_sids_new)
+    _df["fires_old"] = _df["sid"].isin(_sids_old)
+    _df["status"] = "neither"
+    _df.loc[_df["fires_old"] & _df["fires_new"], "status"] = "both"
+    _df.loc[~_df["fires_old"] & _df["fires_new"], "status"] = "only_new"
+    _df.loc[_df["fires_old"] & ~_df["fires_new"], "status"] = "only_old"
+
+    _keep = (
+        _df["fires_old"]
+        | _df["fires_new"]
+        | _df["has_cerf"]
+        | (_df["Total Affected"] > 0)
+    )
+    _df = _df[_keep].copy()
+
+    def _label(r):
+        _nm = (
+            str(r["name"]).strip().title()
+            if pd.notna(r["name"])
+            else "Unnamed"
+        )
+        _yr = (
+            int(r["season"])
+            if pd.notna(r["season"])
+            else r["sid"][:4]
+        )
+        return f"{_nm} ({_yr})"
+
+    _df["Storm"] = _df.apply(_label, axis=1)
+    _df["CERF $"] = _df["Amount in US$"].apply(
+        lambda v: f"${v:,.0f}" if pd.notna(v) and v > 0 else "—"
+    )
+    _df["Old fcast"] = _df["fcast_trig_old"].map({True: "✓", False: "—"})
+    _df["Old obsv"] = _df["obsv_trig_old"].map({True: "✓", False: "—"})
+    _df["64 exp"] = _df["fires_new"].map({True: "✓", False: "—"})
+    _df = _df.sort_values(
+        ["fires_new", "fires_old", "Total Affected"],
+        ascending=[False, False, False],
+    ).reset_index(drop=True)
+
+    _tbl = _df[
+        [
+            "Storm",
+            "Total Affected",
+            "CERF $",
+            "obs_64",
+            "fcast_64",
+            "Old fcast",
+            "Old obsv",
+            "64 exp",
+            "status",
+        ]
+    ]
+
+    _gt = (
+        _GT(_tbl)
+        .tab_header(
+            title=_html(
+                "Trigger comparison — <code>Old</code> option 1b"
+                " (fcast <i>OR</i> obsv) vs <code>64 exp</code>"
+                " (combined obsv + fcast)  ·  (n = 10 storms each)"
+            ),
+            subtitle=_html(
+                "Highlighted columns show which arm fires for each storm."
+            ),
+        )
+        .tab_spanner(
+            label=_html("<b>Old</b> &nbsp;<i>OR</i>"),
+            columns=["Old fcast", "Old obsv"],
+        )
+        .tab_spanner(label="64 kt exposure", columns=["obs_64", "fcast_64"])
+        .cols_label(
+            **{
+                "obs_64": "final obsv",
+                "fcast_64": "max fcast",
+                "CERF $": "CERF",
+                "Old fcast": _html(
+                    "<b>Forecast</b><br><small>ZMA wind ≥ 120</small>"
+                ),
+                "Old obsv": _html(
+                    "<b>Observational</b><br>"
+                    "<small>ZMA wind ≥ 105<br>q80 ≥ 96.2</small>"
+                ),
+                "64 exp": _html(
+                    f"<b>64 exp</b><br>"
+                    f"<small>additive ≥<br>{int(_et_64x):,}</small>"
+                ),
+            }
+        )
+        .fmt_number(
+            columns=["Total Affected", "obs_64", "fcast_64"],
+            decimals=0,
+            sep_mark=",",
+        )
+        .sub_zero(zero_text="—")
+        # Yellow: storm fires in BOTH triggers
+        .tab_style(
+            style=_style.fill(color="#fff9c4"),
+            locations=_loc.body(
+                columns=["Old fcast", "Old obsv", "64 exp"],
+                rows=lambda d: d["status"] == "both",
+            ),
+        )
+        # Green: only new (64 exp) fires
+        .tab_style(
+            style=_style.fill(color="#c8e6c9"),
+            locations=_loc.body(
+                columns=["64 exp"],
+                rows=lambda d: d["status"] == "only_new",
+            ),
+        )
+        # Red: only old fires
+        .tab_style(
+            style=_style.fill(color="#ffcdd2"),
+            locations=_loc.body(
+                columns=["Old fcast", "Old obsv"],
+                rows=lambda d: d["status"] == "only_old",
+            ),
+        )
+        .tab_style(
+            style=[
+                _style.fill(color="#b71c1c"),
+                _style.text(color="white", weight="bold"),
+            ],
+            locations=_loc.body(
+                columns=["CERF $"],
+                rows=lambda d: d["CERF $"].str.startswith("$").fillna(False),
+            ),
+        )
+        .cols_hide(columns=["status"])
+        .tab_options(
+            table_font_size="12px",
+            heading_title_font_size="14px",
+            heading_subtitle_font_size="11px",
+        )
+    )
+
+    _cerf_old = int((_df["fires_old"] & _df["has_cerf"]).sum())
+    _cerf_new = int((_df["fires_new"] & _df["has_cerf"]).sum())
+    _aff_old = int(_df.loc[_df["fires_old"], "Total Affected"].sum())
+    _aff_new = int(_df.loc[_df["fires_new"], "Total Affected"].sum())
+    _only_old = sorted(
+        _df.loc[_df["status"] == "only_old", "Storm"].tolist()
+    )
+    _only_new = sorted(
+        _df.loc[_df["status"] == "only_new", "Storm"].tolist()
+    )
+    _both = sorted(_df.loc[_df["status"] == "both", "Storm"].tolist())
+    _total_cerf = int(_df["has_cerf"].sum())
+
+    _summary_md = mo.md(
+        f"""
+    **Summary**
+
+    | | `Old` option 1b | `64 exp` (combined obsv + fcast) |
+    |---|---|---|
+    | Trigger rule | ZMA wind ≥120 (forecast) **OR** (ZMA wind ≥105 **AND** IMERG q80 ≥96.2) | additive (fcast + cumul. obsv) ≥ **{int(_et_64x):,}** |
+    | # storms triggered | {int(_df['fires_old'].sum())} | {int(_df['fires_new'].sum())} |
+    | # CERF caught (of {_total_cerf}) | **{_cerf_old}** | **{_cerf_new}** |
+    | Total Affected (sum) | {_aff_old:,} | {_aff_new:,} |
+    | # indicators | 2 (ZMA wind + rainfall) | 1 (single exposure metric) |
+
+    - **Both fire on:** {", ".join(_both) if _both else "—"}
+    - **Only `Old` fires on:** {", ".join(_only_old) if _only_old else "—"}
+    - **Only `64 exp` fires on:** {", ".join(_only_new) if _only_new else "—"}
+    """
+    )
+
+    mo.output.replace(
+        mo.vstack([_summary_md, mo.Html(_gt.as_raw_html())])
+    )
+    return
+
+
+@app.cell
 def load_max_fcast(pd, stratus, text):
     """Max NHC forecast exposure per (sid, wind_speed_kt).
 
