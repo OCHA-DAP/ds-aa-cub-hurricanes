@@ -1,0 +1,49 @@
+flowchart LR
+    %% Inputs
+    TRACK_F(["<b>Storm track</b><br/>forecast positions<br/>+ peak wind speeds"])
+    TRACK_O(["<b>Storm track</b><br/>observed positions<br/>+ peak wind speeds"])
+    RAIN(["<b>Rainfall map</b><br/>observed daily totals"])
+    ZMA[("<b>Monitoring<br/>zone</b>")]
+
+    %% Forecast arm
+    WF["max wind speed<br/>inside monitoring zone"]
+    TRACK_F --> WF
+    ZMA -.-> WF
+    WF --> FCAST_WIND(["<b>Peak forecast wind</b>"])
+
+    %% Observational arm — wind side
+    WO["max wind speed<br/>inside monitoring zone"]
+    TRACK_O --> WO
+    ZMA -.-> WO
+    WO --> OBS_WIND(["<b>Peak observed wind</b>"])
+
+    %% Observational arm — rainfall side
+    Q["2-day q80<br/>across Cuba"]
+    RAIN --> Q
+    Q --> OBS_RAIN(["<b>Storm rainfall</b><br/>peak 2-day q80"])
+
+    %% Decisions
+    FCAST_WIND --> F_CHK{{"≥ 120 kt?"}}
+    OBS_WIND --> O_W_CHK{{"≥ 105 kt?"}}
+    OBS_RAIN --> O_R_CHK{{"≥ 96.2 mm?"}}
+
+    %% Gates
+    O_W_CHK --> AND_G(("AND"))
+    O_R_CHK --> AND_G
+    F_CHK --> OR_G(("OR"))
+    AND_G --> OR_G
+    OR_G --> FIRE["Trigger fires"]
+
+    classDef input fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#01579b
+    classDef proc fill:#fafafa,stroke:#9e9e9e,stroke-width:1px,color:#424242,font-style:italic
+    classDef result fill:#fff8e1,stroke:#f57c00,stroke-width:2px,color:#5d4037
+    classDef gate fill:#fff,stroke:#5d4037,stroke-width:2px,color:#5d4037
+    classDef decide fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#bf360c
+    classDef fire fill:#5d4037,stroke:#3e2723,stroke-width:2px,color:#fff
+
+    class TRACK_F,TRACK_O,RAIN,ZMA input
+    class WF,WO,Q proc
+    class FCAST_WIND,OBS_WIND,OBS_RAIN result
+    class AND_G,OR_G gate
+    class F_CHK,O_W_CHK,O_R_CHK decide
+    class FIRE fire

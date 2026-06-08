@@ -3,48 +3,9 @@
 Two indicators, AND/OR logic across forecast and observational arms —
 replaced by a single population-exposure threshold.
 
-```mermaid
-flowchart LR
-    subgraph OLD [" "]
-        direction TB
-        OLD_T["<b>OLD METHOD</b>"]
-        F["<b>Forecast</b><br/>ZMA wind ≥ 120 kt"]
-        O["<b>Observational</b><br/>ZMA wind ≥ 105 kt<br/>+ IMERG q80 ≥ 96.2 mm"]
-        OR(("OR"))
-        OLD_TRIG["Trigger fires"]
-        OLD_T ~~~ F
-        OLD_T ~~~ O
-        F --> OR
-        O --> OR
-        OR --> OLD_TRIG
-    end
-
-    subgraph NEW [" "]
-        direction TB
-        NEW_T["<b>NEW METHOD</b>"]
-        EXP["<b>64 kt exposure</b><br/>≥ 616,778 people"]
-        NEW_TRIG["Trigger fires"]
-        NEW_T ~~~ EXP
-        EXP --> NEW_TRIG
-    end
-
-    classDef title fill:none,stroke:none,color:#37474f,font-size:18px
-    classDef arm fill:#fff8e1,stroke:#f57c00,stroke-width:2px,color:#5d4037
-    classDef new fill:#e0f2f1,stroke:#00796b,stroke-width:3px,color:#004d40
-    classDef gate fill:#fff,stroke:#f57c00,stroke-width:2px,color:#5d4037
-    classDef trigOld fill:#5d4037,stroke:#3e2723,stroke-width:2px,color:#fff
-    classDef trigNew fill:#00796b,stroke:#004d40,stroke-width:2px,color:#fff
-
-    class OLD_T,NEW_T title
-    class F,O arm
-    class EXP new
-    class OR gate
-    class OLD_TRIG trigOld
-    class NEW_TRIG trigNew
-
-    style OLD fill:#fafafa,stroke:#e0e0e0,stroke-width:1px
-    style NEW fill:#fafafa,stroke:#e0e0e0,stroke-width:1px
-```
+<p align="center">
+  <img src="diagrams/comparison.svg" alt="Old vs new method side-by-side" width="780">
+</p>
 
 Same n = 10 storms triggered over 2002–2025 (RP ≈ 2.6 yrs), same
 6 CERF-funded storms caught — but the new method is a single
@@ -59,51 +20,9 @@ For each storm, "people exposed to 64 kt winds" is computed by
 overlaying the hurricane's wind footprint on a population map.
 Two streams contribute and are combined at each NHC advisory.
 
-```mermaid
-flowchart LR
-    %% Inputs
-    OBS(["<b>Storm track</b><br/>where it has been<br/><i>(observed positions)</i>"])
-    FCT(["<b>Storm track</b><br/>where it's going<br/><i>(forecast positions)</i>"])
-    POP[("<b>Population<br/>map</b>")]
-
-    %% Per-stream processing
-    XO["intersect with<br/>64-kt wind buffers"]
-    XF["intersect with<br/>64-kt wind buffers"]
-    OBS --> XO
-    FCT --> XF
-    POP -.-> XO
-    POP -.-> XF
-
-    %% Stream outputs
-    OE(["<b>Observed exposure</b><br/>cumulative people<br/>already affected"])
-    FE(["<b>Forecast exposure</b><br/>people projected<br/>to be affected"])
-    XO --> OE
-    XF --> FE
-
-    %% Combine
-    OE --> SUM(("&plus;"))
-    FE --> SUM
-    SUM --> TOT(["<b>Total exposure</b><br/>recomputed every<br/>NHC advisory"])
-    TOT --> PEAK(["<b>Peak total</b><br/>maximum across all<br/>advisories during the storm"])
-
-    %% Decision
-    PEAK --> THR{{"≥ 616,778 people?"}}
-    THR -->|yes| FIRE["Trigger fires"]
-
-    classDef input fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#01579b
-    classDef proc fill:#fafafa,stroke:#9e9e9e,stroke-width:1px,color:#424242,font-style:italic
-    classDef result fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#004d40
-    classDef gate fill:#fff,stroke:#00796b,stroke-width:2px,color:#004d40
-    classDef decide fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#bf360c
-    classDef fire fill:#00796b,stroke:#004d40,stroke-width:2px,color:#fff
-
-    class OBS,FCT,POP input
-    class XO,XF proc
-    class OE,FE,TOT,PEAK result
-    class SUM gate
-    class THR decide
-    class FIRE fire
-```
+<p align="center">
+  <img src="diagrams/new_exposure_flow.svg" alt="New 64 kt exposure calculation flow" width="940">
+</p>
 
 **Two important details:**
 
@@ -121,3 +40,39 @@ single NHC advisory during the storm's lifetime — so a storm that
 ramps up gradually and a storm that strengthens suddenly can both
 trigger if their peak combined exposure crosses the threshold at any
 moment.
+
+---
+
+## How the old trigger was computed
+
+The old trigger combined three separate measurements from two
+different data sources — wind speeds (from NHC track data) and
+rainfall percentiles (from IMERG observed rainfall). The two arms
+were OR-combined: either the forecast arm fired on its own, or
+the observational arm fired only when wind *and* rainfall both
+crossed their thresholds.
+
+<p align="center">
+  <img src="diagrams/old_trigger_flow.svg" alt="Old trigger calculation flow" width="940">
+</p>
+
+A few things to notice about the old method compared with the new one
+above:
+
+- **Three measurements** had to land instead of one — peak forecast
+  wind, peak observed wind, and a rainfall percentile.
+- **Two separate data products** were stitched together (NHC track
+  data + IMERG rainfall), each with its own quality, cadence, and
+  availability.
+- **Two logic gates** (one AND, one OR) replaced a single
+  "≥ threshold?" check.
+
+The new method collapses all of this into a single number compared
+against a single threshold.
+
+---
+
+<sub>Source diagrams live alongside the SVGs in
+[`diagrams/`](diagrams/) as Mermaid `.mmd` files. To re-render after
+edits:
+`npx -y -p @mermaid-js/mermaid-cli mmdc -i diagrams/<name>.mmd -o diagrams/<name>.svg -b transparent`</sub>
