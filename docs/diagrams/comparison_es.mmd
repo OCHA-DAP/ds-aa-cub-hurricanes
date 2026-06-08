@@ -1,0 +1,40 @@
+flowchart LR
+    subgraph OLD [" "]
+        direction TB
+        OLD_T["<b>MÉTODO ANTIGUO</b>"]
+        F["<b>Pronóstico</b><br/>Viento ZMA ≥ 120 kt"]
+        O["<b>Observacional</b><br/>Viento ZMA ≥ 105 kt<br/>+ IMERG q80 ≥ 96,2 mm"]
+        OR(("O"))
+        OLD_TRIG["Se activa el gatillo"]
+        OLD_T ~~~ F
+        OLD_T ~~~ O
+        F --> OR
+        O --> OR
+        OR --> OLD_TRIG
+    end
+
+    subgraph NEW [" "]
+        direction TB
+        NEW_T["<b>MÉTODO NUEVO</b>"]
+        EXP["<b>Exposición a 64 kt</b><br/>≥ 616.778 personas"]
+        NEW_TRIG["Se activa el gatillo"]
+        NEW_T ~~~ EXP
+        EXP --> NEW_TRIG
+    end
+
+    classDef title fill:none,stroke:none,color:#37474f,font-size:18px
+    classDef arm fill:#fff8e1,stroke:#f57c00,stroke-width:2px,color:#5d4037
+    classDef new fill:#e0f2f1,stroke:#00796b,stroke-width:3px,color:#004d40
+    classDef gate fill:#fff,stroke:#f57c00,stroke-width:2px,color:#5d4037
+    classDef trigOld fill:#5d4037,stroke:#3e2723,stroke-width:2px,color:#fff
+    classDef trigNew fill:#00796b,stroke:#004d40,stroke-width:2px,color:#fff
+
+    class OLD_T,NEW_T title
+    class F,O arm
+    class EXP new
+    class OR gate
+    class OLD_TRIG trigOld
+    class NEW_TRIG trigNew
+
+    style OLD fill:#fafafa,stroke:#e0e0e0,stroke-width:1px
+    style NEW fill:#fafafa,stroke:#e0e0e0,stroke-width:1px

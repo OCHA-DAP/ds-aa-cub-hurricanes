@@ -1,0 +1,43 @@
+flowchart LR
+    %% Insumos
+    OBS(["<b>Trayectoria</b><br/>dónde ha estado<br/><i>(posiciones observadas)</i>"])
+    FCT(["<b>Trayectoria</b><br/>hacia dónde va<br/><i>(posiciones pronosticadas)</i>"])
+    POP[("<b>Mapa de<br/>población</b>")]
+
+    %% Procesamiento por flujo
+    XO["intersectar con<br/>buffers de viento de 64 kt"]
+    XF["intersectar con<br/>buffers de viento de 64 kt"]
+    OBS --> XO
+    FCT --> XF
+    POP -.-> XO
+    POP -.-> XF
+
+    %% Resultados por flujo
+    OE(["<b>Exposición observada</b><br/>personas ya afectadas<br/>(acumulado)"])
+    FE(["<b>Exposición pronosticada</b><br/>personas que se proyecta<br/>serán afectadas"])
+    XO --> OE
+    XF --> FE
+
+    %% Combinación
+    OE --> SUM(("&plus;"))
+    FE --> SUM
+    SUM --> TOT(["<b>Exposición total</b><br/>recalculada en cada<br/>aviso del NHC"])
+    TOT --> PEAK(["<b>Total máximo</b><br/>máximo de todos los avisos<br/>durante la tormenta"])
+
+    %% Decisión
+    PEAK --> THR{{"≥ 616.778 personas?"}}
+    THR -->|sí| FIRE["Se activa el gatillo"]
+
+    classDef input fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#01579b
+    classDef proc fill:#fafafa,stroke:#9e9e9e,stroke-width:1px,color:#424242,font-style:italic
+    classDef result fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#004d40
+    classDef gate fill:#fff,stroke:#00796b,stroke-width:2px,color:#004d40
+    classDef decide fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#bf360c
+    classDef fire fill:#00796b,stroke:#004d40,stroke-width:2px,color:#fff
+
+    class OBS,FCT,POP input
+    class XO,XF proc
+    class OE,FE,TOT,PEAK result
+    class SUM gate
+    class THR decide
+    class FIRE fire

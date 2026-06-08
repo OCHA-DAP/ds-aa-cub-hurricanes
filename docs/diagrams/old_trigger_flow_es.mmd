@@ -1,0 +1,49 @@
+flowchart LR
+    %% Insumos
+    TRACK_F(["<b>Trayectoria</b><br/>posiciones pronosticadas<br/>+ velocidades de viento"])
+    TRACK_O(["<b>Trayectoria</b><br/>posiciones observadas<br/>+ velocidades de viento"])
+    RAIN(["<b>Mapa de lluvia</b><br/>totales diarios observados"])
+    ZMA[("<b>Zona de<br/>monitoreo</b>")]
+
+    %% Brazo de pronóstico
+    WF["velocidad máxima de viento<br/>dentro de la zona"]
+    TRACK_F --> WF
+    ZMA -.-> WF
+    WF --> FCAST_WIND(["<b>Viento pronosticado<br/>máximo</b>"])
+
+    %% Brazo observacional — viento
+    WO["velocidad máxima de viento<br/>dentro de la zona"]
+    TRACK_O --> WO
+    ZMA -.-> WO
+    WO --> OBS_WIND(["<b>Viento observado<br/>máximo</b>"])
+
+    %% Brazo observacional — lluvia
+    Q["q80 de 2 días<br/>sobre Cuba"]
+    RAIN --> Q
+    Q --> OBS_RAIN(["<b>Precipitación de tormenta</b><br/>q80 máximo de 2 días"])
+
+    %% Decisiones
+    FCAST_WIND --> F_CHK{{"≥ 120 kt?"}}
+    OBS_WIND --> O_W_CHK{{"≥ 105 kt?"}}
+    OBS_RAIN --> O_R_CHK{{"≥ 96,2 mm?"}}
+
+    %% Compuertas
+    O_W_CHK --> AND_G(("Y"))
+    O_R_CHK --> AND_G
+    F_CHK --> OR_G(("O"))
+    AND_G --> OR_G
+    OR_G --> FIRE["Se activa el gatillo"]
+
+    classDef input fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#01579b
+    classDef proc fill:#fafafa,stroke:#9e9e9e,stroke-width:1px,color:#424242,font-style:italic
+    classDef result fill:#fff8e1,stroke:#f57c00,stroke-width:2px,color:#5d4037
+    classDef gate fill:#fff,stroke:#5d4037,stroke-width:2px,color:#5d4037
+    classDef decide fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#bf360c
+    classDef fire fill:#5d4037,stroke:#3e2723,stroke-width:2px,color:#fff
+
+    class TRACK_F,TRACK_O,RAIN,ZMA input
+    class WF,WO,Q proc
+    class FCAST_WIND,OBS_WIND,OBS_RAIN result
+    class AND_G,OR_G gate
+    class F_CHK,O_W_CHK,O_R_CHK decide
+    class FIRE fire
