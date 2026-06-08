@@ -79,8 +79,8 @@ against a single threshold.
 
 ## Español
 
-El gatillo propuesto se activa con un solo umbral de exposición de
-la población. El gatillo histórico ("opción 1b") se activaba con una
+El trigger propuesto se activa con un solo umbral de exposición de
+la población. El trigger histórico ("opción 1b") se activaba con una
 combinación lógica de viento pronosticado, viento observado y
 precipitación observada. Ambos están calibrados para activarse en
 exactamente **10 tormentas durante 2002–2025** (período de retorno
@@ -117,15 +117,15 @@ Dos detalles metodológicos importantes:
   el inicio de la tormenta. Así se mantiene disjunta de la serie
   observada y se evita contar dos veces.
 
-El indicador del gatillo es la **exposición total máxima** observada
+El indicador del trigger es la **exposición total máxima** observada
 en cualquier aviso del NHC durante la vida de la tormenta. Una
 tormenta que se intensifica gradualmente y una que se intensifica
-repentinamente pueden ambas activar el gatillo, mientras su
+repentinamente pueden ambas activar el trigger, mientras su
 exposición combinada máxima cruce el umbral en algún momento.
 
-### Cómo se calculaba el gatillo antiguo
+### Cómo se calculaba el trigger antiguo
 
-El gatillo antiguo combinaba tres mediciones distintas de dos
+El trigger antiguo combinaba tres mediciones distintas de dos
 productos de datos diferentes — velocidades de viento de las
 trayectorias del NHC, y percentiles de precipitación de IMERG
 observado. Los dos brazos se combinaban con O: el brazo de
@@ -135,7 +135,7 @@ solo cuando tanto el viento observado *como* la lluvia observada
 cruzaban sus umbrales.
 
 <p align="center">
-  <img src="diagrams/old_trigger_flow_es.svg" alt="Flujo de cálculo del gatillo antiguo" width="940">
+  <img src="diagrams/old_trigger_flow_es.svg" alt="Flujo de cálculo del trigger antiguo" width="940">
 </p>
 
 En comparación con el método nuevo, el método antiguo requería:

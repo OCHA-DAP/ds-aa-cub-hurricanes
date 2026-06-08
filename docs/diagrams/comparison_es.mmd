@@ -5,7 +5,7 @@ flowchart LR
         F["<b>Pronóstico</b><br/>Viento ZMA ≥ 120 kt"]
         O["<b>Observacional</b><br/>Viento ZMA ≥ 105 kt<br/>+ IMERG q80 ≥ 96,2 mm"]
         OR(("O"))
-        OLD_TRIG["Se activa el gatillo"]
+        OLD_TRIG["Se activa el trigger"]
         OLD_T ~~~ F
         OLD_T ~~~ O
         F --> OR
@@ -17,7 +17,7 @@ flowchart LR
         direction TB
         NEW_T["<b>MÉTODO NUEVO</b>"]
         EXP["<b>Exposición a 64 kt</b><br/>≥ 616.778 personas"]
-        NEW_TRIG["Se activa el gatillo"]
+        NEW_TRIG["Se activa el trigger"]
         NEW_T ~~~ EXP
         EXP --> NEW_TRIG
     end
