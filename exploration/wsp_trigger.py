@@ -2687,6 +2687,256 @@ def two_d_64kt_opt(df_exp, df_impact, df_max_fcast, mo, pd, plt):
 
 
 @app.cell
+def doc_two_d_fcast_dom(mo):
+    mo.md(
+        """
+    ## Experiment 3 — 2D optimisation, forecast-dominant
+
+    Same two-arm trigger as Experiment 2 (`final_obsv_64` ≥ θ_obs **OR**
+    `max_fcast_64` ≥ θ_fcast), still locked at **n = 10** storms, but with
+    the constraint **inverted**:
+
+    - **Forecast arm must fire on more storms than the observational arm**
+      — i.e. `n_fcast > n_obs` (each counting all storms that cross that
+      arm's threshold, including overlap).
+    - The earlier `θ_obs ≤ θ_fcast` value constraint is **dropped** here,
+      since forcing forecast to dominate in count typically requires
+      lowering θ_fcast and raising θ_obs.
+
+    Rationale: forecast gives lead time, observational is the safety net.
+    Inverting Experiment 2's dominance flips which arm does most of the
+    work — fewer storms slip through to the observational backstop.
+    """
+    )
+    return
+
+
+@app.cell
+def two_d_64kt_opt_fcast_dom(df_exp, df_impact, df_max_fcast, mo, pd, plt):
+    _WKT = 64
+    _N = 10
+
+    _obs = (
+        df_exp[df_exp["wind_speed_kt"] == _WKT][["sid", "pop_exposed"]]
+        .rename(columns={"pop_exposed": "obs_64"})
+        .drop_duplicates("sid")
+    )
+    _fc = (
+        df_max_fcast[df_max_fcast["wind_speed_kt"] == _WKT][
+            ["sid", "max_fcast_exp"]
+        ]
+        .rename(columns={"max_fcast_exp": "fcast_64"})
+        .drop_duplicates("sid")
+    )
+    _df = pd.merge(_obs, _fc, on="sid", how="outer")
+    _df["obs_64"] = _df["obs_64"].fillna(0)
+    _df["fcast_64"] = _df["fcast_64"].fillna(0)
+    _df = _df[_df["sid"].str[:4].astype(int) >= 2002]
+    _df = _df.merge(
+        df_impact[["sid", "Amount in US$", "Total Affected"]],
+        on="sid",
+        how="left",
+    )
+    _df["has_cerf"] = (_df["Amount in US$"].fillna(0) > 0).astype(int)
+    _df["Total Affected"] = _df["Total Affected"].fillna(0)
+    _df = _df.merge(
+        df_exp[["sid", "name", "season"]].drop_duplicates("sid"),
+        on="sid",
+        how="left",
+    )
+
+    _fc_vals = sorted(set(_df.loc[_df["fcast_64"] > 0, "fcast_64"]))
+    _obs_vals = sorted(set(_df.loc[_df["obs_64"] > 0, "obs_64"]))
+
+    _results = []
+    for _tf in _fc_vals:
+        _f_sids = set(_df[_df["fcast_64"] >= _tf]["sid"])
+        if len(_f_sids) > _N:
+            continue
+        _not_f = _df[~_df["sid"].isin(_f_sids)]
+        for _to in _obs_vals:
+            # NOTE: no θ_obs ≤ θ_fcast constraint here.
+            _o_sids_only = set(_not_f[_not_f["obs_64"] >= _to]["sid"])
+            _n_total = len(_f_sids) + len(_o_sids_only)
+            if _n_total != _N:
+                continue
+            # Forecast-dominant constraint: n_fcast > n_obs (each
+            # counting any storm crossing that arm's threshold).
+            _n_fcast_arm = len(_f_sids)
+            _n_obs_arm = len(set(_df[_df["obs_64"] >= _to]["sid"]))
+            if _n_fcast_arm <= _n_obs_arm:
+                continue
+            _trig = _df[_df["sid"].isin(_f_sids | _o_sids_only)]
+            _results.append(
+                {
+                    "theta_obs": _to,
+                    "theta_fcast": _tf,
+                    "n_fcast": _n_fcast_arm,
+                    "n_obs": _n_obs_arm,
+                    "n_f_only": len(_f_sids - _o_sids_only),
+                    "n_o_only": len(_o_sids_only),
+                    "cerf": int(_trig["has_cerf"].sum()),
+                    "total_aff": int(_trig["Total Affected"].sum()),
+                    "_sids": frozenset(_f_sids | _o_sids_only),
+                }
+            )
+
+    mo.stop(
+        not _results,
+        mo.md(
+            "⚠ No (θ_obs, θ_fcast) combination satisfies n=10 with"
+            " n_fcast > n_obs."
+        ),
+    )
+
+    _res = pd.DataFrame(_results)
+    _best = _res.sort_values(
+        ["cerf", "total_aff", "theta_fcast"],
+        ascending=[False, False, True],
+    ).iloc[0]
+
+    _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(16, 7), dpi=120)
+
+    # ── Left: storm scatter in (fcast, obs) plane ────────────────────────
+    _sub = _df[(_df["fcast_64"] > 0) | (_df["obs_64"] > 0)]
+    _colors = ["crimson" if r else "#aaa" for r in _sub["has_cerf"]]
+    _max_aff = max(_sub["Total Affected"].max(), 1)
+    _sizes = [
+        max(30, (v**0.5) * 500 / (_max_aff**0.5)) if v > 0 else 30
+        for v in _sub["Total Affected"]
+    ]
+    _ax1.scatter(
+        _sub["fcast_64"],
+        _sub["obs_64"],
+        c=_colors,
+        s=_sizes,
+        alpha=0.7,
+        edgecolors="none",
+    )
+    for _, _r in _sub.iterrows():
+        _nm = (
+            str(_r["name"]).strip().title()
+            if pd.notna(_r["name"])
+            else "?"
+        )
+        _yr = (
+            int(_r["season"])
+            if pd.notna(_r["season"])
+            else _r["sid"][:4]
+        )
+        _trig = (
+            _r["fcast_64"] >= _best["theta_fcast"]
+            or _r["obs_64"] >= _best["theta_obs"]
+        )
+        _ax1.annotate(
+            f"{_nm} ({_yr})",
+            xy=(_r["fcast_64"], _r["obs_64"]),
+            fontsize=6.5,
+            ha="center",
+            va="center",
+            fontweight="bold" if _trig else "normal",
+        )
+    _ax1.axvline(
+        _best["theta_fcast"],
+        color="steelblue",
+        linestyle="--",
+        linewidth=1,
+        label=f"θ_fcast = {int(_best['theta_fcast']):,}",
+    )
+    _ax1.axhline(
+        _best["theta_obs"],
+        color="darkorange",
+        linestyle="--",
+        linewidth=1,
+        label=f"θ_obs = {int(_best['theta_obs']):,}",
+    )
+    _maxv = max(_sub["fcast_64"].max(), _sub["obs_64"].max()) * 1.05
+    _ax1.plot(
+        [0, _maxv],
+        [0, _maxv],
+        color="#888",
+        linewidth=0.8,
+        linestyle=":",
+        label="y = x",
+    )
+    _ax1.set_xlabel("Max forecast exposure (64 kt)")
+    _ax1.set_ylabel("Final observed exposure (64 kt, cumulative)")
+    _ax1.set_title(
+        f"Best fcast-dominant thresholds  ·  CERF={int(_best['cerf'])}  ·  "
+        f"total_aff={int(_best['total_aff']):,}"
+    )
+    _ax1.legend(fontsize=8, loc="upper left")
+    _ax1.grid(alpha=0.25, linestyle="--")
+    _ax1.set_xlim(left=0)
+    _ax1.set_ylim(bottom=0)
+
+    # ── Right: feasible (θ_obs, θ_fcast) pairs coloured by CERF ──────────
+    _sc = _ax2.scatter(
+        _res["theta_fcast"],
+        _res["theta_obs"],
+        c=_res["cerf"],
+        cmap="viridis",
+        s=40,
+        alpha=0.85,
+        edgecolors="none",
+    )
+    _cb = plt.colorbar(_sc, ax=_ax2, fraction=0.03)
+    _cb.set_label("CERF storms caught", fontsize=9)
+    _ax2.scatter(
+        [_best["theta_fcast"]],
+        [_best["theta_obs"]],
+        marker="*",
+        s=400,
+        edgecolors="black",
+        facecolors="gold",
+        linewidths=1.2,
+        zorder=5,
+        label="best",
+    )
+    _ax2.plot(
+        [0, _maxv],
+        [0, _maxv],
+        color="#888",
+        linewidth=0.8,
+        linestyle=":",
+    )
+    _ax2.set_xlabel("θ_fcast")
+    _ax2.set_ylabel("θ_obs")
+    _ax2.set_title(
+        f"All feasible (θ_obs, θ_fcast) giving n={_N}"
+        "  ·  constraint n_fcast > n_obs"
+    )
+    _ax2.legend(fontsize=8, loc="lower right")
+    _ax2.grid(alpha=0.25, linestyle="--")
+    _ax2.set_xlim(left=0)
+    _ax2.set_ylim(bottom=0)
+
+    plt.tight_layout()
+
+    _summary = mo.md(
+        f"**Best:** θ_fcast = **{int(_best['theta_fcast']):,}**, "
+        f"θ_obs = **{int(_best['theta_obs']):,}**  ·  "
+        f"n_fcast = {int(_best['n_fcast'])}, n_obs = {int(_best['n_obs'])} "
+        f"(n_f_only = {int(_best['n_f_only'])},"
+        f" n_o_only = {int(_best['n_o_only'])})  ·  "
+        f"CERF = **{int(_best['cerf'])}** caught, "
+        f"Total Affected = **{int(_best['total_aff']):,}**  \n"
+        f"Total feasible (θ_obs, θ_fcast) pairs: **{len(_res)}**"
+    )
+    mo.output.replace(mo.vstack([_summary, _fig]))
+    two_d_best_fcast_dom = {
+        "theta_obs": int(_best["theta_obs"]),
+        "theta_fcast": int(_best["theta_fcast"]),
+        "cerf": int(_best["cerf"]),
+        "total_aff": int(_best["total_aff"]),
+        "n_fcast": int(_best["n_fcast"]),
+        "n_obs": int(_best["n_obs"]),
+        "sids": _best["_sids"],
+    }
+    return (two_d_best_fcast_dom,)
+
+
+@app.cell
 def doc_compare(mo):
     mo.md("""
     ## Head-to-head — `64 exp` (combined obsv + fcast) vs `2-dimensional`
