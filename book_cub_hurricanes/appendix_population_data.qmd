@@ -207,6 +207,157 @@ The only meaningful rank swap is Artemisa rising 2 places (9th → 11th in
 ONEI, but 9th in WorldPop), pushing Las Tunas and Guantánamo down one slot
 each. That is the same east-west reshape made visible on the rank scale.
 
+### Cross-checking at admin2
+
+If the shared-lineage story is right, we should see the same close agreement
+at admin2 (municipio). Both sources publish at this scale: CODAB has 168
+admin2 polygons, ONEI's `CUB_ADM2_POP_2024.xlsx` has 168 admin2 rows.
+
+The pcode systems do not match (CODAB uses `CU0201`, ONEI uses NaN for
+adm2 and `21`-style numeric for adm1), so the join is on
+`(adm1_name, adm2_name)` after Unicode normalisation. Nine municipios have
+typos or spelling variants on one side, plus two municipios both named
+"San Luis" (in Pinar del Río and Santiago de Cuba) — handled by the
+compound key.
+
+```{python}
+NAME_FIXES = {
+    "ciefuegos": "cienfuegos",
+    "ciro redodo": "ciro redondo",
+    "frak pais": "frank pais",
+    "aguada de pasajajeros": "aguada de pasajeros",
+    "carlos m. de cespedes": "carlos manuel de cespedes",
+    "habana del este": "la habana del este",
+    "habana vieja": "la habana vieja",
+    "manueltames": "manuel tames",
+    "songo - la maya": "songo-la maya",
+}
+
+
+def canonical(s: str) -> str:
+    n = (
+        unicodedata.normalize("NFKD", str(s))
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .strip()
+        .lower()
+    )
+    return NAME_FIXES.get(n, n)
+
+
+adm2 = stratus.load_shp_from_blob(
+    blob_name=f"{PROJECT_PREFIX}/raw/codab/cub.shp.zip",
+    shapefile="cub_adm2.shp",
+    stage="dev",
+)
+adm2["a1_k"] = adm2["ADM1_ES"].map(canonical)
+adm2["a2_k"] = adm2["ADM2_ES"].map(canonical)
+
+xlsx2_bytes = stratus.load_blob_data(
+    f"{PROJECT_PREFIX}/raw/unfpa/CUB_ADM2_POP_2024.xlsx",
+    container_name="projects",
+    stage="dev",
+)
+official2 = (
+    pd.read_excel(io.BytesIO(xlsx2_bytes), sheet_name="CUB_ADM2_POP_2024")[
+        ["ADM1_NAME", "ADM2_NAME", "T_TL"]
+    ]
+    .rename(columns={"T_TL": "pop_official"})
+    .assign(
+        a1_k=lambda d: d["ADM1_NAME"].map(canonical),
+        a2_k=lambda d: d["ADM2_NAME"].map(canonical),
+    )
+)
+
+adm2_joined = adm2.merge(
+    official2[["a1_k", "a2_k", "pop_official"]],
+    on=["a1_k", "a2_k"],
+    validate="one_to_one",
+)
+print(f"adm2 polygons joined: {len(adm2_joined)} / 168")
+```
+
+```{python}
+if str(adm2_joined.crs) != str(da.rio.crs):
+    adm2_joined = adm2_joined.to_crs(da.rio.crs)
+
+stats2 = exact_extract(
+    da,
+    adm2_joined,
+    ops=["sum"],
+    output="pandas",
+    include_cols=["ADM2_PCODE", "ADM2_ES", "ADM1_ES", "pop_official"],
+)
+sum2_col = next(
+    c for c in stats2.columns if c == "sum" or c.endswith("_sum")
+)
+stats2 = stats2.rename(columns={sum2_col: "pop_worldpop2026"})
+stats2["pct_diff"] = 100 * (stats2["pop_worldpop2026"] / stats2["pop_official"] - 1)
+
+print(
+    f"WP total: {stats2['pop_worldpop2026'].sum():>12,.0f}   "
+    f"ONEI total: {stats2['pop_official'].sum():>12,.0f}   "
+    f"diff: {100*(stats2['pop_worldpop2026'].sum()/stats2['pop_official'].sum()-1):+.2f}%"
+)
+r2 = np.corrcoef(stats2["pop_worldpop2026"], stats2["pop_official"])[0, 1]
+rho2 = np.corrcoef(
+    stats2["pop_worldpop2026"].rank(), stats2["pop_official"].rank()
+)[0, 1]
+print(f"Pearson r:    {r2:.4f}   (vs 0.997 at adm1)")
+print(f"Spearman rho: {rho2:.4f}   (vs 0.991 at adm1)")
+```
+
+The national total agrees with the adm1 zonal sum to within ~0.1% (the
+small difference is just CODAB adm2 vs. Field Maps adm1 polygon edge
+effects). But the per-municipio agreement is **much worse**: Pearson r
+drops from 0.997 (adm1) to 0.87 (adm2), and per-unit `pct_diff` ranges
+from −90% to +414%. The deviations are not noise — they concentrate in
+specific places.
+
+```{python}
+top = stats2.nlargest(5, "pct_diff")[
+    ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "pct_diff"]
+]
+bot = stats2.nsmallest(5, "pct_diff")[
+    ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "pct_diff"]
+]
+print("=== Largest positive deviations (WP > ONEI) ===")
+print(top.round(0).to_string(index=False))
+print("=== Largest negative deviations (WP < ONEI) ===")
+print(bot.round(0).to_string(index=False))
+```
+
+The pattern is striking: large positive *and* large negative deviations
+cluster inside **La Habana** province, often in adjacent municipios. Cerro
+shows +111% while neighbouring Arroyo Naranjo shows −87%. The two
+WorldPop estimates *do* sum back to roughly the ONEI provincial total —
+WorldPop just allocates the people across the urban core differently than
+ONEI's municipal census rows.
+
+**Why the adm1 result does not extend to adm2.** Two compounding causes:
+
+1. **WorldPop's input admin level is not CODAB's published 168.** The
+   Release Statement says WorldPop "nested" Cuba's units from 168 down to
+   161 for harmonisation between its 2012 and 2022 timepoints (a
+   pre-processing step to keep boundaries consistent across census
+   rounds). The dasymetric mathematical preservation only holds at *that*
+   nested input level — not at CODAB's published level. Extracting by
+   CODAB's 168 polygons cuts through several of WorldPop's merged input
+   units, and within each merged unit population is spread by the
+   random-forest density + built-settlement mask, not by ONEI's municipal
+   boundaries.
+2. **The raster is 1km, the municipios are small.** Habana's 15 municipios
+   range from ~14 km² (Centro Habana, Cerro) to ~250 km² (La Habana del
+   Este). At 1km resolution, the small dense ones span only ~14 pixels —
+   not nearly enough for the dasymetric allocation across a merged input
+   unit to recover ONEI's municipio counts.
+
+The shared-lineage logic does not break, then — it just becomes a
+constraint *on WorldPop's internal nested admin units*, not on every admin
+level a user might choose. At admin1, where many municipios aggregate
+together, the within-unit allocation noise averages out, and we see r =
+0.997. At admin2, that averaging is gone.
+
 ### Methodology context
 
 **ONEI projection.** The xlsx is ONEI's projection from the 2012 *Censo de
@@ -245,15 +396,22 @@ is marked as an **alpha** release by WorldPop, with refinements expected.
 
 ### What this means for the trigger framework
 
-- **Rank- or share-based comparisons across provinces are robust.** 13/16
-  ranks match exactly, all 16 shares match within 1.1 pp, and the
-  province-correlation is r ≈ 0.997. Exposure rankings used for
-  prioritisation are unaffected by the choice of dataset.
-- **Absolute counts are not robust.** Both datasets descend from the 2012
-  census via ONEI projections that do not reflect post-2020 emigration.
-  Independent estimates suggest the true end-2024 population is ~15–18%
-  lower than either number. If absolute "people affected" figures are
-  needed, they should be flagged with that uncertainty.
+- **At admin1, rank- and share-based comparisons are robust.** 13/16
+  ranks match exactly, all 16 shares match within 1.1 pp, and r ≈ 0.997.
+  Exposure rankings used for provincial prioritisation are insensitive to
+  the choice between WorldPop and ONEI.
+- **At admin2, the raster is not a reliable per-municipio estimator.**
+  Pearson r drops to 0.87, with per-municipio deviations of −90% to
+  +414% concentrated in dense urban Habana. The dasymetric preservation
+  property holds only at WorldPop's internal nested input units (~161
+  for Cuba), not at CODAB's published 168. For municipio-level exposure
+  numbers, use ONEI's adm2 directly rather than zonal sums from this
+  raster.
+- **Absolute counts are not robust at any level.** Both datasets descend
+  from the 2012 census via ONEI projections that do not reflect post-2020
+  emigration. Independent estimates suggest the true end-2024 population
+  is ~15–18% lower than either number. If absolute "people affected"
+  figures are needed, they should be flagged with that uncertainty.
 - **The +11% gap between WorldPop and the xlsx is not evidence about real
   population.** It is mostly a difference between UN WPP 2024 (WorldPop's
   national control) and ONEI's later 2025 projection (the xlsx). The
