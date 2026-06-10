@@ -1,0 +1,275 @@
+---
+jupyter: ds-aa-cub-hurricanes
+---
+
+## Appendix 1B: Population Data Validation — WorldPop vs. ONEI
+
+The trigger framework uses gridded population to estimate exposure inside the
+ZMA. Before relying on those exposure numbers, this appendix sanity-checks the
+WorldPop raster we use against an independent official tabulation from ONEI
+(Oficina Nacional de Estadística e Información de Cuba). The two are not fully
+independent — both descend from Cuba's 2012 census — but the comparison still
+diagnoses (i) whether province-level totals are coherent across products, (ii)
+where they disagree, and (iii) the order of magnitude of structural uncertainty
+on absolute counts.
+
+### Inputs
+
+| Role          | Source                                                                                                                                                                                                                    |
+|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Polygons      | Field Maps edge-matched humanitarian admin1 (`fieldmaps/edge-matched/humanitarian/intl/adm1/CUB.parquet`, Blob container `global`)                                                                                         |
+| Raster        | WorldPop Global 2 R2025A, 2026, **constrained**, 1km (`worldpop/pop_count/global_pop_2026_CN_1km_R2025A_UA_v1.tif`, Blob container `raster`)                                                                                |
+| Official ref. | ONEI 2025 projection (end-2024), 16 provinces, Blob container `projects` at `{PROJECT_PREFIX}/raw/unfpa/CUB_ADM1_POP_2024.xlsx`, sheet `CUB_ADM1_POP_2024`, column `T_TL`                                                          |
+
+The xlsx is published via ONEI's *Observatorio de Igualdad de Género*. Despite
+the "2024" filename, rows are tagged `year = 2025` (this is the 2025-published
+projection for the 2024 reference year).
+
+### Zonal sums
+
+```{python}
+import io
+import unicodedata
+
+import geopandas as gpd
+import numpy as np
+import ocha_stratus as stratus
+import pandas as pd
+from exactextract import exact_extract
+
+from src.constants import PROJECT_PREFIX
+
+
+def norm_name(s: str) -> str:
+    """Accent-fold + lowercase for joining province names across sources."""
+    return (
+        unicodedata.normalize("NFKD", str(s))
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .strip()
+        .lower()
+    )
+
+
+adm1_raw = stratus.load_blob_data(
+    "fieldmaps/edge-matched/humanitarian/intl/adm1/CUB.parquet",
+    container_name="global",
+    stage="dev",
+)
+adm1 = gpd.read_parquet(io.BytesIO(adm1_raw))
+
+da = stratus.open_blob_cog(
+    "worldpop/pop_count/global_pop_2026_CN_1km_R2025A_UA_v1.tif",
+    container_name="raster",
+    stage="dev",
+)
+if "band" in da.dims and da.sizes.get("band", 1) == 1:
+    da = da.squeeze("band", drop=True)
+
+if str(adm1.crs) != str(da.rio.crs):
+    adm1 = adm1.to_crs(da.rio.crs)
+
+# exactextract handles partial-pixel coverage; sum is area-weighted
+stats = exact_extract(
+    da, adm1, ops=["sum"], output="pandas", include_cols=["adm1_name"]
+)
+sum_col = next(
+    c for c in stats.columns if c == "sum" or c.endswith("_sum")
+)
+stats = stats.rename(columns={sum_col: "pop_worldpop2026"})
+stats["name_key"] = stats["adm1_name"].map(norm_name)
+```
+
+```{python}
+xlsx_blob = f"{PROJECT_PREFIX}/raw/unfpa/CUB_ADM1_POP_2024.xlsx"
+xlsx_bytes = stratus.load_blob_data(
+    xlsx_blob, container_name="projects", stage="dev"
+)
+official = pd.read_excel(
+    io.BytesIO(xlsx_bytes), sheet_name="CUB_ADM1_POP_2024"
+)
+official = (
+    official[["ADM1_PCODE", "ADM1_NAME", "T_TL"]]
+    .rename(columns={"T_TL": "pop_official"})
+    .assign(name_key=lambda d: d["ADM1_NAME"].map(norm_name))
+)
+
+merged = (
+    stats.merge(official, on="name_key", validate="one_to_one")
+    .sort_values("ADM1_PCODE")
+    .reset_index(drop=True)
+)
+merged["diff"] = merged["pop_worldpop2026"] - merged["pop_official"]
+merged["pct_diff"] = 100 * merged["diff"] / merged["pop_official"]
+merged[
+    ["ADM1_PCODE", "adm1_name", "pop_worldpop2026", "pop_official", "diff", "pct_diff"]
+].round(0)
+```
+
+Admin0 (Cuba) aggregates:
+
+```{python}
+total_wp = merged["pop_worldpop2026"].sum()
+total_off = merged["pop_official"].sum()
+print(f"WorldPop 2026 (constrained, sum of adm1): {total_wp:>12,.0f}")
+print(f"ONEI 2024 projection (sum of adm1):      {total_off:>12,.0f}")
+print(f"Difference: {total_wp - total_off:>+,.0f} ({100*(total_wp/total_off - 1):+.2f}%)")
+```
+
+### Same shape, different totals
+
+The +11% national gap could mean either (a) the two datasets disagree on the
+spatial distribution of people across provinces, or (b) the spatial
+distribution is similar and only the national total differs. To tell them
+apart, compare each province's *share* of the national total in both datasets.
+
+```{python}
+share = merged.assign(
+    wp_share=lambda d: 100 * d["pop_worldpop2026"] / d["pop_worldpop2026"].sum(),
+    onei_share=lambda d: 100 * d["pop_official"] / d["pop_official"].sum(),
+)
+share["share_diff_pp"] = share["wp_share"] - share["onei_share"]
+share[["ADM1_PCODE", "adm1_name", "wp_share", "onei_share", "share_diff_pp"]].round(2)
+```
+
+Shares match within ~1 percentage point across all 16 provinces. The
+Pearson correlation between provincial totals is essentially 1:
+
+```{python}
+r = np.corrcoef(merged["pop_worldpop2026"], merged["pop_official"])[0, 1]
+print(f"Pearson r (admin1 totals): {r:.4f}")
+```
+
+### Decomposing the per-province difference
+
+Per-province `pct_diff` ranges from +4% (Guantánamo) to +18% (La Habana).
+That is not the +11.3% you would get from a pure national rescale. Both
+components matter and they compose multiplicatively:
+
+$$\text{WP}_i = \text{ONEI}_i \times \underbrace{\frac{\sum \text{WP}}{\sum \text{ONEI}}}_{\text{rescale}} \times \underbrace{\frac{s^{\text{WP}}_i}{s^{\text{ONEI}}_i}}_{\text{reshape}}$$
+
+where $s_i$ is province $i$'s share of the national total.
+
+```{python}
+rescale = total_wp / total_off
+decomp = merged.assign(
+    total_pct=lambda d: 100 * (d["pop_worldpop2026"] / d["pop_official"] - 1),
+    rescale_pct=100 * (rescale - 1),
+    reshape_pct=lambda d: 100
+    * (
+        (d["pop_worldpop2026"] / total_wp)
+        / (d["pop_official"] / total_off)
+        - 1
+    ),
+)
+decomp[
+    ["ADM1_PCODE", "adm1_name", "total_pct", "rescale_pct", "reshape_pct"]
+].round(2)
+```
+
+The rescale is +11.3% for every province (UN WPP 2024 national total vs.
+ONEI's 2025 internal projection). The reshape varies from −6.6% (Guantánamo)
+to +6.0% (La Habana), with a clear east–west tilt:
+
+| Direction         | Provinces (reshape sign)                                                |
+|-------------------|-------------------------------------------------------------------------|
+| Western (gainers) | La Habana, Artemisa, Cienfuegos, Camagüey, Mayabeque, Villa Clara        |
+| Eastern (losers)  | Guantánamo, Granma, Santiago de Cuba, Holguín, Las Tunas                 |
+
+### Rank check
+
+For applications that rank provinces by exposure, the question is whether the
+ordering is preserved. 13 of 16 provinces have identical rank between
+WorldPop and ONEI; the three that swap are a single trio in the middle of
+the distribution:
+
+```{python}
+ranked = merged.assign(
+    rank_wp=lambda d: d["pop_worldpop2026"].rank(ascending=False, method="min").astype(int),
+    rank_onei=lambda d: d["pop_official"].rank(ascending=False, method="min").astype(int),
+)
+ranked["rank_diff"] = ranked["rank_wp"] - ranked["rank_onei"]
+ranked.sort_values("rank_onei")[
+    ["adm1_name", "rank_wp", "rank_onei", "rank_diff"]
+]
+```
+
+Spearman ρ on admin1 totals:
+
+```{python}
+r_wp = merged["pop_worldpop2026"].rank()
+r_on = merged["pop_official"].rank()
+rho = np.corrcoef(r_wp, r_on)[0, 1]
+print(f"Spearman rho: {rho:.4f}")
+```
+
+The only meaningful rank swap is Artemisa rising 2 places (9th → 11th in
+ONEI, but 9th in WorldPop), pushing Las Tunas and Guantánamo down one slot
+each. That is the same east-west reshape made visible on the rank scale.
+
+### Methodology context
+
+**ONEI projection.** The xlsx is ONEI's projection from the 2012 *Censo de
+Población y Viviendas* (Cuba's last completed census) using a deterministic
+cohort-component method via CEPDE under a UNFPA collaboration. The xlsx's
+"Methods" cell does not specify the technique explicitly. The known
+methodological weakness, documented by independent demographers (notably
+Albizu-Campos, CEDEM/UH), is in emigration accounting:
+
+- Since 2013, ONEI does not classify as emigrants persons who hold a valid
+  Cuban passport and re-enter the country at least once every 24 months,
+  regardless of where they actually live.
+- The external migration balance is reportedly dominated by US arrivals data,
+  undercounting flows to Spain, Mexico, Russia, Uruguay, etc.
+- Independent reconstruction from electoral rolls + birth/death + destination
+  data places end-2024 population at roughly 8.0M vs. ONEI's 9.75M — a
+  ~1.7M (~18%) gap that ONEI's published projection does not see.
+
+**WorldPop pipeline.** The R2025A raster is produced by random-forest
+dasymetric disaggregation (Stevens et al. 2007), implemented via the
+`popRF` R package. For Cuba specifically (WorldPop's census-sources sheet,
+row 52):
+
+| Stage      | Input for Cuba                                                                                                |
+|------------|---------------------------------------------------------------------------------------------------------------|
+| Timepoint 1 | ONEI 2012 census, 168 municipios                                                                              |
+| Timepoint 2 | ONEI *Anuario Estadístico 2022*, 170 municipios                                                              |
+| Annual interpolation | Modelled per municipio, 2010–2030                                                                  |
+| National constraint | UN WPP 2024 Revision, January-1st estimates                                                         |
+| Settlement mask | GHSL BUILT-S/V + Google Open Buildings v3 + Microsoft Building Footprints + World Settlement Footprint    |
+
+Both WorldPop timepoints are ONEI products, and the UN WPP 2024 national
+control itself draws on ONEI. So WorldPop and our reference xlsx share the
+same 2012-census-rooted lineage and the same emigration blind-spot. R2025A
+is marked as an **alpha** release by WorldPop, with refinements expected.
+
+### What this means for the trigger framework
+
+- **Rank- or share-based comparisons across provinces are robust.** 13/16
+  ranks match exactly, all 16 shares match within 1.1 pp, and the
+  province-correlation is r ≈ 0.997. Exposure rankings used for
+  prioritisation are unaffected by the choice of dataset.
+- **Absolute counts are not robust.** Both datasets descend from the 2012
+  census via ONEI projections that do not reflect post-2020 emigration.
+  Independent estimates suggest the true end-2024 population is ~15–18%
+  lower than either number. If absolute "people affected" figures are
+  needed, they should be flagged with that uncertainty.
+- **The +11% gap between WorldPop and the xlsx is not evidence about real
+  population.** It is mostly a difference between UN WPP 2024 (WorldPop's
+  national control) and ONEI's later 2025 projection (the xlsx). The
+  ~6% east-west reshape on top is consistent with WorldPop's 2022 input
+  pre-dating ONEI's 2025 redistribution of share away from eastern Cuba.
+
+### References
+
+- WorldPop. *Global Demographic Data: Public Release R2025A V1*, September
+  2025. <https://data.worldpop.org/repo/prj/Global_2015_2030/R2025A/doc/Global2_Release_Statement_R2025A_v1.pdf>
+- WorldPop. *Census data sources, R2025A v1* (Cuba: row 52). <https://data.worldpop.org/repo/prj/Global_2015_2030/R2025A/doc/census/global2_census_data_sources_R2025A_v1.xlsx>
+- Stevens, F. R., Gaughan, A. E., Linard, C. & Tatem, A. J. (2015).
+  Disaggregating census data for population mapping using random forests
+  with remotely-sensed and ancillary data. *PLoS ONE* 10:e0107042.
+- UN DESA, Population Division (2024). *World Population Prospects 2024:
+  Methodology*. UN DESA/POP/2024/DC/NO.10.
+- ONEI (2025). *Cuba: 9,748,007 habitantes al cierre de 2024*. <http://www.onei.gob.cu/node/2586>
+- Albizu-Campos critique (summarised in Columbia Horizonte Cubano, 2025).
+  <https://horizontecubano.law.columbia.edu/news/cuba-una-rapida-mirada-la-emigracion-y-la-poblacion>
