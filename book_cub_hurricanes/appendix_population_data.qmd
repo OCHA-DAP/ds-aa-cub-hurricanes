@@ -209,40 +209,34 @@ each. That is the same east-west reshape made visible on the rank scale.
 
 ### Cross-checking at admin2
 
-If the shared-lineage story is right, we should see the same close agreement
-at admin2 (municipio). Both sources publish at this scale: CODAB has 168
-admin2 polygons, ONEI's `CUB_ADM2_POP_2024.xlsx` has 168 admin2 rows.
+If the shared-lineage story is right, we should see the same close
+agreement at admin2 (municipio). Both sources publish at this scale: CODAB
+has 168 admin2 polygons, ONEI's `CUB_ADM2_POP_2024.xlsx` has 168 rows.
 
-The pcode systems do not match (CODAB uses `CU0201`, ONEI uses NaN for
-adm2 and `21`-style numeric for adm1), so the join is on
-`(adm1_name, adm2_name)` after Unicode normalisation. Nine municipios have
-typos or spelling variants on one side, plus two municipios both named
-"San Luis" (in Pinar del Río and Santiago de Cuba) — handled by the
-compound key.
+The pcode systems do not match (CODAB uses `CU0201`-style, ONEI's adm2
+pcode column is NaN), so the join is on `(adm1_name, adm2_name)` after
+Unicode normalisation. The compound key also disambiguates two municipios
+called "San Luis" (one in Pinar del Río, one in Santiago de Cuba).
+
+A handful of municipio names have typos or spelling variants on one side
+(e.g. ONEI's `"aguada de pasajajeros"` vs. CODAB's `"aguada de pasajeros"`;
+ONEI's `"la habana del este"` vs. CODAB's `"habana del este"`). Rather
+than build a manual fix-up map and risk silently mis-matching, we apply a
+**stricter quality filter**: keep an admin1 only if *every* one of its
+admin2 names matches exactly between CODAB and ONEI under basic Unicode
+normalisation. If even one municipio in a province has uncertain name
+alignment, drop the whole province — because if names are uncertain,
+boundary alignment between the two sources is uncertain too.
 
 ```{python}
-NAME_FIXES = {
-    "ciefuegos": "cienfuegos",
-    "ciro redodo": "ciro redondo",
-    "frak pais": "frank pais",
-    "aguada de pasajajeros": "aguada de pasajeros",
-    "carlos m. de cespedes": "carlos manuel de cespedes",
-    "habana del este": "la habana del este",
-    "habana vieja": "la habana vieja",
-    "manueltames": "manuel tames",
-    "songo - la maya": "songo-la maya",
-}
-
-
-def canonical(s: str) -> str:
-    n = (
+def norm_basic(s: str) -> str:
+    return (
         unicodedata.normalize("NFKD", str(s))
         .encode("ascii", "ignore")
         .decode("ascii")
         .strip()
         .lower()
     )
-    return NAME_FIXES.get(n, n)
 
 
 adm2 = stratus.load_shp_from_blob(
@@ -250,8 +244,8 @@ adm2 = stratus.load_shp_from_blob(
     shapefile="cub_adm2.shp",
     stage="dev",
 )
-adm2["a1_k"] = adm2["ADM1_ES"].map(canonical)
-adm2["a2_k"] = adm2["ADM2_ES"].map(canonical)
+adm2["a1_k"] = adm2["ADM1_ES"].map(norm_basic)
+adm2["a2_k"] = adm2["ADM2_ES"].map(norm_basic)
 
 xlsx2_bytes = stratus.load_blob_data(
     f"{PROJECT_PREFIX}/raw/unfpa/CUB_ADM2_POP_2024.xlsx",
@@ -264,26 +258,40 @@ official2 = (
     ]
     .rename(columns={"T_TL": "pop_official"})
     .assign(
-        a1_k=lambda d: d["ADM1_NAME"].map(canonical),
-        a2_k=lambda d: d["ADM2_NAME"].map(canonical),
+        a1_k=lambda d: d["ADM1_NAME"].map(norm_basic),
+        a2_k=lambda d: d["ADM2_NAME"].map(norm_basic),
     )
 )
 
-adm2_joined = adm2.merge(
-    official2[["a1_k", "a2_k", "pop_official"]],
-    on=["a1_k", "a2_k"],
-    validate="one_to_one",
+# Keep admin1s where the set of adm2 names is identical in both sources
+def is_clean(a1_key: str) -> bool:
+    g = set(adm2.loc[adm2["a1_k"] == a1_key, "a2_k"])
+    o = set(official2.loc[official2["a1_k"] == a1_key, "a2_k"])
+    return bool(g) and g == o
+
+
+clean_a1 = sorted(
+    {a1 for a1 in set(adm2["a1_k"]) | set(official2["a1_k"]) if is_clean(a1)}
 )
-print(f"adm2 polygons joined: {len(adm2_joined)} / 168")
+dropped_a1 = sorted(
+    {a1 for a1 in set(adm2["a1_k"]) | set(official2["a1_k"]) if not is_clean(a1)}
+)
+print(f"clean admin1s ({len(clean_a1)}/16):  {clean_a1}")
+print(f"dropped admin1s ({len(dropped_a1)}/16): {dropped_a1}")
 ```
 
 ```{python}
-if str(adm2_joined.crs) != str(da.rio.crs):
-    adm2_joined = adm2_joined.to_crs(da.rio.crs)
+adm2_clean = adm2[adm2["a1_k"].isin(clean_a1)].merge(
+    official2.loc[official2["a1_k"].isin(clean_a1), ["a1_k", "a2_k", "pop_official"]],
+    on=["a1_k", "a2_k"],
+    validate="one_to_one",
+)
+if str(adm2_clean.crs) != str(da.rio.crs):
+    adm2_clean = adm2_clean.to_crs(da.rio.crs)
 
 stats2 = exact_extract(
     da,
-    adm2_joined,
+    adm2_clean,
     ops=["sum"],
     output="pandas",
     include_cols=["ADM2_PCODE", "ADM2_ES", "ADM1_ES", "pop_official"],
@@ -292,11 +300,14 @@ sum2_col = next(
     c for c in stats2.columns if c == "sum" or c.endswith("_sum")
 )
 stats2 = stats2.rename(columns={sum2_col: "pop_worldpop2026"})
-stats2["pct_diff"] = 100 * (stats2["pop_worldpop2026"] / stats2["pop_official"] - 1)
+stats2["pct_diff"] = (
+    100 * (stats2["pop_worldpop2026"] / stats2["pop_official"] - 1)
+)
 
+print(f"adm2 polygons in clean subset: {len(stats2)} / 168")
 print(
-    f"WP total: {stats2['pop_worldpop2026'].sum():>12,.0f}   "
-    f"ONEI total: {stats2['pop_official'].sum():>12,.0f}   "
+    f"WP total: {stats2['pop_worldpop2026'].sum():>11,.0f}   "
+    f"ONEI total: {stats2['pop_official'].sum():>11,.0f}   "
     f"diff: {100*(stats2['pop_worldpop2026'].sum()/stats2['pop_official'].sum()-1):+.2f}%"
 )
 r2 = np.corrcoef(stats2["pop_worldpop2026"], stats2["pop_official"])[0, 1]
@@ -307,56 +318,110 @@ print(f"Pearson r:    {r2:.4f}   (vs 0.997 at adm1)")
 print(f"Spearman rho: {rho2:.4f}   (vs 0.991 at adm1)")
 ```
 
-The national total agrees with the adm1 zonal sum to within ~0.1% (the
-small difference is just CODAB adm2 vs. Field Maps adm1 polygon edge
-effects). But the per-municipio agreement is **much worse**: Pearson r
-drops from 0.997 (adm1) to 0.87 (adm2), and per-unit `pct_diff` ranges
-from −90% to +414%. The deviations are not noise — they concentrate in
-specific places.
+After filtering, **9 of 16 admin1s qualify**, leaving 89 municipios. A
+naive Pearson r is 0.98, but that statistic is dominated by the largest
+municipios (each province's capital) and hides what is happening to the
+small ones. The more honest test is whether the per-adm2 `pct_diff`
+distribution *within each clean province* clusters tightly around that
+province's adm1-level `pct_diff` (which we already know — it sits on the
++11.3% rescale plus the east-west reshape).
 
 ```{python}
-top = stats2.nlargest(5, "pct_diff")[
-    ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "pct_diff"]
+adm1_summary = (
+    stats2.groupby("ADM1_ES")
+    .agg(
+        adm1_wp=("pop_worldpop2026", "sum"),
+        adm1_onei=("pop_official", "sum"),
+        n_adm2=("pop_worldpop2026", "size"),
+    )
+    .assign(adm1_pct=lambda d: 100 * (d["adm1_wp"] / d["adm1_onei"] - 1))
+)
+adm2_dist = stats2.groupby("ADM1_ES")["pct_diff"].agg(
+    ["min", "median", "max", "std"]
+)
+combined = (
+    adm1_summary.join(adm2_dist)
+    .sort_values("adm1_pct")[
+        ["n_adm2", "adm1_pct", "min", "median", "max", "std"]
+    ]
+    .round(1)
+)
+combined.columns = [
+    "n_adm2",
+    "adm1_pct",
+    "adm2_min",
+    "adm2_median",
+    "adm2_max",
+    "adm2_std",
 ]
-bot = stats2.nsmallest(5, "pct_diff")[
-    ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "pct_diff"]
-]
-print("=== Largest positive deviations (WP > ONEI) ===")
-print(top.round(0).to_string(index=False))
-print("=== Largest negative deviations (WP < ONEI) ===")
-print(bot.round(0).to_string(index=False))
+combined
 ```
 
-The pattern is striking: large positive *and* large negative deviations
-cluster inside **La Habana** province, often in adjacent municipios. Cerro
-shows +111% while neighbouring Arroyo Naranjo shows −87%. The two
-WorldPop estimates *do* sum back to roughly the ONEI provincial total —
-WorldPop just allocates the people across the urban core differently than
-ONEI's municipal census rows.
+Two things to notice:
 
-**Why the adm1 result does not extend to adm2.** Two compounding causes:
+1. **The median per-adm2 `pct_diff` closely tracks the adm1 `pct_diff`**
+   in each province (e.g. Mayabeque adm1 = +13.6%, adm2 median = +13.7%;
+   Sancti Spíritus adm1 = +11.3%, adm2 median = +11.4%). There is no
+   systematic within-province bias — the per-province mass is in roughly
+   the right place.
+2. **But the spread is large.** Villa Clara's individual municipios range
+   from −66% to +93% (std 37 pp); Pinar del Río and Artemisa span
+   ~80 pp; Matanzas and Mayabeque ~50–60 pp. Even in the cleanest
+   provinces, per-municipio agreement is far worse than per-province.
 
-1. **WorldPop's input admin level is not CODAB's published 168.** The
-   Release Statement says WorldPop "nested" Cuba's units from 168 down to
-   161 for harmonisation between its 2012 and 2022 timepoints (a
-   pre-processing step to keep boundaries consistent across census
-   rounds). The dasymetric mathematical preservation only holds at *that*
-   nested input level — not at CODAB's published level. Extracting by
-   CODAB's 168 polygons cuts through several of WorldPop's merged input
-   units, and within each merged unit population is spread by the
-   random-forest density + built-settlement mask, not by ONEI's municipal
-   boundaries.
-2. **The raster is 1km, the municipios are small.** Habana's 15 municipios
-   range from ~14 km² (Centro Habana, Cerro) to ~250 km² (La Habana del
-   Este). At 1km resolution, the small dense ones span only ~14 pixels —
-   not nearly enough for the dasymetric allocation across a merged input
-   unit to recover ONEI's municipio counts.
+This is consistent with the dasymetric preservation property of
+`popRF`: it preserves the *total* inside each WorldPop-input admin unit
+but redistributes population within that unit according to the random
+forest density × built-settlement mask. When CODAB's adm2 polygons
+happen to match WorldPop's internal nested adm2 boundaries, the
+per-municipio sums recover ONEI's values. When they don't, the within-
+unit allocation determines the per-CODAB-adm2 result, and that
+allocation depends on RF/settlement signal rather than on the actual
+ONEI municipal census.
 
-The shared-lineage logic does not break, then — it just becomes a
-constraint *on WorldPop's internal nested admin units*, not on every admin
-level a user might choose. At admin1, where many municipios aggregate
-together, the within-unit allocation noise averages out, and we see r =
-0.997. At admin2, that averaging is gone.
+To make the within-province scatter explicit, the **residual** of each
+adm2's `pct_diff` from its province's `pct_diff` should be centred near
+zero with most weight inside ±10–15 pp if dasymetric preservation
+behaved cleanly. In practice the residuals reach ±80 pp:
+
+```{python}
+stats2 = stats2.merge(
+    adm1_summary["adm1_pct"].rename("province_pct"),
+    left_on="ADM1_ES",
+    right_index=True,
+)
+stats2["residual_pp"] = stats2["pct_diff"] - stats2["province_pct"]
+print("=== Top 5 residuals (WP allocates more than its province average) ===")
+print(
+    stats2.nlargest(5, "residual_pp")[
+        ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "residual_pp"]
+    ]
+    .round(0)
+    .to_string(index=False)
+)
+print("=== Bottom 5 residuals (WP allocates less than its province average) ===")
+print(
+    stats2.nsmallest(5, "residual_pp")[
+        ["ADM2_ES", "ADM1_ES", "pop_worldpop2026", "pop_official", "residual_pp"]
+    ]
+    .round(0)
+    .to_string(index=False)
+)
+```
+
+So even after the strict admin1 filter:
+
+- **Province-level totals (adm1) are preserved.** Per-adm2 medians track
+  per-adm1 `pct_diff` closely, so there is no systematic within-province
+  bias.
+- **Individual municipio counts are not reliable.** The within-province
+  spread is ±20–80 pp. The raster is a province-level estimator, not a
+  municipio-level one — even in provinces where names and boundaries
+  align cleanly.
+- **The 7 dropped provinces include exactly the densest urban areas**
+  (La Habana, Santiago de Cuba, Cienfuegos). We can say nothing
+  empirically validated about adm2 accuracy there; a polygon-level
+  ONEI–CODAB crosswalk would be needed for a true test.
 
 ### Methodology context
 
@@ -400,13 +465,18 @@ is marked as an **alpha** release by WorldPop, with refinements expected.
   ranks match exactly, all 16 shares match within 1.1 pp, and r ≈ 0.997.
   Exposure rankings used for provincial prioritisation are insensitive to
   the choice between WorldPop and ONEI.
-- **At admin2, the raster is not a reliable per-municipio estimator.**
-  Pearson r drops to 0.87, with per-municipio deviations of −90% to
-  +414% concentrated in dense urban Habana. The dasymetric preservation
-  property holds only at WorldPop's internal nested input units (~161
-  for Cuba), not at CODAB's published 168. For municipio-level exposure
-  numbers, use ONEI's adm2 directly rather than zonal sums from this
-  raster.
+- **At admin2, the raster is not a reliable per-municipio estimator —
+  not even in provinces where names and boundaries align cleanly.**
+  After restricting to the 9 admin1s with perfect adm2-name matches
+  between CODAB and ONEI (89 municipios), the per-adm2 `pct_diff`
+  *median* tracks each province's adm1 `pct_diff` closely, but the
+  *spread* is ±20–80 percentage points within province. The
+  dasymetric preservation property holds only at WorldPop's internal
+  nested input units (~161 for Cuba), not at CODAB's published 168 —
+  so within-province allocation is driven by the random-forest density
+  + built-settlement mask, not by ONEI's municipal census. For
+  municipio-level exposure numbers, use ONEI's adm2 directly rather
+  than zonal sums from this raster.
 - **Absolute counts are not robust at any level.** Both datasets descend
   from the 2012 census via ONEI projections that do not reflect post-2020
   emigration. Independent estimates suggest the true end-2024 population
