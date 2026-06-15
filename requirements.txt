@@ -12,6 +12,9 @@ Jinja2==3.1.6
 ocha-stratus==0.1.2
 tqdm==4.67.1
 ipywidgets==8.1.7
+# Zonal stats + Excel I/O for appendix_population_data
+exactextract>=0.3.0
+openpyxl>=3.1.5
 # Jupyter dependencies required by Quarto
 jupyter>=1.0.0
 nbclient>=0.8.0

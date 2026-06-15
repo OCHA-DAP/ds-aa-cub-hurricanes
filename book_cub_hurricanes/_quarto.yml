@@ -22,6 +22,8 @@ book:
     - chirps_gefs_raster_processing.qmd
     - summary.qmd
     - appendix_check_quantile_calc.qmd
+    - appendix_population_data.qmd
+    - appendix_methodology_map.qmd
     - references.qmd
 
 bibliography: references.bib
