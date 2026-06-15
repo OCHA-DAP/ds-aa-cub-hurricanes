@@ -13,8 +13,10 @@ def load_ibtracs_in_bounds(min_lon, min_lat, max_lon, max_lat):
 
 
 def load_storms():
+    # storms.storms was renamed to storms.ibtracs_storms (sid, atcf_id, name,
+    # season, genesis_basin, ...).
     query = """
-    SELECT * FROM storms.storms
+    SELECT * FROM storms.ibtracs_storms
     """
     df = pd.read_sql(query, stratus.get_engine("dev"))
     return df
