@@ -24,9 +24,12 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Columns of a monitoring record. Used to build a well-formed empty frame when
-# a season has no data yet (season start, before any storm is processed) so
-# downstream consumers can filter/iterate without KeyError on missing columns.
+# Columns of a monitoring record, mirroring the dicts built in
+# _process_single_forecast / _process_single_observation (hand-kept in sync).
+# Used only to build a well-formed empty frame when a season has no data yet
+# (season start, before any storm is processed) so downstream consumers can
+# filter/iterate without KeyError. If a record field is added there, add it
+# to the matching list here.
 FCAST_MONITORING_COLUMNS = [
     "monitor_id",
     "atcf_id",
