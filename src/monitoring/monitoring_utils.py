@@ -12,11 +12,57 @@ import geopandas as gpd
 import ocha_stratus as stratus
 import pandas as pd
 
-from src.constants import D_THRESH, NUMERIC_NAME_REGEX, PROJECT_PREFIX, THRESHS
+from src.constants import (
+    D_THRESH,
+    NUMERIC_NAME_REGEX,
+    PROJECT_PREFIX,
+    THRESHS,
+    current_monitoring_season,
+)
 from src.datasources import codab, imerg, nhc, zma
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Columns of a monitoring record, mirroring the dicts built in
+# _process_single_forecast / _process_single_observation (hand-kept in sync).
+# Used only to build a well-formed empty frame when a season has no data yet
+# (season start, before any storm is processed) so downstream consumers can
+# filter/iterate without KeyError. If a record field is added there, add it
+# to the matching list here.
+FCAST_MONITORING_COLUMNS = [
+    "monitor_id",
+    "atcf_id",
+    "name",
+    "issue_time",
+    "time_to_closest",
+    "closest_s",
+    "past_cutoff",
+    "min_dist",
+    "in_zma",
+    "action_s",
+    "action_trigger",
+    "readiness_s",
+    "readiness_trigger",
+]
+OBSV_MONITORING_COLUMNS = [
+    "monitor_id",
+    "atcf_id",
+    "name",
+    "issue_time",
+    "min_dist",
+    "in_zma",
+    "closest_s",
+    "obsv_s",
+    "obsv_trigger",
+    "closest_p",
+    "obsv_p",
+    "rainfall_relevant",
+    "rainfall_source",
+    "quantile_used",
+    "analysis_start",
+    "analysis_end",
+]
 
 
 # This no longer used in pipeline, but can be if we wish to use IMERG
@@ -268,11 +314,16 @@ class CubaHurricaneMonitor:
         self,
         rainfall_processor: Optional[RainfallProcessor] = None,
         rainfall_source: Optional[str] = None,
+        season: Optional[int] = None,
     ):
         self.adm0 = codab.load_codab_from_blob().to_crs(3857)
         self.zma = zma.load_zma().to_crs(3857)  # Load ZMA for filtering
         self.rainfall_processor = rainfall_processor
         self.rainfall_source = rainfall_source
+        # Season scopes both the NHC track loads and the blob partitioning
+        # (monitoring/{season}/...), so one knob keeps inputs and storage
+        # aligned.
+        self.season = season or current_monitoring_season()
 
     # ============================================================================
     # UTILITY METHODS - Single responsibility, highly reusable
@@ -338,7 +389,7 @@ class CubaHurricaneMonitor:
     ) -> pd.DataFrame:
         """Load existing monitoring points from blob storage."""
         blob_name = (
-            f"{PROJECT_PREFIX}/monitoring/"
+            f"{PROJECT_PREFIX}/monitoring/{self.season}/"
             f"cub_{monitoring_type}_monitoring.parquet"
         )
         try:
@@ -347,7 +398,16 @@ class CubaHurricaneMonitor:
             logger.info(
                 f"No existing {monitoring_type} monitoring data found."
             )
-            return pd.DataFrame()
+            # Return an empty frame that still carries the record schema, so
+            # consumers (e.g. load_monitoring_data, update_plots) can filter on
+            # issue_time / min_dist without KeyError before the season's first
+            # storm is written.
+            columns = (
+                FCAST_MONITORING_COLUMNS
+                if monitoring_type == "fcast"
+                else OBSV_MONITORING_COLUMNS
+            )
+            return pd.DataFrame(columns=columns)
 
     # ============================================================================
     # GEOMETRIC OPERATIONS
@@ -702,7 +762,7 @@ class CubaHurricaneMonitor:
     def process_forecast_tracks(self, clobber: bool = False) -> pd.DataFrame:
         """Process NHC forecast tracks into monitoring records."""
         logger.info("Loading NHC forecast tracks for Atlantic basin.")
-        df_tracks = nhc.load_recent_glb_forecasts()
+        df_tracks = nhc.load_recent_glb_forecasts(season=self.season)
         df_tracks = df_tracks[df_tracks["basin"] == "al"]
 
         df_existing = self._load_existing_monitoring("fcast")
@@ -740,7 +800,7 @@ class CubaHurricaneMonitor:
         attributes, with rainfall data added only for qualifying storms.
         """
         logger.info("Loading NHC observational tracks for Atlantic basin.")
-        obsv_tracks = nhc.load_recent_glb_obsv()
+        obsv_tracks = nhc.load_recent_glb_obsv(season=self.season)
 
         # Handle empty DataFrame case
         if obsv_tracks.empty:
@@ -1036,7 +1096,7 @@ class CubaHurricaneMonitor:
             return
 
         blob_name = (
-            f"{PROJECT_PREFIX}/monitoring/"
+            f"{PROJECT_PREFIX}/monitoring/{self.season}/"
             f"cub_{monitoring_type}_monitoring.parquet"
         )
         stratus.upload_parquet_to_blob(df, blob_name, index=False)
@@ -1363,6 +1423,7 @@ class CubaHurricaneMonitor:
 
 def create_cuba_hurricane_monitor(
     rainfall_source: Optional[str] = "raster",
+    season: Optional[int] = None,
 ) -> CubaHurricaneMonitor:
     """Factory function to create CubaHurricaneMonitor with rainfall processor.
 
@@ -1370,6 +1431,7 @@ def create_cuba_hurricane_monitor(
         rainfall_source: Type of rainfall processor
             ('imerg' for DB-based, 'raster' for raster-based, None for
             wind-only)
+        season: Atlantic season (year) to monitor. Defaults to current year.
 
     Returns:
         Configured CubaHurricaneMonitor instance
@@ -1385,7 +1447,9 @@ def create_cuba_hurricane_monitor(
         raise ValueError(f"Unsupported rainfall source: {rainfall_source}")
 
     return CubaHurricaneMonitor(
-        rainfall_processor=rainfall_processor, rainfall_source=rainfall_source
+        rainfall_processor=rainfall_processor,
+        rainfall_source=rainfall_source,
+        season=season,
     )
 
 
