@@ -49,6 +49,7 @@ from src.constants import (
     PROJECT_PREFIX,
     SPANISH_MONTHS,
     THRESHS,
+    current_monitoring_season,
 )
 from src.datasources import codab, nhc, zma
 from src.email.utils import (
@@ -58,10 +59,25 @@ from src.email.utils import (
 )
 
 
+def _year_from_monitor_id(monitor_id: str) -> int:
+    """Partition year for a plot: the year in the monitor_id's issue timestamp
+    (``..._YYYY-MM-DDThh:mm:ss``). Falls back to the current season if the id
+    doesn't parse."""
+    try:
+        year = int(monitor_id.split("_")[-1][:4])
+        if 2000 <= year <= 2100:
+            return year
+    except (ValueError, IndexError):
+        pass
+    return current_monitoring_season()
+
+
 def get_plot_blob_name(monitor_id, plot_type: Literal["map", "scatter"]):
     fcast_obsv = "fcast" if "fcast" in monitor_id.lower() else "obsv"
+    year = _year_from_monitor_id(monitor_id)
     return (
-        f"{PROJECT_PREFIX}/plots/{fcast_obsv}/" f"{monitor_id}_{plot_type}.png"
+        f"{PROJECT_PREFIX}/plots/{year}/{fcast_obsv}/"
+        f"{monitor_id}_{plot_type}.png"
     )
 
 
@@ -80,8 +96,10 @@ def update_plots(
     if clobber is None:
         clobber = []
     df_monitoring = load_monitoring_data(fcast_obsv)
+    # List across all year partitions; existence is checked against the full,
+    # year-qualified blob name returned by get_plot_blob_name.
     existing_plot_blobs = stratus.list_container_blobs(
-        name_starts_with=f"{PROJECT_PREFIX}/plots/{fcast_obsv}/"
+        name_starts_with=f"{PROJECT_PREFIX}/plots/"
     )
 
     # Log email eligibility summary

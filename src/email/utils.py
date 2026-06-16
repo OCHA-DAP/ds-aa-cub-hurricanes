@@ -252,6 +252,11 @@ def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
     if FORCE_ALERT:
         df_monitoring = add_test_row_to_monitoring(df_monitoring, fcast_obsv)
 
+    # No data yet (e.g. start of a season): nothing to filter. Return the
+    # empty, schema-carrying frame so callers can filter/iterate safely.
+    if df_monitoring.empty:
+        return df_monitoring
+
     # Filter by MONITORING_START_DATE to limit processing scope and prevent timeouts
     df_monitoring["issue_time"] = pd.to_datetime(df_monitoring["issue_time"])
     df_monitoring = df_monitoring[

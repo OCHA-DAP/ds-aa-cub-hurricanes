@@ -1,7 +1,8 @@
-import numpy as np
 import os
-import pytz
 from datetime import datetime, timezone
+
+import numpy as np
+import pytz
 
 PROJECT_PREFIX = "ds-aa-cub-hurricanes"
 ISO3 = "cub"
@@ -12,6 +13,16 @@ cuba_tz = pytz.timezone("America/Havana")
 MONITORING_START_DATE = cuba_tz.localize(datetime(2025, 1, 1)).astimezone(
     timezone.utc
 )
+
+
+def current_monitoring_season() -> int:
+    """Current Atlantic monitoring season as a calendar year.
+
+    Atlantic hurricane seasons fall within a single year (Jun-Nov), so the
+    season is just the current year. Used to scope NHC track loads and to
+    partition the monitoring/plot blobs by year (monitoring/{year}/...).
+    """
+    return datetime.now().year
 
 
 # Runtime control flags - centralized configuration
