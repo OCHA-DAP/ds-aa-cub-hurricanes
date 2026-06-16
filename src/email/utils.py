@@ -2,7 +2,7 @@ import base64
 import os
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 import pandas as pd
 import ocha_stratus as stratus
 from src.datasources import nhc
@@ -269,6 +269,77 @@ def load_monitoring_data(fcast_obsv: Literal["fcast", "obsv"]) -> pd.DataFrame:
     )
 
     return df_monitoring
+
+
+def _issue_time_hours_utc(series: pd.Series) -> pd.Series:
+    """issue_time values floored to the UTC hour.
+
+    NHC advisories land on whole hours (03/09/15/21Z), so flooring lets us
+    match records to a target issuance regardless of tz representation or any
+    sub-hour drift in the stored timestamp.
+    """
+    series = pd.to_datetime(series)
+    if series.dt.tz is None:
+        series = series.dt.tz_localize("UTC")
+    else:
+        series = series.dt.tz_convert("UTC")
+    return series.dt.floor("h")
+
+
+def filter_to_issued_time(
+    df_monitoring: pd.DataFrame, issued_time: Optional[str] = None
+) -> pd.DataFrame:
+    """Scope monitoring records to a single issuance ("issued time").
+
+    Each pipeline run emails for exactly ONE issued time, mirroring the
+    once-per-issuance model of the ds-storms-alerts pipeline. This replaces the
+    previous behaviour of looping over every un-emailed record in the season:
+    when the email record was empty for those records (a fresh season, or a
+    mid-season cut-over), the old loop would send the entire backlog at once,
+    one email per past issuance. Scoping to a single issuance means a run can
+    only ever email for the advisory it is processing; the email-record dedup
+    remains as a second layer against re-sends.
+
+    Target issued time, in priority order:
+      1. the explicit ``issued_time`` argument,
+      2. the ``ISSUED_TIME`` environment variable ("%Y-%m-%dT%H", UTC),
+      3. the most recent ``issue_time`` present in ``df_monitoring``.
+
+    We default to the latest issuance in the data (rather than a wall-clock
+    advisory hour as ds-storms-alerts does) because the observed feed's
+    issue_times are synthesised from observation timestamps, so the data is the
+    reliable source of "which issuance do we actually have". The ISSUED_TIME
+    override provides the same explicit, reproducible targeting for backfills
+    or replays.
+
+    Records are matched on the UTC hour of their ``issue_time``. The frame is
+    returned unchanged when FORCE_ALERT is set, so the injected test row (whose
+    issue_time is the season start, not the current advisory) still flows
+    through to the senders.
+    """
+    if FORCE_ALERT or df_monitoring.empty:
+        return df_monitoring
+
+    issue_hours = _issue_time_hours_utc(df_monitoring["issue_time"])
+
+    if issued_time is None:
+        issued_time = os.getenv("ISSUED_TIME")
+    if issued_time:
+        target = pd.Timestamp(issued_time)
+        target = (
+            target.tz_localize("UTC")
+            if target.tzinfo is None
+            else target.tz_convert("UTC")
+        ).floor("h")
+    else:
+        target = issue_hours.max()
+
+    df_at_issuance = df_monitoring[issue_hours == target]
+    print(
+        f"📌 Scoped to issued time {target:%Y-%m-%dT%H}Z: "
+        f"{len(df_at_issuance)}/{len(df_monitoring)} records"
+    )
+    return df_at_issuance
 
 
 def load_email_record_with_test_filtering(

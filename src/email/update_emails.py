@@ -1,16 +1,20 @@
 import traceback
+from typing import Optional
 
 from src.constants import MIN_EMAIL_DISTANCE
 from src.email.send_emails import send_info_email, send_trigger_email
 from src.email.utils import (
     FORCE_ALERT,
+    filter_to_issued_time,
     load_email_record_with_test_filtering,
     load_monitoring_data,
     save_email_record,
 )
 
 
-def update_obsv_info_emails(verbose: bool = False):
+def update_obsv_info_emails(
+    verbose: bool = False, issued_time: Optional[str] = None
+):
     """Check observational monitoring data and coordinate info email sending.
 
     Iterates through observational monitoring points and calls
@@ -19,8 +23,11 @@ def update_obsv_info_emails(verbose: bool = False):
 
     Args:
         verbose: Print detailed progress messages
+        issued_time: Issuance to email for ("%Y-%m-%dT%H", UTC). Defaults to
+            the latest issuance in the data (or the ISSUED_TIME env var).
     """
     df_monitoring = load_monitoring_data("obsv")
+    df_monitoring = filter_to_issued_time(df_monitoring, issued_time)
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
     # Log email eligibility summary with rainfall criteria
@@ -93,7 +100,9 @@ def update_obsv_info_emails(verbose: bool = False):
     save_email_record(df_existing_email_record, dicts)
 
 
-def update_fcast_info_emails(verbose: bool = False):
+def update_fcast_info_emails(
+    verbose: bool = False, issued_time: Optional[str] = None
+):
     """Check forecast monitoring data and coordinate info email sending.
 
     Iterates through forecast monitoring points and calls send_info_email()
@@ -102,8 +111,11 @@ def update_fcast_info_emails(verbose: bool = False):
 
     Args:
         verbose: Print detailed progress messages
+        issued_time: Issuance to email for ("%Y-%m-%dT%H", UTC). Defaults to
+            the latest issuance in the data (or the ISSUED_TIME env var).
     """
     df_monitoring = load_monitoring_data("fcast")
+    df_monitoring = filter_to_issued_time(df_monitoring, issued_time)
     df_existing_email_record = load_email_record_with_test_filtering(["info"])
 
     # Log email eligibility summary
@@ -163,15 +175,20 @@ def update_fcast_info_emails(verbose: bool = False):
     save_email_record(df_existing_email_record, dicts)
 
 
-def update_obsv_trigger_emails():
+def update_obsv_trigger_emails(issued_time: Optional[str] = None):
     """Check observational data and coordinate trigger email sending.
 
     Iterates through observational monitoring data grouped by storm (atcf_id)
     and calls send_trigger_email() for storms with obsv_trigger=True.
     Avoids duplicates by checking if obsv or action emails already sent.
     Updates the email record to track what was sent.
+
+    Args:
+        issued_time: Issuance to email for ("%Y-%m-%dT%H", UTC). Defaults to
+            the latest issuance in the data (or the ISSUED_TIME env var).
     """
     df_monitoring = load_monitoring_data("obsv")
+    df_monitoring = filter_to_issued_time(df_monitoring, issued_time)
     df_existing_email_record = load_email_record_with_test_filtering(["obsv"])
     dicts = []
     for atcf_id, group in df_monitoring.groupby("atcf_id"):
@@ -215,15 +232,20 @@ def update_obsv_trigger_emails():
     save_email_record(df_existing_email_record, dicts)
 
 
-def update_fcast_trigger_emails():
+def update_fcast_trigger_emails(issued_time: Optional[str] = None):
     """Check forecast data and coordinate trigger email sending.
 
     Iterates through forecast monitoring data grouped by storm (atcf_id)
     and calls send_trigger_email() for storms meeting readiness or action
     trigger criteria (not past cutoff). Checks each trigger type separately.
     Updates the email record to track what was sent.
+
+    Args:
+        issued_time: Issuance to email for ("%Y-%m-%dT%H", UTC). Defaults to
+            the latest issuance in the data (or the ISSUED_TIME env var).
     """
     df_monitoring = load_monitoring_data("fcast")
+    df_monitoring = filter_to_issued_time(df_monitoring, issued_time)
     df_existing_email_record = load_email_record_with_test_filtering(
         ["readiness", "action"]
     )
