@@ -23,7 +23,16 @@ on:
           default: "false"
           options:
             - "true"
-            - "false" 
+            - "false"
+  schedule:
+    # NHC TCM forecast advisories are issued every 6 hours at 03/09/15/21 UTC.
+    # Run 30 min later so the upstream ds-nhc-forecast pipeline has landed the
+    # advisory in the tracks DB (storms.nhc_tracks_geo) that this monitor
+    # reads. This matches the ds-storms-alerts schedule against the same data.
+    # The forecast monitor used to be triggered by the ds-nhc-forecast
+    # pipeline; that chaining no longer happens, so it runs on its own
+    # 6-hourly schedule here.
+    - cron: '30 3,9,15,21 * * *'
 jobs:
   run-script:
     runs-on: ubuntu-latest
