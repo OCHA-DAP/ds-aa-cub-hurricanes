@@ -39,10 +39,14 @@ DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
 TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
 FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 
-# Email dispatch backend: "smtp" (legacy AWS SES path, kept as a fallback) or
-# "listmonk" (ocha_relay campaigns). Defaults to smtp so behaviour is unchanged
-# until the listmonk path is validated.
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "smtp").lower()
+# Email dispatch backend (both ultimately use SMTP, so this names the system,
+# not the transport):
+#   "humdata_email" - legacy path that sends directly from the humdata.org
+#                     address via AWS SES. Kept as a manual fallback.
+#   "listmonk"      - ocha_relay campaigns through OCHA's Listmonk instance.
+# Defaults to humdata_email so behaviour is unchanged until listmonk is
+# selected explicitly; the switch is manual (no automatic failover).
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "humdata_email").lower()
 
 # Listmonk lists for Cuba hurricane emails. Created and populated by
 # pipelines/setup_cub_listmonk_lists.py and resolved by tag in the listmonk
