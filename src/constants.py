@@ -39,6 +39,21 @@ DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
 TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
 FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 
+# Email dispatch backend: "smtp" (legacy AWS SES path, kept as a fallback) or
+# "listmonk" (ocha_relay campaigns). Defaults to smtp so behaviour is unchanged
+# until the listmonk path is validated.
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "smtp").lower()
+
+# Listmonk lists for Cuba hurricane emails. Created and populated by
+# pipelines/setup_cub_listmonk_lists.py and resolved by tag in the listmonk
+# dispatch. Each list carries LISTMONK_PROJECT_TAG plus its own type tag, so
+# the two audiences (info vs trigger) map to two separate lists.
+LISTMONK_PROJECT_TAG = "ds-aa-cub-hurricanes"
+LISTMONK_LISTS = {
+    "info": {"name": "Cuba Hurricanes - Info", "tag": "cub:info"},
+    "trigger": {"name": "Cuba Hurricanes - Trigger", "tag": "cub:trigger"},
+}
+
 
 # this would actually be a better replacement way to deal w/ env vars
 # in the long run

@@ -1,12 +1,15 @@
 import base64
 import os
-import re
 from pathlib import Path
 from typing import Literal, Optional
 import pandas as pd
 import ocha_stratus as stratus
 from src.datasources import nhc
 from datetime import datetime, timezone
+
+# Re-exported for backwards compatibility; defined in a side-effect-free module
+# so listmonk/setup contexts can validate emails without importing this module.
+from src.email.validation import is_valid_email  # noqa: F401
 
 from src.constants import (
     PROJECT_PREFIX,
@@ -396,12 +399,4 @@ def save_email_record(df_existing: pd.DataFrame, new_records: list) -> None:
     stratus.upload_csv_to_blob(df_combined_email_record, blob_name)
 
 
-def is_valid_email(email):
-    # Define a regex pattern for validating an email
-    email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-
-    # Use the re.match() method to check if the email matches the pattern
-    if re.match(email_regex, email):
-        return True
-    else:
-        return False
+# is_valid_email now lives in src.email.validation (imported above).
