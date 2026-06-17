@@ -336,6 +336,34 @@ class CubaHurricaneMonitor:
         iso_time = issue_time.isoformat().split("+")[0]
         return f"{atcf_id}_{monitoring_type}_{iso_time}"
 
+    @staticmethod
+    def _daily_obsv_issue_times(lastupdate: pd.Series) -> pd.DatetimeIndex:
+        """Daily obsv issue times across a storm's observed lifecycle.
+
+        Returns one issue time per day at 15:00 UTC, the hour at which IMERG
+        observational rainfall for the prior day becomes available. This puts
+        obsv monitoring (and the obsv emails it feeds) on a once-per-day
+        cadence matching the legacy IMERG schedule, rather than the 6-hourly
+        track cadence.
+
+        The grid is bounded by the latest observation (never issues into the
+        future), so on each daily run it extends by one day as new
+        observations arrive. A storm seen only within a sub-24h window that
+        never spans a 15:00 UTC mark still gets a single record at its latest
+        observation, so it is never silently skipped.
+        """
+        start_obs = lastupdate.min()
+        end_obs = lastupdate.max()
+        issue_times = pd.date_range(
+            start=start_obs.normalize() + pd.Timedelta(hours=15),
+            end=end_obs,
+            freq="D",
+        )
+        issue_times = issue_times[issue_times >= start_obs]
+        if len(issue_times) == 0:
+            return pd.DatetimeIndex([end_obs])
+        return issue_times
+
     def _should_skip_existing(
         self, monitor_id: str, existing_data: pd.DataFrame, clobber: bool
     ) -> bool:
@@ -820,15 +848,15 @@ class CubaHurricaneMonitor:
         for atcf_id, group in obsv_tracks.groupby("atcf_id"):
             group = self._remove_track_duplicates(group, "lastUpdate")
 
-            # Create synthetic issue times every 6 hours during lifecycle
             if group.empty:
                 continue
 
-            issue_times = pd.date_range(
-                start=group["lastUpdate"].min(),
-                end=group["lastUpdate"].max(),
-                freq="6h",
-            )
+            # Daily issue times on the IMERG observational-rainfall schedule
+            # (see _daily_obsv_issue_times), so obsv monitoring and the emails
+            # it feeds run once per day rather than every 6 hours. Only the
+            # set of issue times changes; the wind+rainfall trigger computed
+            # per issue time below is unchanged.
+            issue_times = self._daily_obsv_issue_times(group["lastUpdate"])
 
             for issue_time in issue_times:
                 monitor_id = self._create_monitor_id(
