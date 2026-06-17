@@ -1,0 +1,34 @@
+{#
+  Jinja base used ONLY when rendering the listmonk campaign body. The existing
+  SMTP content templates (informational.html, observational.html, action.html,
+  readiness.html) `{% extends "base.html" %}`; the listmonk dispatch renders
+  them against THIS base instead of the full SMTP base.html, by putting this
+  file's directory first on the Jinja loader path.
+
+  Result: the exact same content blocks (same wording) are reused, wrapped in
+  the bilingual colour cards, with NO outer document / OCHA logo / contact /
+  footer — those come from the listmonk template (basecampaign-dual-language),
+  into whose single content slot this HTML is injected.
+
+  Images in the content blocks are still `cid:{{ map_cid }}` etc.; the dispatch
+  passes placeholder tokens for those cids and swaps them for hosted
+  upload_media URLs after rendering.
+
+  Context (from src.email.send_emails.prepare_email_data): name, fcast_obsv,
+  fcast_obsv_en, pub_time, pub_date, pub_date_en.
+#}
+<div style="background-color:#f0f8ff;border-left:4px solid #009EDB;padding:16px;margin:0 0 24px 0;">
+  <div style="font-size:13px;font-weight:700;color:#009EDB;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Versión en español</div>
+  <h2 style="font-size:18px;margin:0 0 12px 0;color:#222222;font-weight:600;">
+    {{ name }} &ndash; {{ fcast_obsv }} {{ pub_time }} {{ pub_date }} (hora local Cuba)
+  </h2>
+  {% block content %}{% endblock content %}
+</div>
+
+<div style="background-color:#f0f8ff;border-left:4px solid #009EDB;padding:16px;margin:0 0 8px 0;">
+  <div style="font-size:13px;font-weight:700;color:#009EDB;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">English version</div>
+  <h2 style="font-size:18px;margin:0 0 12px 0;color:#222222;font-weight:600;">
+    {{ name }} &ndash; {{ fcast_obsv_en }} {{ pub_time }} {{ pub_date_en }} (Cuba local time)
+  </h2>
+  {% block content_en %}{% endblock content_en %}
+</div>

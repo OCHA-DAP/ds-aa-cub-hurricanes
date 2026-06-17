@@ -57,6 +57,9 @@ LISTMONK_LISTS = {
     "info": {"name": "Cuba Hurricanes - Info", "tag": "cub:info"},
     "trigger": {"name": "Cuba Hurricanes - Trigger", "tag": "cub:trigger"},
 }
+# Listmonk campaign template (the wrapper) the dispatch resolves by name. A
+# generic, reusable dual-language (ES+EN) clone of base_campaign, set to UTF-8.
+LISTMONK_CAMPAIGN_TEMPLATE_NAME = "basecampaign-dual-language"
 
 
 # this would actually be a better replacement way to deal w/ env vars
