@@ -80,6 +80,10 @@ env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
 # Give matplotlib a writable local config/cache dir (the cloned repo lives on
 # the read-only workspace FUSE mount, which it can't use).
 env["MPLCONFIGDIR"] = "/tmp/mplconfig"
+# Don't write __pycache__/*.pyc next to the imported sources: under source: GIT
+# the repo lives on the workspace FUSE mount (wsfs), which rejects __pycache__
+# ("operation not supported") and would otherwise break every `from src ...`.
+env["PYTHONDONTWRITEBYTECODE"] = "1"
 
 cmd = [sys.executable, os.path.join(REPO_ROOT, _MONITOR_SCRIPTS[MONITOR])]
 
