@@ -1,0 +1,113 @@
+"""DBX entry wrapper for the Cuba hurricane monitors.
+
+The bundle's ``spark_python_task`` passes the job parameters positionally:
+
+    sys.argv[1] = monitor      # "fcast" | "obsv" (which monitor to run)
+    sys.argv[2] = dry_run      # "True" | "False"
+    sys.argv[3] = test_email   # "True" | "False"
+    sys.argv[4] = force_alert  # "True" | "False"
+
+The monitor scripts (pipelines/01_update_fcast_monitor.py /
+02_update_obsv_monitor.py) and src/ stay pure Python — they don't know about
+DBX (the GitHub Actions workflows run the same scripts). This wrapper is the
+only DBX-specific glue and does two things:
+
+1. Inject the listmonk credentials and select the listmonk backend. The reused
+   cluster carries the ``DSCI_AZ_*`` DB/blob env vars (used by ds-storms-
+   pipeline) but NOT the listmonk ones, so we read those from the ``dsci``
+   secret scope and export them, alongside the run-mode env vars the monitor
+   reads at import (``DRY_RUN`` / ``TEST_EMAIL`` / ``FORCE_ALERT``) and
+   ``EMAIL_BACKEND=listmonk`` so dispatch goes through ocha_relay rather than
+   the humdata_email SMTP fallback.
+
+2. Shell out to the monitor script with ``PYTHONPATH`` set to the repo root so
+   ``from src ...`` resolves — under ``source: GIT`` the repo is cloned but not
+   pip-installed, and the scripts live in ``pipelines/`` rather than at the
+   root.
+"""
+
+import os
+import subprocess
+import sys
+
+# monitor selector -> the pure-Python entry script it maps to.
+_MONITOR_SCRIPTS = {
+    "fcast": "pipelines/01_update_fcast_monitor.py",
+    "obsv": "pipelines/02_update_obsv_monitor.py",
+}
+
+
+def _find_script_dir() -> str:
+    """spark_python_task's exec context doesn't always define __file__."""
+    try:
+        return os.path.dirname(os.path.abspath(__file__))  # noqa: F821
+    except NameError:
+        pass
+    if sys.argv and sys.argv[0]:
+        return os.path.dirname(os.path.abspath(sys.argv[0]))
+    return os.getcwd()
+
+
+def _arg(i: int, default: str = "") -> str:
+    return sys.argv[i] if len(sys.argv) > i else default
+
+
+REPO_ROOT = os.path.abspath(os.path.join(_find_script_dir(), ".."))
+
+MONITOR = _arg(1, "fcast")
+DRY_RUN = _arg(2, "True")
+TEST_EMAIL = _arg(3, "True")
+FORCE_ALERT = _arg(4, "False")
+
+if MONITOR not in _MONITOR_SCRIPTS:
+    raise ValueError(
+        f"unknown monitor {MONITOR!r}; expected one of "
+        f"{sorted(_MONITOR_SCRIPTS)}"
+    )
+
+# Listmonk config — absent from the reused cluster's env, pulled from the dsci
+# scope (base URL + sender API creds, so dev/prod can't drift and repointing
+# needs no code edit). Tolerated if missing so a dry-run (no send) still
+# validates DB/blob/plotting; the dispatch only builds the ListmonkClient when
+# actually sending, and will then raise a clear missing-env error.
+from databricks.sdk.runtime import dbutils  # noqa: E402
+
+for _key in (
+    "DSCI_LISTMONK_BASE_URL",
+    "DSCI_LISTMONK_API_USERNAME",
+    "DSCI_LISTMONK_API_KEY",
+):
+    try:
+        os.environ[_key] = dbutils.secrets.get("dsci", _key)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[run_monitor_job] WARNING: dsci/{_key} unavailable ({exc}); "
+              "real sends will fail until it is set.")
+
+# Route email dispatch through listmonk (ocha_relay) rather than the legacy
+# humdata_email SMTP backend.
+os.environ["EMAIL_BACKEND"] = "listmonk"
+os.environ["DRY_RUN"] = DRY_RUN
+os.environ["TEST_EMAIL"] = TEST_EMAIL
+os.environ["FORCE_ALERT"] = FORCE_ALERT
+
+# Make `src` importable for the child process (repo isn't pip-installed here).
+env = dict(os.environ)
+env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+# Give matplotlib a writable local config/cache dir (the cloned repo lives on
+# the read-only workspace FUSE mount, which it can't use).
+env["MPLCONFIGDIR"] = "/tmp/mplconfig"
+
+cmd = [sys.executable, os.path.join(REPO_ROOT, _MONITOR_SCRIPTS[MONITOR])]
+
+if __name__ == "__main__":
+    print(
+        f"[run_monitor_job] repo_root={REPO_ROOT} monitor={MONITOR} "
+        f"EMAIL_BACKEND=listmonk DRY_RUN={DRY_RUN} TEST_EMAIL={TEST_EMAIL} "
+        f"FORCE_ALERT={FORCE_ALERT}"
+    )
+    rc = subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False).returncode
+    # DBX treats a top-level sys.exit()/SystemExit (even code 0) as a task
+    # failure. Raise only on non-zero; let success return naturally.
+    if rc != 0:
+        raise RuntimeError(f"{_MONITOR_SCRIPTS[MONITOR]} exited with code {rc}")
+    print("[run_monitor_job] OK")
