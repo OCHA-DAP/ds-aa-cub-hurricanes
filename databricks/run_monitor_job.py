@@ -87,13 +87,20 @@ env["PYTHONDONTWRITEBYTECODE"] = "1"
 
 cmd = [sys.executable, os.path.join(REPO_ROOT, _MONITOR_SCRIPTS[MONITOR])]
 
+# Run from a normal local dir, NOT the cloned repo (which is on the wsfs FUSE
+# mount). Libraries that scan the cwd on init — e.g. matplotlib looking for a
+# ./matplotlibrc — hit a wsfs filesystem error there. The monitors import via
+# PYTHONPATH and use __file__-based paths, so they don't depend on cwd; /tmp is
+# also writable for any incidental temp files, unlike the read-only mount.
+RUN_CWD = "/tmp"
+
 if __name__ == "__main__":
     print(
         f"[run_monitor_job] repo_root={REPO_ROOT} monitor={MONITOR} "
         f"EMAIL_BACKEND=listmonk DRY_RUN={DRY_RUN} TEST_EMAIL={TEST_EMAIL} "
         f"FORCE_ALERT={FORCE_ALERT}"
     )
-    rc = subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False).returncode
+    rc = subprocess.run(cmd, cwd=RUN_CWD, env=env, check=False).returncode
     # DBX treats a top-level sys.exit()/SystemExit (even code 0) as a task
     # failure. Raise only on non-zero; let success return naturally.
     if rc != 0:
