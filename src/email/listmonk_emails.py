@@ -122,9 +122,16 @@ def _upload_and_swap(
         marker = f"cid:{token}"
         if marker not in html:
             continue
-        url = client.upload_media(
-            _read_plot_bytes(monitor_id, plot_type), f"{plot_type}.png"
-        )
+        try:
+            data = _read_plot_bytes(monitor_id, plot_type)
+        except Exception as e:
+            # Match the SMTP path: a missing plot degrades the email (broken
+            # image) rather than failing the whole send.
+            logger.warning(
+                f"Could not load {plot_type} plot for {monitor_id}: {e}"
+            )
+            continue
+        url = client.upload_media(data, f"{plot_type}.png")
         html = html.replace(marker, url)
     return html
 
