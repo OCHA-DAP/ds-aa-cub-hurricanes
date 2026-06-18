@@ -12,13 +12,13 @@ The monitor scripts (pipelines/01_update_fcast_monitor.py /
 DBX (the GitHub Actions workflows run the same scripts). This wrapper is the
 only DBX-specific glue and does two things:
 
-1. Inject the listmonk credentials and select the listmonk backend. The reused
-   cluster carries the ``DSCI_AZ_*`` DB/blob env vars (used by ds-storms-
-   pipeline) but NOT the listmonk ones, so we read those from the ``dsci``
-   secret scope and export them, alongside the run-mode env vars the monitor
-   reads at import (``DRY_RUN`` / ``TEST_EMAIL`` / ``FORCE_ALERT``) and
-   ``EMAIL_BACKEND=listmonk`` so dispatch goes through ocha_relay rather than
-   the humdata_email SMTP fallback.
+1. Select the listmonk email backend and set the run-mode env vars the monitor
+   reads at import (``EMAIL_BACKEND=listmonk`` so dispatch goes through
+   ocha_relay rather than the humdata_email SMTP fallback, plus
+   ``DRY_RUN`` / ``TEST_EMAIL`` / ``FORCE_ALERT``). The actual credentials
+   (``DSCI_AZ_*`` DB/blob, ``DSCI_LISTMONK_*`` sender) are NOT set here — the
+   job cluster injects them from the ``dsci`` secret scope via spark_env_vars
+   (see databricks.yml), so they are already in the environment.
 
 2. Shell out to the monitor script with ``PYTHONPATH`` set to the repo root so
    ``from src ...`` resolves — under ``source: GIT`` the repo is cloned but not
@@ -65,26 +65,10 @@ if MONITOR not in _MONITOR_SCRIPTS:
         f"{sorted(_MONITOR_SCRIPTS)}"
     )
 
-# Listmonk config — absent from the reused cluster's env, pulled from the dsci
-# scope (base URL + sender API creds, so dev/prod can't drift and repointing
-# needs no code edit). Tolerated if missing so a dry-run (no send) still
-# validates DB/blob/plotting; the dispatch only builds the ListmonkClient when
-# actually sending, and will then raise a clear missing-env error.
-from databricks.sdk.runtime import dbutils  # noqa: E402
-
-for _key in (
-    "DSCI_LISTMONK_BASE_URL",
-    "DSCI_LISTMONK_API_USERNAME",
-    "DSCI_LISTMONK_API_KEY",
-):
-    try:
-        os.environ[_key] = dbutils.secrets.get("dsci", _key)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[run_monitor_job] WARNING: dsci/{_key} unavailable ({exc}); "
-              "real sends will fail until it is set.")
-
 # Route email dispatch through listmonk (ocha_relay) rather than the legacy
-# humdata_email SMTP backend.
+# humdata_email SMTP backend. The DSCI_LISTMONK_* / DSCI_AZ_* credentials are
+# supplied by the job cluster's spark_env_vars (resolved from the dsci secret
+# scope), so they are already present in the environment here.
 os.environ["EMAIL_BACKEND"] = "listmonk"
 os.environ["DRY_RUN"] = DRY_RUN
 os.environ["TEST_EMAIL"] = TEST_EMAIL
