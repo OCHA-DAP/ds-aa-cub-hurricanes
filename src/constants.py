@@ -59,8 +59,13 @@ LISTMONK_LISTS = {
     # Test recipients. Created by the setup script but NOT populated from the
     # distribution list; add dev/test subscribers manually. When TEST_EMAIL is
     # set, the listmonk dispatch routes ALL sends here instead of info/trigger,
-    # so real sends can be exercised without reaching the real audience.
-    "test": {"name": "Cuba Hurricanes - Test", "tag": "cub:test"},
+    # so real sends can be exercised without reaching the real audience. The
+    # name + TEST tag follow the instance convention for test lists.
+    "test": {
+        "name": "[TEST] Cuba Hurricanes",
+        "tag": "cub:test",
+        "extra_tags": ["TEST"],
+    },
 }
 # Listmonk campaign template (the wrapper) the dispatch resolves by name. A
 # generic, reusable dual-language (ES+EN) clone of base_campaign, set to UTF-8.

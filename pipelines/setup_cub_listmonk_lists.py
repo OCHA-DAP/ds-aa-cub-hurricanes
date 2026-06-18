@@ -92,9 +92,9 @@ def resolve_or_create_lists(client: ListmonkClient, dry_run: bool) -> dict:
             list_ids[list_type] = None
             print(f"  + would create list '{cfg['name']}' tag={cfg['tag']}")
         else:
-            new_id = client.create_list(
-                name=cfg["name"], tags=[LISTMONK_PROJECT_TAG, cfg["tag"]]
-            )
+            tags = [LISTMONK_PROJECT_TAG, cfg["tag"]]
+            tags += cfg.get("extra_tags", [])
+            new_id = client.create_list(name=cfg["name"], tags=tags)
             list_ids[list_type] = new_id
             print(f"  + created list '{cfg['name']}' (id={new_id})")
     return list_ids

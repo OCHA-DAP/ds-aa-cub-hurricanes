@@ -152,14 +152,17 @@ def _send_campaign(
         list_ids=[_resolve_list_id(client, list_type)],
         template_id=_resolve_template_id(),
     )
-    client.send_campaign(cid, skip_confirmation=True)
+    # Use ocha_relay's interactive safe-send (prompts to confirm the campaign
+    # name) rather than skip_confirmation, so nothing sends without approval.
+    # An automated/cron path will need an explicit skip override later.
+    client.send_campaign(cid)
     logger.info(f"Sent listmonk {kind} campaign {cid} for {monitor_id}")
 
 
 def send_info_email(monitor_id: str, fcast_obsv: str) -> None:
     """Listmonk equivalent of send_emails.send_info_email."""
     d = prepare_email_data(monitor_id, fcast_obsv)
-    test = "PRUEBA : " if FORCE_ALERT else ""
+    test = "[TEST] " if (FORCE_ALERT or TEST_EMAIL) else ""
     subject = (
         f"{test}Acción anticipatoria Cuba – información sobre "
         f"{d['fcast_obsv_es']} {d['cyclone_name']} {d['pub_time']}, "
@@ -191,7 +194,7 @@ def send_trigger_email(monitor_id: str, trigger_name: str) -> None:
     fcast_obsv = "fcast" if trigger_name in ("readiness", "action") else "obsv"
     d = prepare_email_data(monitor_id, fcast_obsv)
     _, trigger_name_en, trigger_type_subj = _TRIGGER_LABELS[trigger_name]
-    test = "PRUEBA : " if FORCE_ALERT else ""
+    test = "[TEST] " if (FORCE_ALERT or TEST_EMAIL) else ""
     subject = (
         f"{test}Acción anticipatoria Cuba – Disparador "
         f"{trigger_type_subj} alcanzado"
