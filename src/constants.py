@@ -56,6 +56,11 @@ LISTMONK_PROJECT_TAG = "ds-aa-cub-hurricanes"
 LISTMONK_LISTS = {
     "info": {"name": "Cuba Hurricanes - Info", "tag": "cub:info"},
     "trigger": {"name": "Cuba Hurricanes - Trigger", "tag": "cub:trigger"},
+    # Test recipients. Created by the setup script but NOT populated from the
+    # distribution list; add dev/test subscribers manually. When TEST_EMAIL is
+    # set, the listmonk dispatch routes ALL sends here instead of info/trigger,
+    # so real sends can be exercised without reaching the real audience.
+    "test": {"name": "Cuba Hurricanes - Test", "tag": "cub:test"},
 }
 # Listmonk campaign template (the wrapper) the dispatch resolves by name. A
 # generic, reusable dual-language (ES+EN) clone of base_campaign, set to UTF-8.

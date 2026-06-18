@@ -28,6 +28,7 @@ from src.constants import (
     LISTMONK_CAMPAIGN_TEMPLATE_NAME,
     LISTMONK_LISTS,
     LISTMONK_PROJECT_TAG,
+    TEST_EMAIL,
 )
 from src.email.plotting import get_plot_blob_name
 from src.email.send_emails import prepare_email_data
@@ -67,7 +68,10 @@ def _env() -> Environment:
 
 
 def _resolve_list_id(client: ListmonkClient, list_type: str) -> int:
-    tag = LISTMONK_LISTS[list_type]["tag"]
+    # In test mode every send goes to the test list instead of the real
+    # info/trigger audience.
+    effective_type = "test" if TEST_EMAIL else list_type
+    tag = LISTMONK_LISTS[effective_type]["tag"]
     for lst in client.fetch_all_lists(tag=LISTMONK_PROJECT_TAG):
         if tag in lst.get("tags", []):
             return lst["id"]
@@ -97,8 +101,9 @@ def _resolve_template_id() -> int:
 
 def _campaign_name(kind: str, monitor_id: str) -> str:
     name = f"{LISTMONK_PROJECT_TAG} {kind} {monitor_id}"
-    # [test] makes the listmonk template show its test banner.
-    return f"{name} [test]" if FORCE_ALERT else name
+    # [test] makes the listmonk template show its test banner — applied for a
+    # forced-alert (dummy data) or any test-list send.
+    return f"{name} [test]" if (FORCE_ALERT or TEST_EMAIL) else name
 
 
 def _read_plot_bytes(monitor_id: str, plot_type: str) -> bytes:
