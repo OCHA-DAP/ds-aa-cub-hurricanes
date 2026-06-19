@@ -2,7 +2,7 @@ import traceback
 from typing import Optional
 
 from src.constants import MIN_EMAIL_DISTANCE
-from src.email.send_emails import send_info_email, send_trigger_email
+from src.email.backends import send_info_email, send_trigger_email
 from src.email.utils import (
     FORCE_ALERT,
     filter_to_issued_time,

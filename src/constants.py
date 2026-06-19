@@ -39,6 +39,41 @@ DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
 TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
 FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 
+# Email dispatch backend (both ultimately use SMTP, so this names the system,
+# not the transport):
+#   "listmonk"      - ocha_relay campaigns through OCHA's Listmonk instance.
+#                     The primary path (default).
+#   "humdata_email" - legacy path that sends directly from the humdata.org
+#                     address via AWS SES. Kept as a manual escape hatch,
+#                     used only by explicitly setting EMAIL_BACKEND where AWS
+#                     email creds are present (never wired into the GitHub
+#                     Actions workflows).
+# Defaults to listmonk; the switch is manual (no automatic failover).
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "listmonk").lower()
+
+# Listmonk lists for Cuba hurricane emails. Created and populated by
+# pipelines/setup_cub_listmonk_lists.py and resolved by tag in the listmonk
+# dispatch. Each list carries LISTMONK_PROJECT_TAG plus its own type tag, so
+# the two audiences (info vs trigger) map to two separate lists.
+LISTMONK_PROJECT_TAG = "ds-aa-cub-hurricanes"
+LISTMONK_LISTS = {
+    "info": {"name": "Cuba Hurricanes - Info", "tag": "cub:info"},
+    "trigger": {"name": "Cuba Hurricanes - Trigger", "tag": "cub:trigger"},
+    # Test recipients. Created by the setup script but NOT populated from the
+    # distribution list; add dev/test subscribers manually. When TEST_EMAIL is
+    # set, the listmonk dispatch routes ALL sends here instead of info/trigger,
+    # so real sends can be exercised without reaching the real audience. The
+    # name + TEST tag follow the instance convention for test lists.
+    "test": {
+        "name": "[TEST] Cuba Hurricanes",
+        "tag": "cub:test",
+        "extra_tags": ["TEST"],
+    },
+}
+# Listmonk campaign template (the wrapper) the dispatch resolves by name. A
+# generic, reusable dual-language (ES+EN) clone of base_campaign, set to UTF-8.
+LISTMONK_CAMPAIGN_TEMPLATE_NAME = "basecampaign-dual-language"
+
 
 # this would actually be a better replacement way to deal w/ env vars
 # in the long run

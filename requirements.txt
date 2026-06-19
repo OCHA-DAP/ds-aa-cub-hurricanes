@@ -10,6 +10,10 @@ pytz==2024.2
 html2text==2024.2.26
 Jinja2==3.1.6
 ocha-stratus==0.1.2
+# ocha-relay: listmonk email dispatch. Pinned to the v0.3.0 release tag
+# (immutable; includes upload_media / upload_attachment / create_list /
+# fetch_all_lists). Bump the tag to adopt future releases.
+ocha-relay @ git+https://github.com/OCHA-DAP/ocha-relay.git@v0.3.0
 tqdm==4.67.1
 ipywidgets==8.1.7
 # Zonal stats + Excel I/O for appendix_population_data
