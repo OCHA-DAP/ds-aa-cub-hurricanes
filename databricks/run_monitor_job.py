@@ -27,8 +27,10 @@ only DBX-specific glue and does two things:
 """
 
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 # monitor selector -> the pure-Python entry script it maps to.
 _MONITOR_SCRIPTS = {
@@ -74,33 +76,42 @@ os.environ["DRY_RUN"] = DRY_RUN
 os.environ["TEST_EMAIL"] = TEST_EMAIL
 os.environ["FORCE_ALERT"] = FORCE_ALERT
 
-# Make `src` importable for the child process (repo isn't pip-installed here).
+# Under source: GIT the repo is cloned onto the workspace FUSE mount (wsfs).
+# Importing Python packages whose directories live on wsfs is unreliable: the
+# import machinery probes several candidate filenames per module
+# (__init__.cpython-*.so, __init__.py, ...) and wsfs raises a hard filesystem
+# error for the non-existent candidates instead of a clean "not found",
+# intermittently breaking `from src ...` (and likewise breaks __pycache__ writes
+# and matplotlib's cwd scan). So copy the Python sources onto local disk and
+# import/run from there — wsfs is then off the import path and the cwd entirely.
+# The monitors read all their data from blob/DB, so src + pipelines is the whole
+# footprint (templates live under src/).
+LOCAL_ROOT = os.path.join(
+    "/local_disk0" if os.path.isdir("/local_disk0") else tempfile.gettempdir(),
+    "cub_monitor_run",
+)
+for _sub in ("src", "pipelines"):
+    shutil.copytree(
+        os.path.join(REPO_ROOT, _sub),
+        os.path.join(LOCAL_ROOT, _sub),
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+
 env = dict(os.environ)
-env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
-# Give matplotlib a writable local config/cache dir (the cloned repo lives on
-# the read-only workspace FUSE mount, which it can't use).
+env["PYTHONPATH"] = LOCAL_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+# matplotlib needs a writable config/cache dir (and must not land on wsfs).
 env["MPLCONFIGDIR"] = "/tmp/mplconfig"
-# Don't write __pycache__/*.pyc next to the imported sources: under source: GIT
-# the repo lives on the workspace FUSE mount (wsfs), which rejects __pycache__
-# ("operation not supported") and would otherwise break every `from src ...`.
-env["PYTHONDONTWRITEBYTECODE"] = "1"
 
-cmd = [sys.executable, os.path.join(REPO_ROOT, _MONITOR_SCRIPTS[MONITOR])]
-
-# Run from a normal local dir, NOT the cloned repo (which is on the wsfs FUSE
-# mount). Libraries that scan the cwd on init — e.g. matplotlib looking for a
-# ./matplotlibrc — hit a wsfs filesystem error there. The monitors import via
-# PYTHONPATH and use __file__-based paths, so they don't depend on cwd; /tmp is
-# also writable for any incidental temp files, unlike the read-only mount.
-RUN_CWD = "/tmp"
+cmd = [sys.executable, os.path.join(LOCAL_ROOT, _MONITOR_SCRIPTS[MONITOR])]
 
 if __name__ == "__main__":
     print(
-        f"[run_monitor_job] repo_root={REPO_ROOT} monitor={MONITOR} "
-        f"EMAIL_BACKEND=listmonk DRY_RUN={DRY_RUN} TEST_EMAIL={TEST_EMAIL} "
-        f"FORCE_ALERT={FORCE_ALERT}"
+        f"[run_monitor_job] repo_root={REPO_ROOT} local_root={LOCAL_ROOT} "
+        f"monitor={MONITOR} EMAIL_BACKEND=listmonk DRY_RUN={DRY_RUN} "
+        f"TEST_EMAIL={TEST_EMAIL} FORCE_ALERT={FORCE_ALERT}"
     )
-    rc = subprocess.run(cmd, cwd=RUN_CWD, env=env, check=False).returncode
+    rc = subprocess.run(cmd, cwd=LOCAL_ROOT, env=env, check=False).returncode
     # DBX treats a top-level sys.exit()/SystemExit (even code 0) as a task
     # failure. Raise only on non-zero; let success return naturally.
     if rc != 0:
