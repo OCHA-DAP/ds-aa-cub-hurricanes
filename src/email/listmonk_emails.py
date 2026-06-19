@@ -146,13 +146,20 @@ def _send_campaign(
     client = ListmonkClient.from_env()
     if with_images:
         body = _upload_and_swap(client, body, monitor_id)
+    list_id = _resolve_list_id(client, list_type)
     cid = client.create_campaign(
         name=_campaign_name(kind, monitor_id),
         subject=subject,
         body=body,
-        list_ids=[_resolve_list_id(client, list_type)],
+        list_ids=[list_id],
         template_id=_resolve_template_id(),
     )
+    # Recipient count from the send manifest (accounts for opt-in/status), so the
+    # log records who the send actually reaches — not just that it fired.
+    try:
+        n_recipients = len(client.build_send_manifest(cid).recipients)
+    except Exception:  # noqa: BLE001 - never let logging break the send
+        n_recipients = "?"
     # Confirmation mode: by default ocha_relay's safe-send prompts the caller to
     # type the campaign name before sending (good for local/manual runs). A
     # headless run has no stdin and would hit EOFError on that prompt, so the
@@ -162,7 +169,10 @@ def _send_campaign(
         "LISTMONK_SKIP_CONFIRMATION", default=False
     )
     client.send_campaign(cid, skip_confirmation=skip_confirmation)
-    logger.info(f"Sent listmonk {kind} campaign {cid} for {monitor_id}")
+    logger.info(
+        f"Sent listmonk {kind} campaign {cid} for {monitor_id} "
+        f"→ list {list_id} ({n_recipients} recipients)"
+    )
 
 
 def send_info_email(monitor_id: str, fcast_obsv: str) -> None:

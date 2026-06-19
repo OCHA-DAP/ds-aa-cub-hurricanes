@@ -106,6 +106,11 @@ env = dict(os.environ)
 env["PYTHONPATH"] = LOCAL_ROOT + os.pathsep + env.get("PYTHONPATH", "")
 # matplotlib needs a writable config/cache dir (and must not land on wsfs).
 env["MPLCONFIGDIR"] = "/tmp/mplconfig"
+# Unbuffered stdout/stderr: the child's stdout is block-buffered when piped (not
+# a TTY), so print() output (e.g. the per-email "sending …" lines) can be
+# dropped or reordered relative to logging in the captured task output. Force
+# line-buffering so every send/skip line is reliably visible in the run logs.
+env["PYTHONUNBUFFERED"] = "1"
 
 cmd = [sys.executable, os.path.join(LOCAL_ROOT, _MONITOR_SCRIPTS[MONITOR])]
 
