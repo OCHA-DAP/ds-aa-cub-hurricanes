@@ -644,9 +644,8 @@ def create_map_plot_figure(
     df_tracks = nhc.load_recent_glb_nhc(fcast_obsv=fcast_obsv)
 
     if FORCE_ALERT:
-        df_dummy_tracks = create_dummy_storm_tracks(
-            df_tracks, fcast_obsv=fcast_obsv
-        )
+        # The helper loads Rafael (2024) from the DB itself (see its docstring).
+        df_dummy_tracks = create_dummy_storm_tracks(fcast_obsv=fcast_obsv)
         df_tracks = pd.concat([df_tracks, df_dummy_tracks], ignore_index=True)
 
     if fcast_obsv == "fcast":

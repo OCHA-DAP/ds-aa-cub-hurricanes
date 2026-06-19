@@ -47,70 +47,71 @@ TEMPLATES_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "templates"
 STATIC_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
 
 
-def create_dummy_storm_tracks(
-    df_tracks: pd.DataFrame, fcast_obsv: str
-) -> pd.DataFrame:
-    """Create dummy storm tracks based on Hurricane Rafael data but with test IDs.
+def create_dummy_storm_tracks(fcast_obsv: str) -> pd.DataFrame:
+    """Build dummy storm tracks from Hurricane Rafael (al182024) for FORCE_ALERT
+    testing, re-stamped with the test ATCF id and shifted to
+    MONITORING_START_DATE.
+
+    Rafael is a 2024-season storm, so its tracks are loaded explicitly from the
+    2024 season here — the live monitor's loads are scoped to the current season
+    and no longer contain it. Filtering on the unique ATCF id (not the name) also
+    sidesteps the DB storing the name as "RAFAEL". This is only called by the
+    FORCE_ALERT plot path (create_map_plot_figure); it does not affect normal
+    monitoring.
 
     Args:
-        fcast_obsv: Whether to create forecast or observation tracks
+        fcast_obsv: "fcast" or "obsv" — which kind of track to build.
 
     Returns:
-        DataFrame with tracks data modified to match dummy storm monitoring data
+        DataFrame of dummy track points (id = TEST_ATCF_ID).
     """
-    # Use Hurricane Rafael as the base data
-    dummy_id = "al182024"
-    dummy_name = "Rafael"
-    # al182024_fcast_2024-11-04T21:00:00
+    dummy_id = "al182024"  # Hurricane Rafael (2024 Atlantic season)
+    df_tracks = nhc.load_recent_glb_nhc(fcast_obsv=fcast_obsv, season=2024)
+    df_tracks = df_tracks[df_tracks["id"] == dummy_id].copy()
 
     if fcast_obsv == "obsv":
         from src.constants import THRESHS
 
-        dummy_track = df_tracks[
-            (df_tracks["id"] == dummy_id) & (df_tracks["name"] == dummy_name)
-        ].copy()
-
         # Sort by time to ensure proper chronological order
-        dummy_track = dummy_track.sort_values("lastUpdate")
+        dummy_track = df_tracks.sort_values("lastUpdate")
 
         # Replace 100-knot values with 105 knots to create threshold crossing
         dummy_track.loc[dummy_track["intensity"] == 100, "intensity"] = 105
 
-        # Find first point where wind crosses observation threshold (105 knots)
+        # Keep points up to the first observation-threshold crossing
         obs_threshold = THRESHS["obsv"]["s"]  # 105 knots
-        threshold_crossed_idx = dummy_track[
+        crossed = dummy_track[
             dummy_track["intensity"] >= obs_threshold
         ].index
-
-        if len(threshold_crossed_idx) > 0:
-            # Include only points up to first threshold crossing
-            first_crossing_idx = threshold_crossed_idx[0]
-            dummy_track = dummy_track.loc[:first_crossing_idx]
+        if len(crossed) > 0:
+            dummy_track = dummy_track.loc[: crossed[0]]
 
         # Shift timestamps to start from MONITORING_START_DATE
         min_time = min(dummy_track["lastUpdate"])
-        diff_from_min = dummy_track["lastUpdate"] - min_time
-        dummy_track["lastUpdate"] = MONITORING_START_DATE + diff_from_min
+        dummy_track["lastUpdate"] = MONITORING_START_DATE + (
+            dummy_track["lastUpdate"] - min_time
+        )
 
     if fcast_obsv == "fcast":
-
+        # Use an issuance that exists in the DB (6-hourly synoptic times); the
+        # old hardcoded 21:00 advisory time predates the DB data source.
         target_track_time = datetime(
-            2024, 11, 4, 21, 0, 0, tzinfo=timezone.utc
+            2024, 11, 4, 18, 0, 0, tzinfo=timezone.utc
         )
         dummy_track = df_tracks[
-            (df_tracks["id"] == dummy_id)
-            & (df_tracks["name"] == dummy_name)
-            & (df_tracks["issuance"] == target_track_time)
+            df_tracks["issuance"] == target_track_time
         ].copy()
-        # Calculate lead time between issuance and validTime
+
+        # Re-stamp the issuance to MONITORING_START_DATE, preserving lead times
         lt = dummy_track["validTime"] - dummy_track["issuance"]
         dummy_track["issuance"] = MONITORING_START_DATE
         dummy_track["validTime"] = dummy_track["issuance"] + lt
 
-        # Inject maxwind value of 125 where lead time = 2 days (action)
-        dummy_track.loc[lt == pd.Timedelta(days=2, hours=9), "maxwind"] = 125
-        # Inject readiness activation
-        dummy_track.loc[lt == pd.Timedelta(days=4, hours=21), "maxwind"] = 125
+        # Force a triggering wind at the forecast points nearest the action and
+        # readiness lead times (robust to the actual lead-time grid).
+        for target in (pd.Timedelta(days=2), pd.Timedelta(days=4)):
+            if len(lt):
+                dummy_track.loc[(lt - target).abs().idxmin(), "maxwind"] = 125
 
     dummy_track["id"] = TEST_ATCF_ID
     return dummy_track
