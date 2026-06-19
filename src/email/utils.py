@@ -26,7 +26,13 @@ from src.constants import (
 )
 
 EMAIL_HOST = os.getenv("DSCI_AWS_EMAIL_HOST")
-EMAIL_PORT = int(os.getenv("DSCI_AWS_EMAIL_PORT"))
+# Tolerate an unset port: the humdata_email (SMTP) path sets it, but the
+# listmonk path (now the default backend) does not carry the DSCI_AWS_EMAIL_*
+# creds. Importing this module (e.g. transitively via plotting) must not require
+# them; the SMTP send path would surface a clear error later if the port is
+# genuinely needed and missing.
+_email_port = os.getenv("DSCI_AWS_EMAIL_PORT")
+EMAIL_PORT = int(_email_port) if _email_port else None
 EMAIL_PASSWORD = os.getenv("DSCI_AWS_EMAIL_PASSWORD")
 EMAIL_USERNAME = os.getenv("DSCI_AWS_EMAIL_USERNAME")
 EMAIL_ADDRESS = os.getenv("DSCI_AWS_EMAIL_ADDRESS")
