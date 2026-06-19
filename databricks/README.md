@@ -32,15 +32,21 @@ daily schedule.
   libraries, cluster) changes.
 - Each task runs the thin wrapper `databricks/run_monitor_job.py`, which selects
   the monitor (`fcast`/`obsv`), sets `EMAIL_BACKEND=listmonk` and the run-mode
-  env vars, and shells out to the monitor script. Pipeline code (`pipelines/`,
-  `src/`) stays pure Python and DBX-agnostic — the GHA workflows run the same
-  scripts.
+  env vars, **copies `src` + `pipelines` from the wsfs-mounted clone onto local
+  disk**, and shells out to the monitor script from there. Pipeline code
+  (`pipelines/`, `src/`) stays pure Python and DBX-agnostic — the GHA workflows
+  run the same scripts. (The copy-to-local step is required because importing
+  Python packages off the wsfs FUSE mount is unreliable — see Gotchas.)
 - **Compute: an ephemeral single-node job cluster per run** (not anyone's
   personal interactive cluster). It starts bare, so every credential the
   pipeline reads is injected from the `dsci` secret scope via the cluster's
   `spark_env_vars`: `DSCI_AZ_*` (DB/blob — dev for NHC tracks, prod for IMERG,
   consumed by ocha_stratus) and `DSCI_LISTMONK_*` (sender creds, consumed by the
-  listmonk dispatch).
+  listmonk dispatch). Ephemeral was a deliberate choice over a warm
+  pre-installed cluster: the AA lead times are days, so the ~15–20 min cold
+  start + library install per run is operationally negligible, and we keep the
+  reproducible / person-independent / zero-idle-cost properties. See "Startup
+  time" below for the trade-offs and possible optimizations.
 
 ## Target model — one live deploy, dev on demand
 
@@ -127,11 +133,40 @@ schedule anything. To take the monitors live on Databricks:
   monitor's log lines (or `databricks jobs get-run-output <task_run_id>`).
 - **`source: GIT` means runtime = branch HEAD.** Pushing the branch updates the
   next run automatically; only config changes need a `bundle deploy`.
-- **`matplotlib` needs a writable config dir** on the cluster (`MPLCONFIGDIR=/tmp/...`),
-  since the cloned repo lives on the read-only workspace FUSE mount.
+- **Don't import Python code directly off the wsfs mount.** Under `source: GIT`
+  the repo is cloned onto the workspace FUSE mount (wsfs), which raises hard
+  filesystem errors (not a clean "not found") when the import machinery probes
+  candidate filenames per module (`__init__.cpython-*.so`, `matplotlibrc`,
+  `__pycache__`, …). This intermittently breaks `from src ...`. The wrapper
+  copies `src` + `pipelines` to `/local_disk0` and runs from there; if you add a
+  new top-level package the pipeline imports, add it to that copy list.
+- **`matplotlib` needs a writable config dir** (`MPLCONFIGDIR=/tmp/...`).
 - **Library versions track `requirements.txt`.** `numpy`/`pandas` are left to the
   cluster runtime (DBR base); the rest are pinned. If a pin conflicts with the
   runtime, loosen it in `databricks.yml` and document why.
+
+## Startup time & possible optimizations
+
+Each run is ~15–20 min before the monitor logic starts, almost all of it
+**library install** on the bare ephemeral cluster (geopandas, rioxarray, xarray,
+kaleido, `ocha-relay` from git), not cluster boot (~4 min). This is accepted on
+purpose (see Architecture). If it ever needs cutting, in rough order of
+leverage/risk:
+
+- **Trim the dependency list** — lean on the DBR base where possible and drop
+  `plotly`/`kaleido` if matplotlib can render the map/scatter plots (kaleido is a
+  large chunk of the install). Stacks with any compute model.
+- **Serverless jobs compute** — fast start + env caching, scale-to-zero; needs
+  serverless enabled, network config to reach Azure Postgres/blob, and a check
+  that the geo stack installs cleanly.
+- **Custom container image / init script** with the libs baked in — near-zero
+  install, still reproducible; costs an image to build and maintain.
+- An **instance pool** alone is low ROI: it shaves the ~4 min boot, not the
+  ~15 min install.
+- A warm **all-purpose cluster** with libs pre-installed is fastest per-run but
+  was rejected for prod: single-user ACLs, idle cost, mutable shared state, and
+  the lib set living off-bundle (drifts from `requirements.txt`). Fine as a
+  *dev-only* convenience if you want faster iteration.
 
 ## Rollback
 

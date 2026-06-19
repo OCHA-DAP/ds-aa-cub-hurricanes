@@ -113,6 +113,21 @@ variables:
   - pypi: { package: "requests>=2.31.0" }
   - pypi: { package: "tqdm==4.67.1" }
 
+# Both jobs clone this repo and take the same run-mode parameters; shared here so
+# the two job definitions can't drift apart.
+.git_source: &git_source
+  git_url: https://github.com/OCHA-DAP/ds-aa-cub-hurricanes.git
+  git_provider: gitHub
+  git_branch: ${var.git_branch}
+
+.monitor_params: &monitor_params
+  - name: dry_run        # run-mode switch (see variables block)
+    default: ${var.dry_run}
+  - name: test_email     # run-mode switch (see variables block)
+    default: ${var.test_email}
+  - name: force_alert    # run-mode switch (see variables block)
+    default: ${var.force_alert}
+
 targets:
   prod:
     # The live jobs (default target). Production mode runs the obsv schedule as
@@ -145,20 +160,11 @@ resources:
     # ===================================================================
     fcast_monitor:
       name: Cuba Hurricane Forecast Monitor
-      git_source:
-        git_url: https://github.com/OCHA-DAP/ds-aa-cub-hurricanes.git
-        git_provider: gitHub
-        git_branch: ${var.git_branch}
+      git_source: *git_source
 
       max_concurrent_runs: 1
 
-      parameters:
-        - name: dry_run        # run-mode switch (see variables block)
-          default: ${var.dry_run}
-        - name: test_email     # run-mode switch (see variables block)
-          default: ${var.test_email}
-        - name: force_alert    # run-mode switch (see variables block)
-          default: ${var.force_alert}
+      parameters: *monitor_params
 
       job_clusters:
         - job_cluster_key: monitor_cluster
@@ -183,10 +189,7 @@ resources:
     # ===================================================================
     obsv_monitor:
       name: Cuba Hurricane Observational Monitor
-      git_source:
-        git_url: https://github.com/OCHA-DAP/ds-aa-cub-hurricanes.git
-        git_provider: gitHub
-        git_branch: ${var.git_branch}
+      git_source: *git_source
 
       schedule:
         # 17:15 UTC daily. No explicit pause_status: prod (production mode) runs
@@ -197,13 +200,7 @@ resources:
 
       max_concurrent_runs: 1
 
-      parameters:
-        - name: dry_run
-          default: ${var.dry_run}
-        - name: test_email
-          default: ${var.test_email}
-        - name: force_alert
-          default: ${var.force_alert}
+      parameters: *monitor_params
 
       job_clusters:
         - job_cluster_key: monitor_cluster
