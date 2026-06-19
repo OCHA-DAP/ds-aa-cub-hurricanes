@@ -183,6 +183,11 @@ def import_subscribers(session, base, memberships, list_ids, dry_run):
                         "name": info["name"],
                         "status": "enabled",
                         "lists": target_ids,
+                        # type=mailing_list suppresses the unsubscribe link in
+                        # the campaign template (the footer renders it only when
+                        # attribs.type != "mailing_list"). These are operational
+                        # alert recipients we don't want self-unsubscribing.
+                        "attribs": {"type": "mailing_list"},
                         "preconfirm_subscriptions": True,
                     },
                 ).raise_for_status()
