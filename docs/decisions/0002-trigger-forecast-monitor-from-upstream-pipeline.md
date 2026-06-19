@@ -61,7 +61,7 @@ sides for no clear gain).
 
 * The cub side is ready (the `fcast_monitor` job has no schedule). The upstream
   `run_job_task` is a follow-up in `ds-storms-pipeline`, to be wired against the
-  prod job id at go-live.
+  prod job id at go-live — tracked in OCHA-DAP/ds-storms-pipeline#33.
 * Compute/deployment model: see
   `0001-run-monitors-as-databricks-jobs-on-ephemeral-clusters.md`.
 * `databricks/README.md` — "Why the forecast monitor is triggered, not scheduled".
