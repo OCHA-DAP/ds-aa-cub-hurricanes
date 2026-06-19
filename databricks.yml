@@ -1,0 +1,220 @@
+# Databricks Asset Bundle — ONE bundle (`ds-aa-cub-hurricanes`) defining TWO
+# independent jobs:
+#
+#   • fcast_monitor — forecast monitor. NO schedule: it is triggered by the
+#                     upstream ds-storms-pipeline `nhc_pipeline` job (via a
+#                     run_job_task) once the NHC tracks have landed in Postgres,
+#                     which is the forecast trigger's real data dependency.
+#                     Runs pipelines/01_update_fcast_monitor.py.
+#   • obsv_monitor  — observational (IMERG) monitor, once daily on a schedule.
+#                     Runs pipelines/02_update_obsv_monitor.py.
+#
+# Both go through the thin wrapper databricks/run_monitor_job.py, which selects
+# the listmonk email backend and shells out to the (unchanged, pure-Python)
+# monitor script. Each job runs on its own ephemeral single-node job cluster
+# (no dependency on anyone's personal cluster); the cluster carries the
+# DSCI_AZ_* DB/blob creds and the DSCI_LISTMONK_* sender creds, resolved from
+# the `dsci` secret scope at launch (see spark_env_vars below).
+#
+#   databricks bundle validate -p DEFAULT
+#   databricks bundle deploy   -p DEFAULT                                   # deploy prod (default target)
+#   databricks bundle run obsv_monitor  -p DEFAULT                          # manual run (live params)
+#   databricks bundle run fcast_monitor -p DEFAULT --params dry_run=True,test_email=True   # safe manual test
+#
+# The `dev` target is for feature work: deploy it on-demand pointed at a feature
+# branch — it auto-pauses the obsv schedule and uses the test list, so it never
+# competes with prod. Tear it down when the feature merges:
+#
+#   databricks bundle deploy  -t dev -p DEFAULT --var git_branch=my-feature
+#   databricks bundle run     fcast_monitor -t dev -p DEFAULT              # manual test run
+#   databricks bundle destroy -t dev -p DEFAULT
+#
+# The jobs run entirely from source: GIT at ${var.git_branch}, so shipping a
+# code change = pushing the branch. A `bundle deploy` is only needed when the
+# job *config* (schedule, params, libraries, cluster) changes.
+#
+# Bundle docs: https://docs.databricks.com/dev-tools/bundles/
+
+bundle:
+  name: ds-aa-cub-hurricanes
+
+variables:
+  git_branch:
+    description: Branch the jobs pull the pipeline code from
+    default: main
+  # Run-mode switches (the DBX analog of the GHA repo vars / workflow inputs).
+  # Flip without editing files via, e.g.:
+  #   databricks bundle deploy -p DEFAULT --var test_email=False
+  dry_run:
+    description: '"True" = run monitor but skip send/write; "False" = actually send/write'
+    default: "False"
+  test_email:
+    # Default is the safe test list; the prod target overrides to "False" below.
+    description: '"True" = route all sends to the [TEST] list; "False" = real info/trigger audiences'
+    default: "True"
+  force_alert:
+    description: '"True" = inject dummy storm data (PRUEBA prefix) to force an alert; "False" = real data only'
+    default: "False"
+
+# Reusable ephemeral single-node job-cluster spec (mirrors ds-storms-pipeline's
+# prod job cluster). Single node: the monitors are plain Python, not Spark.
+# spark_env_vars are resolved from the `dsci` secret scope at cluster launch —
+# the cluster starts bare, so every credential the pipeline reads must be listed
+# here: DSCI_AZ_* (DB/blob; dev for NHC tracks, prod for IMERG) consumed by
+# ocha_stratus, and DSCI_LISTMONK_* (sender) consumed by the listmonk dispatch.
+.monitor_cluster_spec: &monitor_cluster_spec
+  spark_version: "18.2.x-scala2.13"
+  node_type_id: "Standard_DS3_v2"
+  num_workers: 0
+  spark_conf:
+    spark.databricks.cluster.profile: singleNode
+    spark.master: "local[*]"
+  custom_tags:
+    ResourceClass: SingleNode
+  data_security_mode: SINGLE_USER
+  azure_attributes:
+    availability: ON_DEMAND_AZURE
+    first_on_demand: 1
+    spot_bid_max_price: -1
+  spark_env_vars:
+    DSCI_AZ_DB_DEV_HOST: "{{secrets/dsci/DSCI_AZ_DB_DEV_HOST}}"
+    DSCI_AZ_DB_DEV_UID: "{{secrets/dsci/DSCI_AZ_DB_DEV_UID}}"
+    DSCI_AZ_DB_DEV_PW: "{{secrets/dsci/DSCI_AZ_DB_DEV_PW}}"
+    DSCI_AZ_DB_DEV_UID_WRITE: "{{secrets/dsci/DSCI_AZ_DB_DEV_UID_WRITE}}"
+    DSCI_AZ_DB_DEV_PW_WRITE: "{{secrets/dsci/DSCI_AZ_DB_DEV_PW_WRITE}}"
+    DSCI_AZ_DB_PROD_HOST: "{{secrets/dsci/DSCI_AZ_DB_PROD_HOST}}"
+    DSCI_AZ_DB_PROD_UID: "{{secrets/dsci/DSCI_AZ_DB_PROD_UID}}"
+    DSCI_AZ_DB_PROD_PW: "{{secrets/dsci/DSCI_AZ_DB_PROD_PW}}"
+    DSCI_AZ_BLOB_DEV_SAS: "{{secrets/dsci/DSCI_AZ_BLOB_DEV_SAS}}"
+    DSCI_AZ_BLOB_DEV_SAS_WRITE: "{{secrets/dsci/DSCI_AZ_BLOB_DEV_SAS_WRITE}}"
+    DSCI_AZ_BLOB_PROD_SAS: "{{secrets/dsci/DSCI_AZ_BLOB_PROD_SAS}}"
+    DSCI_LISTMONK_BASE_URL: "{{secrets/dsci/DSCI_LISTMONK_BASE_URL}}"
+    DSCI_LISTMONK_API_USERNAME: "{{secrets/dsci/DSCI_LISTMONK_API_USERNAME}}"
+    DSCI_LISTMONK_API_KEY: "{{secrets/dsci/DSCI_LISTMONK_API_KEY}}"
+
+# Shared library list. Pinned to requirements.txt where the repo pins, so the
+# job runs the versions the pipeline was tested against. numpy/pandas are left
+# to the cluster runtime (DBR base) to avoid fighting its core scientific stack.
+# xarray/rioxarray are needed by the IMERG raster path (obsv) and at import for
+# both monitors.
+.cub_libs: &cub_libs
+  - pypi: { package: "ocha-stratus==0.1.2" }
+  - pypi:
+      package: "ocha-relay @ git+https://github.com/OCHA-DAP/ocha-relay.git@v0.3.0"
+  - pypi: { package: "geopandas==1.0.1" }
+  - pypi: { package: "xarray==2025.4.0" }
+  - pypi: { package: "rioxarray==0.19.0" }
+  - pypi: { package: "matplotlib==3.10.3" }
+  - pypi: { package: "plotly==5.24.1" }
+  - pypi: { package: "kaleido==0.2.1" }
+  - pypi: { package: "pytz==2024.2" }
+  - pypi: { package: "html2text==2024.2.26" }
+  - pypi: { package: "Jinja2==3.1.6" }
+  - pypi: { package: "requests>=2.31.0" }
+  - pypi: { package: "tqdm==4.67.1" }
+
+# Both jobs clone this repo and take the same run-mode parameters; shared here so
+# the two job definitions can't drift apart.
+.git_source: &git_source
+  git_url: https://github.com/OCHA-DAP/ds-aa-cub-hurricanes.git
+  git_provider: gitHub
+  git_branch: ${var.git_branch}
+
+.monitor_params: &monitor_params
+  - name: dry_run        # run-mode switch (see variables block)
+    default: ${var.dry_run}
+  - name: test_email     # run-mode switch (see variables block)
+    default: ${var.test_email}
+  - name: force_alert    # run-mode switch (see variables block)
+    default: ${var.force_alert}
+
+targets:
+  prod:
+    # The live jobs (default target). Production mode runs the obsv schedule as
+    # defined and leaves fcast trigger-only.
+    mode: production
+    default: true
+    workspace:
+      profile: DEFAULT
+      root_path: /Workspace/Users/adm.zarno1@global.un.org/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      # Live: send to the real info/trigger subscriber lists (not the test list).
+      test_email: "False"
+  dev:
+    # On-demand feature-branch testing only — deploy with --var git_branch=<branch>.
+    # Development mode auto-pauses the obsv schedule and prefixes the job names
+    # ("[dev <user>] ..."), and test_email defaults to True (test list), so it
+    # never competes with the live prod jobs. Destroy when done.
+    mode: development
+    workspace:
+      profile: DEFAULT
+
+resources:
+  jobs:
+
+    # ===================================================================
+    # Forecast monitor — single task, NO schedule. Triggered by the upstream
+    # ds-storms-pipeline `nhc_pipeline` job (run_job_task) once NHC tracks have
+    # landed in storms.nhc_tracks_geo, which is the forecast trigger's actual
+    # data dependency. Can also be run manually for tests/backfills.
+    # ===================================================================
+    fcast_monitor:
+      name: Cuba Hurricane Forecast Monitor
+      git_source: *git_source
+
+      max_concurrent_runs: 1
+
+      parameters: *monitor_params
+
+      job_clusters:
+        - job_cluster_key: monitor_cluster
+          new_cluster: *monitor_cluster_spec
+
+      tasks:
+        - task_key: run_fcast
+          job_cluster_key: monitor_cluster
+          spark_python_task:
+            python_file: databricks/run_monitor_job.py
+            source: GIT
+            parameters:
+              - "fcast"
+              - "{{job.parameters.dry_run}}"
+              - "{{job.parameters.test_email}}"
+              - "{{job.parameters.force_alert}}"
+          libraries: *cub_libs
+
+    # ===================================================================
+    # Observational monitor — single task, once daily at 17:15 UTC. Processes
+    # IMERG rainfall (raster). Matches the old GHA "Observational Monitor" cron.
+    # ===================================================================
+    obsv_monitor:
+      name: Cuba Hurricane Observational Monitor
+      git_source: *git_source
+
+      schedule:
+        # 17:15 UTC daily. No explicit pause_status: prod (production mode) runs
+        # it; the dev target (development mode) auto-pauses it. Setting UNPAUSED
+        # here would override dev's auto-pause and make dev fire too — don't.
+        quartz_cron_expression: "0 15 17 * * ?"
+        timezone_id: UTC
+
+      max_concurrent_runs: 1
+
+      parameters: *monitor_params
+
+      job_clusters:
+        - job_cluster_key: monitor_cluster
+          new_cluster: *monitor_cluster_spec
+
+      tasks:
+        - task_key: run_obsv
+          job_cluster_key: monitor_cluster
+          spark_python_task:
+            python_file: databricks/run_monitor_job.py
+            source: GIT
+            parameters:
+              - "obsv"
+              - "{{job.parameters.dry_run}}"
+              - "{{job.parameters.test_email}}"
+              - "{{job.parameters.force_alert}}"
+          libraries: *cub_libs

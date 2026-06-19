@@ -29,6 +29,7 @@ from src.constants import (
     LISTMONK_LISTS,
     LISTMONK_PROJECT_TAG,
     TEST_EMAIL,
+    _parse_bool_env,
 )
 from src.email.plotting import get_plot_blob_name
 from src.email.send_emails import prepare_email_data
@@ -152,10 +153,15 @@ def _send_campaign(
         list_ids=[_resolve_list_id(client, list_type)],
         template_id=_resolve_template_id(),
     )
-    # Use ocha_relay's interactive safe-send (prompts to confirm the campaign
-    # name) rather than skip_confirmation, so nothing sends without approval.
-    # An automated/cron path will need an explicit skip override later.
-    client.send_campaign(cid)
+    # Confirmation mode: by default ocha_relay's safe-send prompts the caller to
+    # type the campaign name before sending (good for local/manual runs). A
+    # headless run has no stdin and would hit EOFError on that prompt, so the
+    # automated path (the Databricks wrapper sets LISTMONK_SKIP_CONFIRMATION=true)
+    # skips it. Unset (local/manual) keeps the interactive confirmation.
+    skip_confirmation = _parse_bool_env(
+        "LISTMONK_SKIP_CONFIRMATION", default=False
+    )
+    client.send_campaign(cid, skip_confirmation=skip_confirmation)
     logger.info(f"Sent listmonk {kind} campaign {cid} for {monitor_id}")
 
 
