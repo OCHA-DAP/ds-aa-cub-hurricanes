@@ -107,15 +107,23 @@ files (`--var test_email=False`). Per run, override with `--params`.
 Merging this only adds the bundle definition — it does **not** deploy or
 schedule anything. To take the monitors live on Databricks:
 
-1. **Provision the production listmonk instance** + recreate the lists/template
-   and point `dsci/DSCI_LISTMONK_BASE_URL` at it (currently the demo instance).
-2. **Import the real subscribers** to the info/trigger lists.
-3. `databricks bundle deploy -p DEFAULT` — deploys both prod jobs (obsv schedule
+1. **Import the real subscribers** into the info/trigger lists
+   (`python pipelines/setup_cub_listmonk_lists.py`). They are created with
+   `attribs.type=mailing_list`, so the campaign template omits the unsubscribe
+   link for them.
+2. `databricks bundle deploy -p DEFAULT` — deploys both prod jobs (obsv schedule
    active; fcast trigger-only). Confirm `dry_run=False`, `test_email=False`.
-4. Deploy the matching `ds-storms-pipeline` change so `nhc_pipeline` triggers the
-   prod `fcast_monitor` (point its `cub_fcast_job_id` var at the prod job id).
-5. Leave the GitHub Actions monitor workflows **disabled** (the manual fallback).
-   Re-enabling them while the DBX jobs run would double-fire.
+   (Unattended sending already works: the wrapper sets
+   `LISTMONK_SKIP_CONFIRMATION=true`.)
+3. Deploy the matching `ds-storms-pipeline` change so `nhc_pipeline` triggers the
+   prod `fcast_monitor` (point its `cub_fcast_job_id` var at the prod job id) —
+   OCHA-DAP/ds-storms-pipeline#33.
+4. Leave the GitHub Actions monitor workflows **disabled**. They are retired, not
+   a live fallback: listmonk is now the default backend and GitHub carries no
+   listmonk creds, so re-enabling one would fail rather than send.
+
+There is a single listmonk instance; if a separate production instance is ever
+added, repoint `dsci/DSCI_LISTMONK_BASE_URL` and re-run the setup script then.
 
 ## Gotchas / best practices (from the ds-storms-alerts/pipeline deploys)
 
@@ -170,10 +178,12 @@ leverage/risk:
 
 ## Rollback
 
-Re-enable the GitHub Actions schedules (the humdata_email fallback):
-```bash
-gh workflow enable "Forecast Monitor"
-gh workflow enable "Observational Monitor"
-```
-Pause the DBX jobs in the workspace UI, or `databricks bundle destroy -p DEFAULT`.
-Revert a deploy to the test list: `databricks bundle deploy -p DEFAULT --var test_email=True`.
+Stop the DBX jobs: pause them in the workspace UI, or
+`databricks bundle destroy -p DEFAULT`. Revert a deploy to the test list:
+`databricks bundle deploy -p DEFAULT --var test_email=True`.
+
+The humdata_email SMTP path remains as a manual escape hatch, but it is **not**
+the GitHub Actions workflows: listmonk is the default backend and GitHub has no
+listmonk creds, so re-enabling those workflows would fail, not send. To use the
+SMTP fallback, run a monitor with `EMAIL_BACKEND=humdata_email` in an environment
+that has the `DSCI_AWS_EMAIL_*` creds.

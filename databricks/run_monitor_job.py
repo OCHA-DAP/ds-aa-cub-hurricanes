@@ -75,6 +75,10 @@ os.environ["EMAIL_BACKEND"] = "listmonk"
 os.environ["DRY_RUN"] = DRY_RUN
 os.environ["TEST_EMAIL"] = TEST_EMAIL
 os.environ["FORCE_ALERT"] = FORCE_ALERT
+# Headless: ocha_relay's send_campaign would otherwise prompt for typed
+# confirmation and raise EOFError here. Skip the prompt so the job can send
+# unattended (a local/manual run, which does not set this, stays interactive).
+os.environ["LISTMONK_SKIP_CONFIRMATION"] = "true"
 
 # Under source: GIT the repo is cloned onto the workspace FUSE mount (wsfs).
 # Importing Python packages whose directories live on wsfs is unreliable: the
