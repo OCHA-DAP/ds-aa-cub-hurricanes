@@ -56,38 +56,29 @@ variables:
     description: '"True" = inject dummy storm data (PRUEBA prefix) to force an alert; "False" = real data only'
     default: "False"
 
-# Reusable ephemeral single-node job-cluster spec (mirrors ds-storms-pipeline's
-# prod job cluster). Single node: the monitors are plain Python, not Spark.
-# spark_env_vars are resolved from the `dsci` secret scope at cluster launch —
-# the cluster starts bare, so every credential the pipeline reads must be listed
-# here: DSCI_AZ_* (DB/blob; dev for NHC tracks, prod for IMERG) consumed by
-# ocha_stratus, and DSCI_LISTMONK_* (sender) consumed by the listmonk dispatch.
+# Reusable job-cluster spec, governed by the "Job Compute" cluster policy
+# (000C79D951EAF0D6) — required since unrestricted compute is no longer
+# available. The policy:
+#   - forbids single-node and fixes num_workers=1, so this is a driver + 1
+#     worker (fine: the monitors are plain Python and run on the driver);
+#   - fixes spot_bid_max_price=100 (set explicitly below; the provider's -1
+#     default is rejected by the policy);
+#   - injects all DB/blob/IMERG creds (DSCI_AZ_DB_*, DSCI_AZ_BLOB_*, IMERG_*,
+#     STORAGE_ACCOUNT_*, CONTAINER_*) as hidden spark_env_vars.
+# So those creds are dropped here and supplied by the policy; we only add
+# DSCI_LISTMONK_* (the listmonk sender creds), which the policy does not set.
 .monitor_cluster_spec: &monitor_cluster_spec
-  spark_version: "18.2.x-scala2.13"
-  node_type_id: "Standard_DS3_v2"
-  num_workers: 0
-  spark_conf:
-    spark.databricks.cluster.profile: singleNode
-    spark.master: "local[*]"
-  custom_tags:
-    ResourceClass: SingleNode
+  policy_id: "000C79D951EAF0D6"
+  spark_version: "18.2.x-scala2.13"   # policy allows any (spark_version unlimited)
+  node_type_id: "Standard_DS3_v2"     # in the policy's node_type allowlist (its default)
+  num_workers: 1                       # policy fixes this; single-node is forbidden
   data_security_mode: SINGLE_USER
   azure_attributes:
-    availability: ON_DEMAND_AZURE
-    first_on_demand: 1
-    spot_bid_max_price: -1
+    # Policy fixes spot_bid_max_price=100; must be set explicitly because the
+    # Terraform provider otherwise sends its -1 default, which the policy rejects.
+    availability: SPOT_WITH_FALLBACK_AZURE
+    spot_bid_max_price: 100
   spark_env_vars:
-    DSCI_AZ_DB_DEV_HOST: "{{secrets/dsci/DSCI_AZ_DB_DEV_HOST}}"
-    DSCI_AZ_DB_DEV_UID: "{{secrets/dsci/DSCI_AZ_DB_DEV_UID}}"
-    DSCI_AZ_DB_DEV_PW: "{{secrets/dsci/DSCI_AZ_DB_DEV_PW}}"
-    DSCI_AZ_DB_DEV_UID_WRITE: "{{secrets/dsci/DSCI_AZ_DB_DEV_UID_WRITE}}"
-    DSCI_AZ_DB_DEV_PW_WRITE: "{{secrets/dsci/DSCI_AZ_DB_DEV_PW_WRITE}}"
-    DSCI_AZ_DB_PROD_HOST: "{{secrets/dsci/DSCI_AZ_DB_PROD_HOST}}"
-    DSCI_AZ_DB_PROD_UID: "{{secrets/dsci/DSCI_AZ_DB_PROD_UID}}"
-    DSCI_AZ_DB_PROD_PW: "{{secrets/dsci/DSCI_AZ_DB_PROD_PW}}"
-    DSCI_AZ_BLOB_DEV_SAS: "{{secrets/dsci/DSCI_AZ_BLOB_DEV_SAS}}"
-    DSCI_AZ_BLOB_DEV_SAS_WRITE: "{{secrets/dsci/DSCI_AZ_BLOB_DEV_SAS_WRITE}}"
-    DSCI_AZ_BLOB_PROD_SAS: "{{secrets/dsci/DSCI_AZ_BLOB_PROD_SAS}}"
     DSCI_LISTMONK_BASE_URL: "{{secrets/dsci/DSCI_LISTMONK_BASE_URL}}"
     DSCI_LISTMONK_API_USERNAME: "{{secrets/dsci/DSCI_LISTMONK_API_USERNAME}}"
     DSCI_LISTMONK_API_KEY: "{{secrets/dsci/DSCI_LISTMONK_API_KEY}}"
