@@ -46,6 +46,10 @@ from src.constants import (  # noqa: E402
 from src.email.validation import is_valid_email  # noqa: E402
 
 DIST_LIST_BLOB = f"{PROJECT_PREFIX}/email/distribution_list.csv"
+# Safe test recipients (the soak-test list); imported into the real info/trigger
+# lists with --test to exercise the live test_email=False path without reaching
+# the real audience.
+TEST_DIST_LIST_BLOB = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
 # distribution_list.csv columns map "to"/"cc" per email type; for listmonk both
 # simply mean "receives this email", so we treat them identically.
 _RECEIVES = ["to", "cc"]
@@ -100,14 +104,14 @@ def resolve_or_create_lists(client: ListmonkClient, dry_run: bool) -> dict:
     return list_ids
 
 
-def load_target_memberships() -> dict:
+def load_target_memberships(dist_blob: str = DIST_LIST_BLOB) -> dict:
     """Read the distribution list and return {email: {"name", "types"}}, where
     ``types`` is the set of audiences ("info"/"trigger") that email belongs to.
 
     Audiences are kept as type labels (not list IDs) so the plan is meaningful
     even in a dry run before the lists exist. Invalid emails are skipped (via
     the shared src.email.validation.is_valid_email)."""
-    df = stratus.load_csv_from_blob(DIST_LIST_BLOB)
+    df = stratus.load_csv_from_blob(dist_blob)
     df["email"] = df["email"].str.strip()
 
     memberships: dict[str, dict] = {}
@@ -197,9 +201,12 @@ def import_subscribers(session, base, memberships, list_ids, dry_run):
     print(f"  existing subscribers ({verb2}): {updated}")
 
 
-def main(dry_run: bool = False, lists_only: bool = False):
+def main(dry_run: bool = False, lists_only: bool = False, test: bool = False):
     mode = "DRY RUN" if dry_run else "APPLY"
+    dist_blob = TEST_DIST_LIST_BLOB if test else DIST_LIST_BLOB
     print(f"=== Cuba listmonk list setup ({mode}) ===")
+    if test:
+        print(f"  ! TEST MODE: importing safe recipients from {dist_blob}")
 
     client = _admin_client()
     print("Resolving / creating lists:")
@@ -212,7 +219,7 @@ def main(dry_run: bool = False, lists_only: bool = False):
         return
 
     print("Mapping distribution-list subscribers:")
-    memberships = load_target_memberships()
+    memberships = load_target_memberships(dist_blob)
     n_info = sum("info" in m["types"] for m in memberships.values())
     n_trig = sum("trigger" in m["types"] for m in memberships.values())
     print(
@@ -238,5 +245,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Create the lists but skip the subscriber import.",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Import the safe test recipients (test_distribution_list.csv) into "
+        "the real info/trigger lists, for soak-testing the live "
+        "test_email=False path. Clear the lists before importing the real "
+        "distribution list afterwards.",
+    )
     args = parser.parse_args()
-    main(dry_run=args.dry_run, lists_only=args.lists_only)
+    main(dry_run=args.dry_run, lists_only=args.lists_only, test=args.test)
