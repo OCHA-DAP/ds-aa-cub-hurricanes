@@ -9,9 +9,12 @@ repo-root `databricks.yml`):
 | `obsv_monitor`  | Schedule `15 17 * * *` (once daily, UTC) | `pipelines/02_update_obsv_monitor.py` |
 
 This is the production deployment vehicle for the listmonk email backend: the
-jobs run with `EMAIL_BACKEND=listmonk`. The GitHub Actions monitor workflows
-(`Forecast Monitor`, `Observational Monitor`) stay disabled as the manual
-fallback (they still send via the humdata_email SMTP path).
+jobs run with `EMAIL_BACKEND=listmonk`. **Live in production since 2026-06-30**
+(real audience: ~50 info / ~29 trigger recipients). The GitHub Actions monitor
+workflows (`Forecast Monitor`, `Observational Monitor`) stay **disabled** —
+they're retired, not a live fallback (listmonk is the default backend and GitHub
+has no listmonk creds, so re-enabling one would fail rather than send). See
+Rollback for the humdata_email escape hatch.
 
 ## Why the forecast monitor is triggered, not scheduled
 
@@ -20,8 +23,10 @@ landing the NHC tracks in `storms.nhc_tracks_geo` **before** this monitor reads
 them. A time-based schedule is only a guess at when that finishes (the upstream
 even has a `:30` late-WSP retry). So instead, `nhc_pipeline` runs this monitor as
 a downstream `run_job_task` once its tracks task has completed — event-driven, no
-race. The observational monitor has no such dependency, so it stays on a plain
-daily schedule.
+race. The upstream fires twice per cycle (`:00` + a `:30` WSP-retry), but only
+triggers this monitor **once per new advisory** (see OCHA-DAP/ds-storms-pipeline#35).
+The observational monitor has no such dependency, so it stays on a plain daily
+schedule.
 
 ## Architecture
 
@@ -37,16 +42,18 @@ daily schedule.
   (`pipelines/`, `src/`) stays pure Python and DBX-agnostic — the GHA workflows
   run the same scripts. (The copy-to-local step is required because importing
   Python packages off the wsfs FUSE mount is unreliable — see Gotchas.)
-- **Compute: an ephemeral single-node job cluster per run** (not anyone's
-  personal interactive cluster). It starts bare, so every credential the
-  pipeline reads is injected from the `dsci` secret scope via the cluster's
-  `spark_env_vars`: `DSCI_AZ_*` (DB/blob — dev for NHC tracks, prod for IMERG,
-  consumed by ocha_stratus) and `DSCI_LISTMONK_*` (sender creds, consumed by the
-  listmonk dispatch). Ephemeral was a deliberate choice over a warm
-  pre-installed cluster: the AA lead times are days, so the ~15–20 min cold
-  start + library install per run is operationally negligible, and we keep the
-  reproducible / person-independent / zero-idle-cost properties. See "Startup
-  time" below for the trade-offs and possible optimizations.
+- **Compute: an ephemeral job cluster per run, under the "Job Compute" cluster
+  policy** (`000C79D951EAF0D6`) — required since unrestricted compute is no
+  longer available to the deployer. The policy forbids single-node and fixes
+  `num_workers=1`, so each run is a **driver + 1 worker** (fine — the monitors
+  are plain Python and run on the driver). It also **injects the DB/blob/IMERG
+  credentials** (`DSCI_AZ_*`, `IMERG_*`, `STORAGE_ACCOUNT_*`, `CONTAINER_*`,
+  consumed by ocha_stratus) as hidden `spark_env_vars`, so the bundle's cluster
+  spec only adds `DSCI_LISTMONK_*` (the listmonk sender creds the policy doesn't
+  provide). Ephemeral was a deliberate choice over a warm pre-installed cluster:
+  the AA lead times are days, so the ~15–20 min cold start + library install per
+  run is operationally negligible, and we keep the reproducible /
+  person-independent / zero-idle-cost properties. See "Startup time" below.
 
 ## Target model — one live deploy, dev on demand
 
@@ -84,7 +91,7 @@ files (`--var test_email=False`). Per run, override with `--params`.
 
 | | `dry_run` | `test_email` | `force_alert` |
 |---|---|---|---|
-| `"True"` | run monitor but **skip** send/write | route all sends to the **[TEST] list** | inject **dummy storm data** (PRUEBA) to force an alert |
+| `"True"` | run monitor but **skip** send/write | route all sends to the **[TEST] list** | inject **dummy storm data** to force an alert (subject prefixed `[TEST]`) |
 | `"False"` | **actually send/write** | send to the **real info/trigger audiences** | real data only |
 
 ⚠️ The default target is the **live** one: a bare `bundle run fcast_monitor`
@@ -95,35 +102,41 @@ files (`--var test_email=False`). Per run, override with `--params`.
 
 1. Workspace GitHub credentials for this repo (same mechanism as
    ds-storms-pipeline).
-2. The `dsci` secret scope must carry the keys the cluster injects (all already
-   present, shared with the rest of the storms stack): the `DSCI_AZ_*` DB/blob
-   creds and the listmonk **sender** creds (`DSCI_LISTMONK_BASE_URL`,
-   `DSCI_LISTMONK_API_USERNAME`, `DSCI_LISTMONK_API_KEY`).
+2. The `dsci` secret scope must carry the keys referenced by the Job Compute
+   policy (`DSCI_AZ_*` DB/blob, `IMERG_*`, etc.) and by the bundle (the listmonk
+   **sender** creds `DSCI_LISTMONK_BASE_URL` / `_API_USERNAME` / `_API_KEY`) —
+   all already present, shared with the rest of the storms stack.
 3. The listmonk lists + dual-language template must exist on the instance the
    `DSCI_LISTMONK_BASE_URL` points at (run `pipelines/setup_cub_listmonk_lists.py`).
+4. The identity that triggers the forecast monitor (the `ds-storms-pipeline`
+   `nhc_pipeline`'s run-as) needs `CAN_MANAGE_RUN` on the `fcast_monitor` job.
+   The `dsci` group is granted this, which covers the dev (`adm.tdowning`) and
+   prod (`adm.hker1`) run-as identities.
 
-## Go-live checklist (nothing fires automatically on merge)
+## Operations
 
-Merging this only adds the bundle definition — it does **not** deploy or
-schedule anything. To take the monitors live on Databricks:
+The monitors are **live** (since 2026-06-30): `test_email=False`, sending to the
+real info (`106`) / trigger (`107`) lists, fcast triggered by `ds-storms-pipeline`
+and obsv on its daily schedule. Merging the bundle never deploys or sends anything
+on its own — a `bundle deploy` is the only thing that updates the live jobs.
 
-1. **Import the real subscribers** into the info/trigger lists
-   (`python pipelines/setup_cub_listmonk_lists.py`). They are created with
-   `attribs.type=mailing_list`, so the campaign template omits the unsubscribe
-   link for them.
-2. `databricks bundle deploy -p DEFAULT` — deploys both prod jobs (obsv schedule
-   active; fcast trigger-only). Confirm `dry_run=False`, `test_email=False`.
-   (Unattended sending already works: the wrapper sets
-   `LISTMONK_SKIP_CONFIRMATION=true`.)
-3. Deploy the matching `ds-storms-pipeline` change so `nhc_pipeline` triggers the
-   prod `fcast_monitor` (point its `cub_fcast_job_id` var at the prod job id) —
-   OCHA-DAP/ds-storms-pipeline#33.
-4. Leave the GitHub Actions monitor workflows **disabled**. They are retired, not
-   a live fallback: listmonk is now the default backend and GitHub carries no
-   listmonk creds, so re-enabling one would fail rather than send.
+Common tasks:
 
-There is a single listmonk instance; if a separate production instance is ever
-added, repoint `dsci/DSCI_LISTMONK_BASE_URL` and re-run the setup script then.
+- **Change the audience.** Re-populating the lists *is* the live switch — sends
+  follow whatever is on `106`/`107`. The import is **additive**, so to *replace*
+  the audience, clear the lists first, then
+  `python pipelines/setup_cub_listmonk_lists.py` (reads `distribution_list.csv`).
+  New subscribers get `attribs.type=mailing_list` so the template omits the
+  unsubscribe link; pre-existing subscribers keep their own attribs (ADR-0004 —
+  a known scope limit).
+- **Soak-test the live path safely.** `… setup_cub_listmonk_lists.py --test`
+  imports the safe `test_distribution_list.csv` recipients into the real lists,
+  so a `test_email=False` run only reaches them. Clear before importing the real
+  list afterwards.
+- **Route everything to the `[TEST]` list** (config test) without touching the
+  real lists: deploy `--var test_email=True`, or per run `--params test_email=True`.
+- **Single listmonk instance.** If a separate prod instance is ever stood up,
+  repoint `dsci/DSCI_LISTMONK_BASE_URL` and re-run the setup script there.
 
 ## Gotchas / best practices (from the ds-storms-alerts/pipeline deploys)
 
@@ -133,9 +146,13 @@ added, repoint `dsci/DSCI_LISTMONK_BASE_URL` and re-run the setup script then.
 - **The wrapper must not call `sys.exit()` at the top level.** `spark_python_task`
   treats a top-level `SystemExit` — *even code 0* — as a task failure. The wrapper
   raises an exception only on a non-zero child exit; success returns naturally.
-- **The ephemeral job cluster starts bare.** Every credential the pipeline reads
-  must be in the cluster's `spark_env_vars` (resolved from `dsci`). If a new env
-  var is added to the pipeline, add it there too.
+- **Credentials come from the Job Compute policy + the bundle.** The policy
+  injects the DB/blob/IMERG creds (hidden `spark_env_vars`); the bundle's cluster
+  spec adds only `DSCI_LISTMONK_*`. If the pipeline needs a new credential, add it
+  to the bundle's `spark_env_vars` — or, if it's shared across the storms stack,
+  to the policy. Also note the policy **fixes** some attributes (e.g.
+  `spot_bid_max_price=100`, `num_workers=1`): the spec must match those or the
+  deploy is rejected.
 - **Verify runs from the task logs, not the CLI exit code.** `databricks bundle run`
   can report exit 0 while the task itself failed. Check the run output for the
   monitor's log lines (or `databricks jobs get-run-output <task_run_id>`).
@@ -156,10 +173,10 @@ added, repoint `dsci/DSCI_LISTMONK_BASE_URL` and re-run the setup script then.
 ## Startup time & possible optimizations
 
 Each run is ~15–20 min before the monitor logic starts, almost all of it
-**library install** on the bare ephemeral cluster (geopandas, rioxarray, xarray,
-kaleido, `ocha-relay` from git), not cluster boot (~4 min). This is accepted on
-purpose (see Architecture). If it ever needs cutting, in rough order of
-leverage/risk:
+**library install** on the fresh policy job cluster (geopandas, rioxarray,
+xarray, kaleido, `ocha-relay` from git), not cluster boot (~4 min). This is
+accepted on purpose (see Architecture). If it ever needs cutting, in rough order
+of leverage/risk:
 
 - **Trim the dependency list** — lean on the DBR base where possible and drop
   `plotly`/`kaleido` if matplotlib can render the map/scatter plots (kaleido is a
