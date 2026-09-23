@@ -173,6 +173,9 @@ def load_historical_forecasts(include_geometry: bool = False):
 # only ever held recent storms), the loaders scope to a single Atlantic season;
 # otherwise the monitor would reprocess decades of history into the monitoring
 # parquet.
+# Read from PROD since 2026-09-22: the dev DB lost public network access that
+# day and ds-storms-pipeline's prod jobs now write storms.* there
+# (OCHA-DAP/ds-storms-pipeline#50).
 NHC_TRACKS_TABLE = "storms.nhc_tracks_geo"
 NHC_STORMS_TABLE = "storms.nhc_storms"
 
@@ -213,7 +216,7 @@ def _load_nhc_tracks_from_db(
         )
     )
     return pd.read_sql(
-        query, stratus.get_engine("dev"), params={"season": season}
+        query, stratus.get_engine("prod"), params={"season": season}
     )
 
 
