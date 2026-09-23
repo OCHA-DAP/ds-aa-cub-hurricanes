@@ -62,6 +62,7 @@ HUMDATA_RECIPIENTS_OVERRIDE = [
     "tristan.downing@un.org",
     "zachary.arno@un.org",
     "leonardo.milano@un.org",
+    "hannah.ker@un.org",
 ]
 HUMDATA_RECIPIENTS_OVERRIDE_TEST = ["tristan.downing@un.org"]
 
