@@ -173,6 +173,9 @@ def load_historical_forecasts(include_geometry: bool = False):
 # only ever held recent storms), the loaders scope to a single Atlantic season;
 # otherwise the monitor would reprocess decades of history into the monitoring
 # parquet.
+# Read from PROD since 2026-09-22: the dev DB lost public network access that
+# day and ds-storms-pipeline's prod jobs now write storms.* there
+# (OCHA-DAP/ds-storms-pipeline#50).
 NHC_TRACKS_TABLE = "storms.nhc_tracks_geo"
 NHC_STORMS_TABLE = "storms.nhc_storms"
 
@@ -212,9 +215,14 @@ def _load_nhc_tracks_from_db(
             leadtime_clause=leadtime_clause,
         )
     )
-    return pd.read_sql(
-        query, stratus.get_engine("dev"), params={"season": season}
+    df = pd.read_sql(
+        query, stratus.get_engine("prod"), params={"season": season}
     )
+    # Prod stores unnamed systems as SQL NULL; the dev DB carried the string
+    # "NaN", which the numeric-name regex in _remove_track_duplicates relied
+    # on (re.search on a float raises). Keep the dev semantics.
+    df["name"] = df["name"].fillna("NaN")
+    return df
 
 
 def load_recent_glb_nhc(

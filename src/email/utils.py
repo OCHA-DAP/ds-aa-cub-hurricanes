@@ -31,8 +31,10 @@ EMAIL_HOST = os.getenv("DSCI_AWS_EMAIL_HOST")
 # creds. Importing this module (e.g. transitively via plotting) must not require
 # them; the SMTP send path would surface a clear error later if the port is
 # genuinely needed and missing.
+# 465 = SMTP over TLS (the send path uses SMTP_SSL); the dsci secret scope
+# carries host/address/user/password but no port.
 _email_port = os.getenv("DSCI_AWS_EMAIL_PORT")
-EMAIL_PORT = int(_email_port) if _email_port else None
+EMAIL_PORT = int(_email_port) if _email_port else 465
 EMAIL_PASSWORD = os.getenv("DSCI_AWS_EMAIL_PASSWORD")
 EMAIL_USERNAME = os.getenv("DSCI_AWS_EMAIL_USERNAME")
 EMAIL_ADDRESS = os.getenv("DSCI_AWS_EMAIL_ADDRESS")
@@ -210,7 +212,28 @@ def open_static_image(filename: str) -> str:
 
 
 def get_distribution_list() -> pd.DataFrame:
-    """Load distribution list from blob storage."""
+    """Load distribution list from blob storage.
+
+    TEMPORARY: while HUMDATA_RECIPIENTS_OVERRIDE (src/constants.py) is set,
+    the blob CSVs are bypassed and the override addresses are the whole list.
+    """
+    from src.constants import (
+        HUMDATA_RECIPIENTS_OVERRIDE,
+        HUMDATA_RECIPIENTS_OVERRIDE_TEST,
+    )
+
+    override = (
+        HUMDATA_RECIPIENTS_OVERRIDE_TEST if TEST_EMAIL
+        else HUMDATA_RECIPIENTS_OVERRIDE
+    )
+    if override:
+        return pd.DataFrame({
+            "email": override,
+            "name": override,
+            "trigger": "to",
+            "info": "to",
+            "daily_summary": "to",
+        })
     if TEST_EMAIL:  # Use new flag instead of TEST_LIST
         blob_name = f"{PROJECT_PREFIX}/email/test_distribution_list.csv"
     else:
