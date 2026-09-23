@@ -215,9 +215,14 @@ def _load_nhc_tracks_from_db(
             leadtime_clause=leadtime_clause,
         )
     )
-    return pd.read_sql(
+    df = pd.read_sql(
         query, stratus.get_engine("prod"), params={"season": season}
     )
+    # Prod stores unnamed systems as SQL NULL; the dev DB carried the string
+    # "NaN", which the numeric-name regex in _remove_track_duplicates relied
+    # on (re.search on a float raises). Keep the dev semantics.
+    df["name"] = df["name"].fillna("NaN")
+    return df
 
 
 def load_recent_glb_nhc(
