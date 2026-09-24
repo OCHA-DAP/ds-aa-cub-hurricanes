@@ -209,3 +209,58 @@ resources:
               - "{{job.parameters.test_email}}"
               - "{{job.parameters.force_alert}}"
           libraries: *cub_libs
+
+    # ===================================================================
+    # Daily Hurricane Report — single task, 06:00 UTC daily. Renders
+    # Report.qmd (Quarto, jupyter engine) and emails it to the blob
+    # distribution list. Replaces the GitHub Actions "Daily Hurricane Report"
+    # cron: the report reads storms.nhc_* on the prod DB, which GitHub
+    # runners are losing access to (the GHA run had no DB creds at all and
+    # failed silently). databricks/run_report_job.py installs the Quarto CLI
+    # on the job cluster and pulls the SES sender creds from the dsci scope.
+    # ===================================================================
+    daily_report:
+      name: Cuba Daily Hurricane Report
+      git_source: *git_source
+
+      schedule:
+        # 06:00 UTC daily (the GHA cron). No explicit pause_status: prod runs
+        # it, the dev target (development mode) auto-pauses it.
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+
+      max_concurrent_runs: 1
+
+      parameters:
+        - name: recipients
+          # "" = the blob distribution list; a comma-separated address list
+          # overrides it (manual test runs):
+          #   databricks bundle run daily_report -p DEFAULT --params recipients=me@un.org
+          default: ""
+
+      job_clusters:
+        - job_cluster_key: monitor_cluster
+          new_cluster: *monitor_cluster_spec
+
+      tasks:
+        - task_key: render_and_send
+          job_cluster_key: monitor_cluster
+          spark_python_task:
+            python_file: databricks/run_report_job.py
+            source: GIT
+            parameters:
+              - "{{job.parameters.recipients}}"
+          libraries:
+            - pypi: { package: "ocha-stratus==0.1.2" }
+            - pypi: { package: "geopandas==1.0.1" }
+            - pypi: { package: "matplotlib==3.10.3" }
+            - pypi: { package: "pytz==2024.2" }
+            - pypi: { package: "requests>=2.31.0" }
+            # Quarto's jupyter engine + the report's scraping/imaging deps
+            - pypi: { package: "jupyter>=1.0.0" }
+            - pypi: { package: "nbclient>=0.8.0" }
+            - pypi: { package: "nbformat>=5.7.0" }
+            - pypi: { package: "ipykernel>=6.25.0" }
+            - pypi: { package: "beautifulsoup4>=4.12.0" }
+            - pypi: { package: "lxml>=4.9.0" }
+            - pypi: { package: "pillow>=10.0.0" }

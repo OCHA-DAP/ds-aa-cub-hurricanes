@@ -143,21 +143,29 @@ def send_hurricane_report():
     EMAIL_USER = EMAIL_USERNAME
     EMAIL_PASS = EMAIL_PASSWORD
 
-    # Load distribution list from blob storage
-    print("📧 Loading email distribution list...")
-    try:
-        blob_name = f"{PROJECT_PREFIX}/email/distribution_list.csv"
-        df_distribution = stratus.load_csv_from_blob(blob_name)
-        df_distribution = df_distribution[
-            df_distribution["daily_summary"].notna()
-        ]
-        email_list = df_distribution["email"].tolist()
-        EMAIL_TO = ", ".join(email_list)
-        print(f"✅ Loaded {len(email_list)} emails from distribution list")
-    except Exception as e:
-        print(f"⚠️ Could not load distribution list: {e}")
-        print("📧 Falling back to default test email")
-        EMAIL_TO = "zachary.arno@un.org"
+    # Recipients: an explicit REPORT_RECIPIENTS override (comma-separated;
+    # test runs), else the distribution list in blob storage.
+    override = os.getenv("REPORT_RECIPIENTS", "").strip()
+    if override:
+        EMAIL_TO = ", ".join(
+            [x.strip() for x in override.split(",") if x.strip()]
+        )
+        print(f"📧 Using REPORT_RECIPIENTS override: {EMAIL_TO}")
+    else:
+        print("📧 Loading email distribution list...")
+        try:
+            blob_name = f"{PROJECT_PREFIX}/email/distribution_list.csv"
+            df_distribution = stratus.load_csv_from_blob(blob_name)
+            df_distribution = df_distribution[
+                df_distribution["daily_summary"].notna()
+            ]
+            email_list = df_distribution["email"].tolist()
+            EMAIL_TO = ", ".join(email_list)
+            print(f"✅ Loaded {len(email_list)} emails from distribution list")
+        except Exception as e:
+            print(f"⚠️ Could not load distribution list: {e}")
+            print("📧 Falling back to default test email")
+            EMAIL_TO = "zachary.arno@un.org"
 
     EMAIL_FROM = EMAIL_ADDRESS
     SUBJECT = "Daily Hurricane Summary - Atlantic Basin"
@@ -173,19 +181,21 @@ def send_hurricane_report():
         )
         print("✅ Quarto document rendered successfully")
     except subprocess.CalledProcessError as e:
+        # Fail loudly: a silent return here made the scheduled job look
+        # green with no email sent.
         print(f"❌ Failed to render Quarto document: {e}")
         print(f"STDOUT: {e.stdout}")
         print(f"STDERR: {e.stderr}")
-        return
+        sys.exit(1)
     except FileNotFoundError:
         print("❌ Quarto not found. Please install Quarto CLI.")
-        return
+        sys.exit(1)
 
     # Step 2: Load HTML report
     html_file = "Report.html"
     if not os.path.exists(html_file):
         print(f"❌ HTML file not found: {html_file}")
-        return
+        sys.exit(1)
 
     with open(html_file, "r", encoding="utf-8") as f:
         html_content = f.read()
