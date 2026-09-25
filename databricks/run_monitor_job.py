@@ -67,28 +67,14 @@ if MONITOR not in _MONITOR_SCRIPTS:
         f"{sorted(_MONITOR_SCRIPTS)}"
     )
 
-# TEMPORARY (2026-09-23): Listmonk is down (it runs on the dev DB, which lost
-# public network access on 2026-09-22), so dispatch goes through the legacy
-# humdata_email SMTP backend (AWS SES) with the fixed recipient override in
-# src/constants.py. Restore "listmonk" once Listmonk is migrated. The
-# DSCI_AWS_EMAIL_* creds are not in the cluster policy env; pull them from the
-# dsci secret scope (tolerated if missing so a dry run still works).
-os.environ["EMAIL_BACKEND"] = "humdata_email"
-try:
-    from databricks.sdk.runtime import dbutils
-
-    for _key in (
-        "DSCI_AWS_EMAIL_HOST",
-        "DSCI_AWS_EMAIL_ADDRESS",
-        "DSCI_AWS_EMAIL_USERNAME",
-        "DSCI_AWS_EMAIL_PASSWORD",
-    ):
-        try:
-            os.environ[_key] = dbutils.secrets.get("dsci", _key)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[run_monitor_job] WARNING: dsci/{_key} unavailable ({exc})")
-except ImportError:
-    pass
+# Route email dispatch through listmonk (ocha_relay) rather than the legacy
+# humdata_email SMTP backend. The DSCI_LISTMONK_* / DSCI_AZ_* credentials are
+# supplied by the job cluster's spark_env_vars (resolved from the dsci secret
+# scope), so they are already present in the environment here. (2026-09-22..25
+# this was "humdata_email" with the DSCI_AWS_EMAIL_* creds pulled from the dsci
+# scope while Listmonk was down — see git history if that escape hatch is
+# ever needed again.)
+os.environ["EMAIL_BACKEND"] = "listmonk"
 os.environ["DRY_RUN"] = DRY_RUN
 os.environ["TEST_EMAIL"] = TEST_EMAIL
 os.environ["FORCE_ALERT"] = FORCE_ALERT
