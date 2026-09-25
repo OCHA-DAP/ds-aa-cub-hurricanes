@@ -51,20 +51,14 @@ FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
 # Defaults to listmonk; the switch is manual (no automatic failover).
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "listmonk").lower()
 
-# TEMPORARY (2026-09-23): while Listmonk is down (it runs on the dev DB, which
-# lost public network access on 2026-09-22) the humdata_email backend is the
-# live path, and it must NOT mail the real partner distribution list. When
-# this override is non-empty, get_distribution_list() returns exactly these
-# addresses (as "to" for every email type) instead of the blob CSVs.
-# TEST_EMAIL narrows it to HUMDATA_RECIPIENTS_OVERRIDE_TEST. Empty both to
-# restore the blob-driven lists.
-HUMDATA_RECIPIENTS_OVERRIDE = [
-    "tristan.downing@un.org",
-    "zachary.arno@un.org",
-    "leonardo.milano@un.org",
-    "hannah.ker@un.org",
-]
-HUMDATA_RECIPIENTS_OVERRIDE_TEST = ["tristan.downing@un.org"]
+# Escape hatch for the humdata_email backend: when non-empty,
+# get_distribution_list() returns exactly these addresses (as "to" for every
+# email type) instead of the blob CSVs, so a stop-gap SES send never mails the
+# real partner distribution list. TEST_EMAIL narrows it to the _TEST list.
+# Empty (the default) = blob-driven lists. Used 2026-09-23..25 while Listmonk
+# was down.
+HUMDATA_RECIPIENTS_OVERRIDE: list[str] = []
+HUMDATA_RECIPIENTS_OVERRIDE_TEST: list[str] = []
 
 # Listmonk lists for Cuba hurricane emails. Created and populated by
 # pipelines/setup_cub_listmonk_lists.py and resolved by tag in the listmonk

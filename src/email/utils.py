@@ -214,8 +214,9 @@ def open_static_image(filename: str) -> str:
 def get_distribution_list() -> pd.DataFrame:
     """Load distribution list from blob storage.
 
-    TEMPORARY: while HUMDATA_RECIPIENTS_OVERRIDE (src/constants.py) is set,
-    the blob CSVs are bypassed and the override addresses are the whole list.
+    While HUMDATA_RECIPIENTS_OVERRIDE (src/constants.py) is non-empty, the
+    blob CSVs are bypassed and the override addresses are the whole list
+    (escape hatch for stop-gap humdata_email sends; empty by default).
     """
     from src.constants import (
         HUMDATA_RECIPIENTS_OVERRIDE,
