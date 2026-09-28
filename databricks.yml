@@ -128,6 +128,9 @@ targets:
     workspace:
       profile: DEFAULT
       root_path: /Workspace/Users/adm.zarno1@global.un.org/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      # Same identity the live job already runs as; production mode requires an explicit run_as.
+      user_name: adm.zarno1@global.un.org
     variables:
       # Live: send to the real info/trigger subscriber lists (not the test list).
       test_email: "False"
@@ -151,9 +154,14 @@ resources:
     # ===================================================================
     fcast_monitor:
       name: Cuba Hurricane Forecast Monitor
+      description: "Monitor the Cuba trigger from NHC forecast wind exposure, triggered by each NHC Pipeline run"
       git_source: *git_source
 
       max_concurrent_runs: 1
+      tags:
+        databricks: job
+        type: monitoring
+        hazard: tropical-cyclone
 
       parameters: *monitor_params
 
@@ -180,6 +188,7 @@ resources:
     # ===================================================================
     obsv_monitor:
       name: Cuba Hurricane Observational Monitor
+      description: "Monitor the Cuba trigger from observed NHC wind exposure"
       git_source: *git_source
 
       schedule:
@@ -190,6 +199,10 @@ resources:
         timezone_id: UTC
 
       max_concurrent_runs: 1
+      tags:
+        databricks: job
+        type: monitoring
+        hazard: tropical-cyclone
 
       parameters: *monitor_params
 
