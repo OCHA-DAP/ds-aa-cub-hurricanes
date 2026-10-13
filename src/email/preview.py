@@ -5,27 +5,26 @@ Email preview functions for testing email templates without sending them.
 import base64
 import io
 from typing import Literal
-from email.utils import make_msgid
 
+import ocha_stratus as stratus
 import pandas as pd
 import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
 from src.constants import SPANISH_MONTHS
-from src.email.plotting import get_plot_blob_name
+from src.email.plotting import get_plot_blob_name, load_plot_bytes
 from src.email.send_emails import create_info_email_content
 from src.email.utils import (
+    DRY_RUN,
     EMAIL_DISCLAIMER,
+    FORCE_ALERT,
     STATIC_DIR,
     TEMPLATES_DIR,
-    FORCE_ALERT,
-    DRY_RUN,
     TEST_EMAIL,
     load_monitoring_data,
 )
 from src.monitoring import monitoring_utils
-import ocha_stratus as stratus
 
 
 def show_environment_status():
@@ -75,7 +74,7 @@ def get_image_as_base64(
     except Exception as e:
         print(f"Warning: Could not load image {image_path_or_blob_name}: {e}")
         # Return a placeholder data URL for a small transparent PNG
-        placeholder = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        placeholder = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="  # noqa: E501
         return f"data:image/png;base64,{placeholder}"
 
 
@@ -109,7 +108,8 @@ def preview_info_email(
         monitor_id, fcast_obsv, for_preview=True
     )
 
-    # Get the HTML and replace placeholder CIDs with base64 data URLs for browser viewing
+    # Get the HTML and replace placeholder CIDs with base64 data URLs for
+    # browser viewing
     html_str = email_content["html"]
 
     try:
@@ -118,6 +118,10 @@ def preview_info_email(
         scatter_blob_name = get_plot_blob_name(monitor_id, "scatter")
 
         map_data_url = get_image_as_base64(map_blob_name, is_blob=True)
+        map_en_base64 = base64.b64encode(
+            load_plot_bytes(monitor_id, "map", lang="en")
+        ).decode("utf-8")
+        map_en_data_url = f"data:image/png;base64,{map_en_base64}"
         scatter_data_url = get_image_as_base64(scatter_blob_name, is_blob=True)
 
         # Load static images from local files
@@ -135,7 +139,7 @@ def preview_info_email(
         print(f"Warning: Could not load images: {e}")
         # Use placeholder for plot images but load actual static images
         placeholder_url = get_image_as_base64("placeholder", is_blob=False)
-        map_data_url = scatter_data_url = placeholder_url
+        map_data_url = map_en_data_url = scatter_data_url = placeholder_url
 
         # Load actual static images even if plot images failed
         chd_banner_path = STATIC_DIR / "centre_banner.png"
@@ -147,9 +151,13 @@ def preview_info_email(
             str(ocha_logo_path), is_blob=False
         )
 
-    # Replace placeholder CID references with direct data URLs for browser viewing
+    # Replace placeholder CID references with direct data URLs for browser
+    # viewing
     html_str = html_str.replace(
         'src="cid:PREVIEW_MAP_PLACEHOLDER"', f'src="{map_data_url}"'
+    )
+    html_str = html_str.replace(
+        'src="cid:PREVIEW_MAP_EN_PLACEHOLDER"', f'src="{map_en_data_url}"'
     )
     html_str = html_str.replace(
         'src="cid:PREVIEW_SCATTER_PLACEHOLDER"', f'src="{scatter_data_url}"'
@@ -167,21 +175,19 @@ def preview_info_email(
         with open(filename, "w", encoding="utf-8") as f:
             f.write(html_str)
         print(f"Email preview saved to: {filename}")
-        print(
-            f"Open this file in your browser to see how the email will look!"
-        )
+        print("Open this file in your browser to see how the email will look!")
 
     # Print summary using the email data
     email_data = email_content["email_data"]
-    print(f"\n📧 EMAIL PREVIEW SUMMARY:")
+    print("\n📧 EMAIL PREVIEW SUMMARY:")
     print(f"Subject: {email_content['subject']}")
     print(f"Storm: {email_data['cyclone_name']}")
     print(f"Time: {email_data['pub_time']}, {email_data['pub_date']}")
     print(f"Readiness: {email_data['readiness']}")
     print(f"Action: {email_data['action']}")
     print(f"Observation: {email_data['obsv']}")
-    print(f"Recipients (TO): Preview mode - distribution list not loaded")
-    print(f"Recipients (CC): Preview mode - distribution list not loaded")
+    print("Recipients (TO): Preview mode - distribution list not loaded")
+    print("Recipients (CC): Preview mode - distribution list not loaded")
 
     # Return preview data
     return {
@@ -249,10 +255,6 @@ def preview_trigger_email(
         trigger_name_es = "observacional"
     fcast_obsv_es = "observación" if fcast_obsv == "obsv" else "pronóstico"
 
-    # For preview, skip distribution list entirely - we'll show generic counts
-    to_list = None
-    cc_list = None
-
     test_subject = "PREVIEW: " if not FORCE_ALERT else "TEST PREVIEW: "
 
     environment = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
@@ -308,7 +310,8 @@ def preview_trigger_email(
         ocha_logo_cid="PREVIEW_LOGO_PLACEHOLDER",
     )
 
-    # Replace placeholder CID references with direct data URLs for browser viewing
+    # Replace placeholder CID references with direct data URLs for browser
+    # viewing
     html_str = html_str.replace(
         'src="cid:PREVIEW_BANNER_PLACEHOLDER"', f'src="{chd_banner_data_url}"'
     )
@@ -325,18 +328,16 @@ def preview_trigger_email(
         with open(filename, "w", encoding="utf-8") as f:
             f.write(html_str)
         print(f"Email preview saved to: {filename}")
-        print(
-            f"Open this file in your browser to see how the email will look!"
-        )
+        print("Open this file in your browser to see how the email will look!")
 
     # Print summary
-    print(f"\n🚨 TRIGGER EMAIL PREVIEW SUMMARY:")
+    print("\n🚨 TRIGGER EMAIL PREVIEW SUMMARY:")
     print(f"Subject: {subject}")
     print(f"Storm: {cyclone_name}")
     print(f"Trigger: {trigger_name_es}")
     print(f"Time: {pub_time}, {pub_date}")
-    print(f"Recipients (TO): Preview mode - distribution list not loaded")
-    print(f"Recipients (CC): Preview mode - distribution list not loaded")
+    print("Recipients (TO): Preview mode - distribution list not loaded")
+    print("Recipients (CC): Preview mode - distribution list not loaded")
 
     # Return preview data
     return {
@@ -366,7 +367,7 @@ def list_available_monitors():
         if not obsv_data.empty:
             print(f"  {len(obsv_data)} points available")
             print(
-                f"  Latest date: {obsv_data['date'].max() if 'date' in obsv_data else 'No date column'}"
+                f"  Latest date: {obsv_data['date'].max() if 'date' in obsv_data else 'No date column'}"  # noqa: E501
             )
         else:
             print("  No observation data found")
@@ -375,7 +376,7 @@ def list_available_monitors():
         if not fcast_data.empty:
             print(f"  {len(fcast_data)} points available")
             print(
-                f"  Latest date: {fcast_data['date'].max() if 'date' in fcast_data else 'No date column'}"
+                f"  Latest date: {fcast_data['date'].max() if 'date' in fcast_data else 'No date column'}"  # noqa: E501
             )
         else:
             print("  No forecast data found")
@@ -393,7 +394,8 @@ if __name__ == "__main__":
     print("This tool helps you preview emails without sending them.")
     print("\nExample usage:")
     print(
-        "from src.email.preview import preview_info_email, preview_trigger_email, list_available_monitors"
+        "from src.email.preview import preview_info_email, "
+        "preview_trigger_email, list_available_monitors"
     )
     print()
     print("# List available monitor IDs")

@@ -1,7 +1,8 @@
 """
 NOTE FOR ANALYSTS: Environment variable testing pattern
 Uncomment the block below to test FORCE_ALERT functionality locally
-This patches the environment to simulate alert conditions without modifying global env vars
+This patches the environment to simulate alert conditions without modifying
+global env vars
 
 Usage:
 1. Uncomment the entire block below
@@ -16,8 +17,8 @@ with patch.dict(os.environ, {"FORCE_ALERT": "true"}):
     import src.constants
     importlib.reload(src.constants)
 
-    print("env var:", os.getenv("FORCE_ALERT"))                  # Should print: true
-    print("reloaded:", src.constants.FORCE_ALERT)                # Should print: True ✅
+    print("env var:", os.getenv("FORCE_ALERT"))  # Should print: true
+    print("reloaded:", src.constants.FORCE_ALERT)  # Should print: True ✅
 
     from src.email import utils
     importlib.reload(utils)  # must reload downstream module that imported it
@@ -37,10 +38,10 @@ import ocha_stratus as stratus
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
+from azure.core.exceptions import ResourceNotFoundError
 from matplotlib import pyplot as plt
 
 from src.constants import (
-    CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
     FORCE_ALERT,
@@ -52,11 +53,7 @@ from src.constants import (
     current_monitoring_season,
 )
 from src.datasources import codab, nhc, zma
-from src.email.utils import (
-    create_dummy_storm_tracks,
-    load_monitoring_data,
-    open_static_image,
-)
+from src.email.utils import create_dummy_storm_tracks, load_monitoring_data
 
 
 def _year_from_monitor_id(monitor_id: str) -> int:
@@ -72,13 +69,57 @@ def _year_from_monitor_id(monitor_id: str) -> int:
     return current_monitoring_season()
 
 
-def get_plot_blob_name(monitor_id, plot_type: Literal["map", "scatter"]):
+# Languages the map is rendered in (one map per language block of the email).
+MAP_LANGS = ("es", "en")
+
+
+def get_plot_blob_name(
+    monitor_id,
+    plot_type: Literal["map", "scatter"],
+    lang: Literal["es", "en"] = "es",
+):
+    """Blob name for a plot. The Spanish map keeps the original un-suffixed
+    name (``..._map.png``) so maps saved before per-language maps existed are
+    still found; other languages get a ``_{lang}`` suffix."""
     fcast_obsv = "fcast" if "fcast" in monitor_id.lower() else "obsv"
     year = _year_from_monitor_id(monitor_id)
+    lang_suffix = "" if lang == "es" else f"_{lang}"
     return (
         f"{PROJECT_PREFIX}/plots/{year}/{fcast_obsv}/"
-        f"{monitor_id}_{plot_type}.png"
+        f"{monitor_id}_{plot_type}{lang_suffix}.png"
     )
+
+
+def load_plot_bytes(
+    monitor_id: str,
+    plot_type: Literal["map", "scatter"],
+    lang: Literal["es", "en"] = "es",
+) -> bytes:
+    """Download a plot from blob storage.
+
+    A map missing in another language falls back to the Spanish one, so an
+    email is never left without a map (e.g. maps saved before per-language
+    maps existed, or a failed render of the second language).
+    """
+    container_client = stratus.get_container_client()
+
+    def download(blob_name: str) -> bytes:
+        return (
+            container_client.get_blob_client(blob_name)
+            .download_blob()
+            .readall()
+        )
+
+    try:
+        return download(get_plot_blob_name(monitor_id, plot_type, lang))
+    except ResourceNotFoundError:
+        if lang == "es":
+            raise
+        print(
+            f"⚠️  No '{lang}' {plot_type} plot for {monitor_id}, "
+            f"falling back to Spanish"
+        )
+        return download(get_plot_blob_name(monitor_id, plot_type))
 
 
 def convert_datetime_to_es_str(x: pd.Timestamp) -> str:
@@ -86,6 +127,10 @@ def convert_datetime_to_es_str(x: pd.Timestamp) -> str:
     for en_mo, es_mo in SPANISH_MONTHS.items():
         es_str = es_str.replace(en_mo, es_mo)
     return es_str
+
+
+def convert_datetime_to_en_str(x: pd.Timestamp) -> str:
+    return x.strftime("%H:%M, %-d %b")
 
 
 def update_plots(
@@ -185,6 +230,9 @@ def update_plots(
                 )
             continue
 
+        # "map" covers every language in MAP_LANGS: existence is checked on
+        # the Spanish map only, so storms plotted before per-language maps
+        # existed are not re-rendered.
         for plot_type in ["map", "scatter"]:
             blob_name = get_plot_blob_name(monitor_id, plot_type)
             if blob_name in existing_plot_blobs and plot_type not in clobber:
@@ -559,14 +607,175 @@ def create_scatter_plot(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     plt.close(fig)
 
 
+# Text on the map, per language. Legend entries are (fill, outline, text),
+# with the text pre-wrapped using <br> to fit the legend box.
+MAP_TEXT = {
+    "es": {
+        "datetime_str": convert_datetime_to_es_str,
+        "valid_time": "Hora válida",
+        "legend_title": "Leyenda",
+        "fcast": {
+            "title": "Pronósticos NOAA para {name}",
+            "issued": "Emitidos {time} (hora local Cuba)",
+            "legend": [
+                (
+                    "black",
+                    None,
+                    "Previsión del viento en<br>nudos (kt) con un plazo"
+                    "<br>≤ 3 días (acción)",
+                ),
+                (
+                    "grey",
+                    None,
+                    "Previsión del viento en<br>nudos (kt) con un plazo"
+                    "<br>≤ 5 días (movilización)",
+                ),
+                (None, "red", "El valor de pronóstico<br>alcanzó el umbral"),
+            ],
+        },
+        "obsv": {
+            "title": "Observaciones NOAA para {name}",
+            "issued": "Emitidas {time} (hora local Cuba)",
+            "legend": [
+                ("black", None, "Observación del viento<br>en nudos (kt)"),
+                (
+                    "blue",
+                    None,
+                    "Observación de<br>precipitaciones durante dos"
+                    "<br>días consecutivos (mm)",
+                ),
+                (None, "red", "El valor observado<br>alcanza el umbral"),
+            ],
+        },
+    },
+    "en": {
+        "datetime_str": convert_datetime_to_en_str,
+        "valid_time": "Valid time",
+        "legend_title": "Legend",
+        "fcast": {
+            "title": "NOAA forecasts for {name}",
+            "issued": "Issued {time} (Cuba local time)",
+            "legend": [
+                (
+                    "black",
+                    None,
+                    "Forecast wind speed in<br>knots (kt), lead time"
+                    "<br>≤ 3 days (action)",
+                ),
+                (
+                    "grey",
+                    None,
+                    "Forecast wind speed in<br>knots (kt), lead time"
+                    "<br>≤ 5 days (readiness)",
+                ),
+                (None, "red", "Forecast value reached<br>the threshold"),
+            ],
+        },
+        "obsv": {
+            "title": "NOAA observations for {name}",
+            "issued": "Issued {time} (Cuba local time)",
+            "legend": [
+                ("black", None, "Observed wind speed<br>in knots (kt)"),
+                (
+                    "blue",
+                    None,
+                    "Observed rainfall over two<br>consecutive days (mm)",
+                ),
+                (None, "red", "Observed value reached<br>the threshold"),
+            ],
+        },
+    },
+}
+
+
+def add_map_legend(fig: go.Figure, title: str, entries: list) -> None:
+    """Draw the legend box in the bottom-right corner of the map.
+
+    Drawn with pixel-sized layout shapes and annotations anchored to the plot
+    corner (rather than a static image) so the text follows the map language.
+
+    Args:
+        fig: Map figure to draw on
+        title: Legend heading
+        entries: (fill, outline, text) per row, text pre-wrapped with <br>
+    """
+    anchor = dict(xref="paper", yref="paper")
+    anchor_x, anchor_y = 0.99, 0.04
+    width, pad, radius, gap = 255, 14, 14, 10
+    font_size, title_size = 13, 20
+    line_height = 1.3 * font_size
+
+    # lay rows out bottom-up, in pixels from the box's bottom-right corner
+    rows = []
+    y = pad
+    for fill, outline, text in reversed(entries):
+        height = max(2 * radius, (text.count("<br>") + 1) * line_height)
+        rows.append((y + height / 2, fill, outline, text))
+        y += height + gap
+    title_y = y + 0.65 * title_size
+    box_height = y + 1.3 * title_size + pad
+
+    def add_shape(**kwargs):
+        fig.add_shape(
+            xsizemode="pixel",
+            ysizemode="pixel",
+            xanchor=anchor_x,
+            yanchor=anchor_y,
+            **anchor,
+            **kwargs,
+        )
+
+    def add_text(text, x, y, size):
+        fig.add_annotation(
+            x=anchor_x,
+            y=anchor_y,
+            xshift=x,
+            yshift=y,
+            xanchor="left",
+            yanchor="middle",
+            align="left",
+            showarrow=False,
+            text=text,
+            font=dict(size=size, color="black"),
+            **anchor,
+        )
+
+    add_shape(
+        type="rect",
+        x0=-width,
+        x1=0,
+        y0=0,
+        y1=box_height,
+        fillcolor="rgba(255, 255, 255, 0.8)",
+        line_width=0,
+    )
+    add_text(title, -width + pad, title_y, title_size)
+    cx = -width + pad + radius
+    for cy, fill, outline, text in rows:
+        r = radius - 2 if outline else radius
+        add_shape(
+            type="circle",
+            x0=cx - r,
+            x1=cx + r,
+            y0=cy - r,
+            y1=cy + r,
+            fillcolor=fill or "white",
+            line=dict(color=outline or fill, width=3 if outline else 0),
+        )
+        add_text(text, cx + radius + gap, cy, font_size)
+
+
 def create_map_plot_figure(
-    monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]
+    monitor_id: str,
+    fcast_obsv: Literal["fcast", "obsv"],
+    lang: Literal["es", "en"] = "es",
 ) -> go.Figure:
     """Create a map plot figure object without saving to blob storage.
 
     Args:
         monitor_id: The monitoring ID to create plot for
         fcast_obsv: Whether this is forecast or observation data
+        lang: Language of the title, legend and hover text
 
     Returns:
         Plotly Figure object that can be displayed or saved
@@ -589,6 +798,7 @@ def create_map_plot_figure(
         print(f"⚠️  Could not load ZMA trigger zone data: {e}")
         print(f"⚠️  Skipping map plot creation for {monitor_id}")
         return None
+    map_text = MAP_TEXT[lang]
     lts = {
         "action": {
             "color": "darkorange",
@@ -644,7 +854,7 @@ def create_map_plot_figure(
     df_tracks = nhc.load_recent_glb_nhc(fcast_obsv=fcast_obsv)
 
     if FORCE_ALERT:
-        # The helper loads Rafael (2024) from the DB itself (see its docstring).
+        # The helper loads Rafael (2024) from the DB itself; see its docstring.
         df_dummy_tracks = create_dummy_storm_tracks(fcast_obsv=fcast_obsv)
         df_tracks = pd.concat([df_tracks, df_dummy_tracks], ignore_index=True)
 
@@ -668,7 +878,7 @@ def create_map_plot_figure(
         lambda x: x.astimezone(cuba_tz)
     )
     tracks_f["valid_time_str"] = tracks_f["validTime_cuba"].apply(
-        convert_datetime_to_es_str
+        map_text["datetime_str"]
     )
 
     tracks_f["lt"] = tracks_f["validTime"] - tracks_f["issuance"]
@@ -713,7 +923,7 @@ def create_map_plot_figure(
                 lon=dff_trig["longitude"],
                 lat=dff_trig["latitude"],
                 mode="markers",
-                marker=dict(size=50, color="red"),
+                marker=dict(size=62, color="red"),
             )
         )
         # all points
@@ -722,12 +932,17 @@ def create_map_plot_figure(
                 lon=dff["longitude"],
                 lat=dff["latitude"],
                 mode="markers+text+lines",
-                marker=dict(size=40, color=lt_params["plot_color"]),
-                text=dff["maxwind"].astype(str),
+                marker=dict(size=52, color=lt_params["plot_color"]),
+                text=dff["maxwind"].map(
+                    lambda x: "" if pd.isnull(x) else f"{x:.0f} kt"
+                ),
                 line=dict(width=2, color=lt_params["plot_color"]),
-                textfont=dict(size=20, color="white"),
+                textfont=dict(size=16, color="white"),
                 customdata=dff["valid_time_str"],
-                hovertemplate=("Hora válida: %{customdata}<extra></extra>"),
+                hovertemplate=(
+                    f"{map_text['valid_time']}: "
+                    "%{customdata}<extra></extra>"
+                ),
             )
         )
 
@@ -737,14 +952,14 @@ def create_map_plot_figure(
             if pd.isnull(rain_level):
                 rain_level_str = ""
             else:
-                rain_level_str = int(rain_level)
+                rain_level_str = f"{int(rain_level)} mm"
             if rain_level > lt_params["threshs"]["roll2_rain_dist"]:
                 fig.add_trace(
                     go.Scattermapbox(
                         lon=[centroid_lon],
                         lat=[centroid_lat],
                         mode="markers",
-                        marker=dict(size=50, color="red"),
+                        marker=dict(size=62, color="red"),
                     )
                 )
             fig.add_trace(
@@ -753,8 +968,8 @@ def create_map_plot_figure(
                     lat=[centroid_lat],
                     mode="text+markers",
                     text=[rain_level_str],
-                    marker=dict(size=40, color="blue"),
-                    textfont=dict(size=20, color="white"),
+                    marker=dict(size=52, color="blue"),
+                    textfont=dict(size=16, color="white"),
                     hoverinfo="none",
                 )
             )
@@ -783,21 +998,12 @@ def create_map_plot_figure(
         center_lat = centroid_lat
         center_lon = centroid_lon
 
-    issue_time_str_es = convert_datetime_to_es_str(issue_time_cuba)
-    fcast_obsv_es = "Observaciones" if fcast_obsv == "obsv" else "Pronósticos"
+    issue_time_str = map_text["datetime_str"](issue_time_cuba)
     plot_title = (
-        f"{fcast_obsv_es} NOAA para {cyclone_name}<br>"
-        f"<sup>Emitidas {issue_time_str_es} (hora local Cuba)</sup>"
+        f"{map_text[fcast_obsv]['title'].format(name=cyclone_name)}<br>"
+        f"<sup>{map_text[fcast_obsv]['issued'].format(time=issue_time_str)}"
+        "</sup>"
     )
-
-    if fcast_obsv == "fcast":
-        legend_filename = "map_legend.png"
-        aspect = 1
-    else:
-        legend_filename = "map_legend_obsv.png"
-        aspect = 1.3
-
-    encoded_legend = open_static_image(legend_filename)
 
     fig.update_layout(
         title=plot_title,
@@ -809,27 +1015,19 @@ def create_map_plot_figure(
         height=850,
         width=800,
         showlegend=False,
-        images=[
-            dict(
-                source=f"data:image/png;base64,{encoded_legend}",
-                xref="paper",
-                yref="paper",
-                x=0.99,
-                y=0.01,
-                sizex=0.3,
-                sizey=0.3 / aspect,
-                xanchor="right",
-                yanchor="bottom",
-                opacity=0.7,
-            )
-        ],
+    )
+    add_map_legend(
+        fig, map_text["legend_title"], map_text[fcast_obsv]["legend"]
     )
 
     return fig
 
 
 def save_plot_to_blob(
-    fig: go.Figure, monitor_id: str, plot_type: Literal["map", "scatter"]
+    fig: go.Figure,
+    monitor_id: str,
+    plot_type: Literal["map", "scatter"],
+    lang: Literal["es", "en"] = "es",
 ) -> None:
     """Save a plotly figure to blob storage.
 
@@ -837,13 +1035,14 @@ def save_plot_to_blob(
         fig: Plotly Figure object to save
         monitor_id: The monitoring ID for blob naming
         plot_type: Type of plot for blob naming
+        lang: Language of the plot for blob naming
     """
     buffer = io.BytesIO()
     # scale corresponds to 150 dpi
     fig.write_image(buffer, format="png", scale=2.08)
     buffer.seek(0)
 
-    blob_name = get_plot_blob_name(monitor_id, plot_type)
+    blob_name = get_plot_blob_name(monitor_id, plot_type, lang)
 
     # Upload blob data using stratus container client
     try:
@@ -858,17 +1057,19 @@ def save_plot_to_blob(
 def create_map_plot(
     monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]
 ) -> None:
-    """Create a map plot and save it to blob storage (wrapper function).
+    """Create the map plot in each language and save them to blob storage.
 
     Args:
         monitor_id: The monitoring ID to create plot for
         fcast_obsv: Whether this is forecast or observation data
     """
-    fig = create_map_plot_figure(monitor_id, fcast_obsv)
-    if fig is not None:
-        save_plot_to_blob(fig, monitor_id, "map")
-    else:
-        print(
-            f"⚠️  Skipping map plot upload for {monitor_id} "
-            f"due to data loading error"
-        )
+    # Spanish first: its blob is what update_plots checks for existence.
+    for lang in MAP_LANGS:
+        fig = create_map_plot_figure(monitor_id, fcast_obsv, lang=lang)
+        if fig is None:
+            print(
+                f"⚠️  Skipping map plot upload for {monitor_id} "
+                f"due to data loading error"
+            )
+            return
+        save_plot_to_blob(fig, monitor_id, "map", lang=lang)

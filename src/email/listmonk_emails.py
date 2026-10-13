@@ -17,7 +17,6 @@ footer.
 import os
 from pathlib import Path
 
-import ocha_stratus as stratus
 import requests
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 from ocha_relay.listmonk import ListmonkClient
@@ -31,7 +30,7 @@ from src.constants import (
     TEST_EMAIL,
     _parse_bool_env,
 )
-from src.email.plotting import get_plot_blob_name
+from src.email.plotting import load_plot_bytes
 from src.email.send_emails import prepare_email_data
 from src.email.utils import TEMPLATES_DIR
 from src.utils.logging import get_logger
@@ -43,7 +42,9 @@ _LISTMONK_TEMPLATES_DIR = (
 )
 # Placeholder cids rendered into the content blocks, swapped for hosted
 # upload_media URLs after rendering (the content templates use cid: refs).
-_MAP_TOKEN = "LISTMONK_MAP"
+# No token may be a prefix of another, or the swap would clobber the longer.
+_MAP_ES_TOKEN = "LISTMONK_MAP_ES"
+_MAP_EN_TOKEN = "LISTMONK_MAP_EN"
 _SCATTER_TOKEN = "LISTMONK_SCATTER"
 
 # trigger_name -> (es label, en label, subject fragment). Mirrors the mapping
@@ -107,24 +108,22 @@ def _campaign_name(kind: str, monitor_id: str) -> str:
     return f"{name} [test]" if (FORCE_ALERT or TEST_EMAIL) else name
 
 
-def _read_plot_bytes(monitor_id: str, plot_type: str) -> bytes:
-    blob_name = get_plot_blob_name(monitor_id, plot_type)
-    container_client = stratus.get_container_client()
-    blob_client = container_client.get_blob_client(blob_name)
-    return blob_client.download_blob().readall()
-
-
 def _upload_and_swap(
     client: ListmonkClient, html: str, monitor_id: str
 ) -> str:
     """Upload referenced plots to the listmonk media library and replace the
     placeholder cid refs with the returned hosted URLs."""
-    for token, plot_type in ((_MAP_TOKEN, "map"), (_SCATTER_TOKEN, "scatter")):
+    for token, plot_type, lang in (
+        (_MAP_ES_TOKEN, "map", "es"),
+        (_MAP_EN_TOKEN, "map", "en"),
+        (_SCATTER_TOKEN, "scatter", "es"),
+    ):
         marker = f"cid:{token}"
         if marker not in html:
             continue
         url = client.upload_media(
-            _read_plot_bytes(monitor_id, plot_type), f"{plot_type}.png"
+            load_plot_bytes(monitor_id, plot_type, lang),
+            f"{plot_type}_{lang}.png",
         )
         html = html.replace(marker, url)
     return html
@@ -154,17 +153,18 @@ def _send_campaign(
         list_ids=[list_id],
         template_id=_resolve_template_id(),
     )
-    # Recipient count from the send manifest (accounts for opt-in/status), so the
-    # log records who the send actually reaches — not just that it fired.
+    # Recipient count from the send manifest (accounts for opt-in/status), so
+    # the log records who the send actually reaches — not just that it fired.
     try:
         n_recipients = len(client.build_send_manifest(cid).recipients)
     except Exception:  # noqa: BLE001 - never let logging break the send
         n_recipients = "?"
-    # Confirmation mode: by default ocha_relay's safe-send prompts the caller to
-    # type the campaign name before sending (good for local/manual runs). A
+    # Confirmation mode: by default ocha_relay's safe-send prompts the caller
+    # to type the campaign name before sending (good for local/manual runs). A
     # headless run has no stdin and would hit EOFError on that prompt, so the
-    # automated path (the Databricks wrapper sets LISTMONK_SKIP_CONFIRMATION=true)
-    # skips it. Unset (local/manual) keeps the interactive confirmation.
+    # automated path (the Databricks wrapper sets
+    # LISTMONK_SKIP_CONFIRMATION=true) skips it. Unset (local/manual) keeps the
+    # interactive confirmation.
     skip_confirmation = _parse_bool_env(
         "LISTMONK_SKIP_CONFIRMATION", default=False
     )
@@ -184,23 +184,28 @@ def send_info_email(monitor_id: str, fcast_obsv: str) -> None:
         f"{d['fcast_obsv_es']} {d['cyclone_name']} {d['pub_time']}, "
         f"{d['pub_date']}"
     )
-    body = _env().get_template("informational.html").render(
-        name=d["cyclone_name"],
-        fcast_obsv=d["fcast_obsv_es"],
-        fcast_obsv_en=d["fcast_obsv_en"],
-        pub_time=d["pub_time"],
-        pub_date=d["pub_date"],
-        pub_date_en=d["pub_date_en"],
-        pub_datetime_txt=d["pub_datetime_txt"],
-        readiness=d["readiness"],
-        action=d["action"],
-        obsv=d["obsv"],
-        readiness_en=d["readiness_en"],
-        action_en=d["action_en"],
-        obsv_en=d["obsv_en"],
-        map_cid=_MAP_TOKEN,
-        scatter_cid=_SCATTER_TOKEN,
-        show_scatter_plot=d["show_scatter_plot"],
+    body = (
+        _env()
+        .get_template("informational.html")
+        .render(
+            name=d["cyclone_name"],
+            fcast_obsv=d["fcast_obsv_es"],
+            fcast_obsv_en=d["fcast_obsv_en"],
+            pub_time=d["pub_time"],
+            pub_date=d["pub_date"],
+            pub_date_en=d["pub_date_en"],
+            pub_datetime_txt=d["pub_datetime_txt"],
+            readiness=d["readiness"],
+            action=d["action"],
+            obsv=d["obsv"],
+            readiness_en=d["readiness_en"],
+            action_en=d["action_en"],
+            obsv_en=d["obsv_en"],
+            map_cid=_MAP_ES_TOKEN,
+            map_cid_en=_MAP_EN_TOKEN,
+            scatter_cid=_SCATTER_TOKEN,
+            show_scatter_plot=d["show_scatter_plot"],
+        )
     )
     _send_campaign(subject, body, "info", "info", monitor_id, with_images=True)
 
@@ -216,15 +221,19 @@ def send_trigger_email(monitor_id: str, trigger_name: str) -> None:
         f"{trigger_type_subj} alcanzado"
     )
     template_name = "observational" if trigger_name == "obsv" else trigger_name
-    body = _env().get_template(f"{template_name}.html").render(
-        name=d["cyclone_name"],
-        fcast_obsv=d["fcast_obsv_es"],
-        fcast_obsv_en=d["fcast_obsv_en"],
-        pub_time=d["pub_time"],
-        pub_date=d["pub_date"],
-        pub_date_en=d["pub_date_en"],
-        trigger_name_en=trigger_name_en,
-        test_email=FORCE_ALERT,
+    body = (
+        _env()
+        .get_template(f"{template_name}.html")
+        .render(
+            name=d["cyclone_name"],
+            fcast_obsv=d["fcast_obsv_es"],
+            fcast_obsv_en=d["fcast_obsv_en"],
+            pub_time=d["pub_time"],
+            pub_date=d["pub_date"],
+            pub_date_en=d["pub_date_en"],
+            trigger_name_en=trigger_name_en,
+            test_email=FORCE_ALERT,
+        )
     )
     _send_campaign(
         subject, body, "trigger", trigger_name, monitor_id, with_images=False
