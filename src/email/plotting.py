@@ -1,7 +1,8 @@
 """
 NOTE FOR ANALYSTS: Environment variable testing pattern
 Uncomment the block below to test FORCE_ALERT functionality locally
-This patches the environment to simulate alert conditions without modifying global env vars
+This patches the environment to simulate alert conditions without modifying
+global env vars
 
 Usage:
 1. Uncomment the entire block below
@@ -16,8 +17,8 @@ with patch.dict(os.environ, {"FORCE_ALERT": "true"}):
     import src.constants
     importlib.reload(src.constants)
 
-    print("env var:", os.getenv("FORCE_ALERT"))                  # Should print: true
-    print("reloaded:", src.constants.FORCE_ALERT)                # Should print: True ✅
+    print("env var:", os.getenv("FORCE_ALERT"))  # Should print: true
+    print("reloaded:", src.constants.FORCE_ALERT)  # Should print: True ✅
 
     from src.email import utils
     importlib.reload(utils)  # must reload downstream module that imported it
@@ -40,7 +41,6 @@ import pytz
 from matplotlib import pyplot as plt
 
 from src.constants import (
-    CERF_SIDS,
     CHD_GREEN,
     D_THRESH,
     FORCE_ALERT,
@@ -644,7 +644,7 @@ def create_map_plot_figure(
     df_tracks = nhc.load_recent_glb_nhc(fcast_obsv=fcast_obsv)
 
     if FORCE_ALERT:
-        # The helper loads Rafael (2024) from the DB itself (see its docstring).
+        # The helper loads Rafael (2024) from the DB itself; see its docstring.
         df_dummy_tracks = create_dummy_storm_tracks(fcast_obsv=fcast_obsv)
         df_tracks = pd.concat([df_tracks, df_dummy_tracks], ignore_index=True)
 

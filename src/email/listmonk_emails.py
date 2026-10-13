@@ -154,17 +154,18 @@ def _send_campaign(
         list_ids=[list_id],
         template_id=_resolve_template_id(),
     )
-    # Recipient count from the send manifest (accounts for opt-in/status), so the
-    # log records who the send actually reaches — not just that it fired.
+    # Recipient count from the send manifest (accounts for opt-in/status), so
+    # the log records who the send actually reaches — not just that it fired.
     try:
         n_recipients = len(client.build_send_manifest(cid).recipients)
     except Exception:  # noqa: BLE001 - never let logging break the send
         n_recipients = "?"
-    # Confirmation mode: by default ocha_relay's safe-send prompts the caller to
-    # type the campaign name before sending (good for local/manual runs). A
+    # Confirmation mode: by default ocha_relay's safe-send prompts the caller
+    # to type the campaign name before sending (good for local/manual runs). A
     # headless run has no stdin and would hit EOFError on that prompt, so the
-    # automated path (the Databricks wrapper sets LISTMONK_SKIP_CONFIRMATION=true)
-    # skips it. Unset (local/manual) keeps the interactive confirmation.
+    # automated path (the Databricks wrapper sets
+    # LISTMONK_SKIP_CONFIRMATION=true) skips it. Unset (local/manual) keeps the
+    # interactive confirmation.
     skip_confirmation = _parse_bool_env(
         "LISTMONK_SKIP_CONFIRMATION", default=False
     )
@@ -184,23 +185,27 @@ def send_info_email(monitor_id: str, fcast_obsv: str) -> None:
         f"{d['fcast_obsv_es']} {d['cyclone_name']} {d['pub_time']}, "
         f"{d['pub_date']}"
     )
-    body = _env().get_template("informational.html").render(
-        name=d["cyclone_name"],
-        fcast_obsv=d["fcast_obsv_es"],
-        fcast_obsv_en=d["fcast_obsv_en"],
-        pub_time=d["pub_time"],
-        pub_date=d["pub_date"],
-        pub_date_en=d["pub_date_en"],
-        pub_datetime_txt=d["pub_datetime_txt"],
-        readiness=d["readiness"],
-        action=d["action"],
-        obsv=d["obsv"],
-        readiness_en=d["readiness_en"],
-        action_en=d["action_en"],
-        obsv_en=d["obsv_en"],
-        map_cid=_MAP_TOKEN,
-        scatter_cid=_SCATTER_TOKEN,
-        show_scatter_plot=d["show_scatter_plot"],
+    body = (
+        _env()
+        .get_template("informational.html")
+        .render(
+            name=d["cyclone_name"],
+            fcast_obsv=d["fcast_obsv_es"],
+            fcast_obsv_en=d["fcast_obsv_en"],
+            pub_time=d["pub_time"],
+            pub_date=d["pub_date"],
+            pub_date_en=d["pub_date_en"],
+            pub_datetime_txt=d["pub_datetime_txt"],
+            readiness=d["readiness"],
+            action=d["action"],
+            obsv=d["obsv"],
+            readiness_en=d["readiness_en"],
+            action_en=d["action_en"],
+            obsv_en=d["obsv_en"],
+            map_cid=_MAP_TOKEN,
+            scatter_cid=_SCATTER_TOKEN,
+            show_scatter_plot=d["show_scatter_plot"],
+        )
     )
     _send_campaign(subject, body, "info", "info", monitor_id, with_images=True)
 
@@ -216,15 +221,19 @@ def send_trigger_email(monitor_id: str, trigger_name: str) -> None:
         f"{trigger_type_subj} alcanzado"
     )
     template_name = "observational" if trigger_name == "obsv" else trigger_name
-    body = _env().get_template(f"{template_name}.html").render(
-        name=d["cyclone_name"],
-        fcast_obsv=d["fcast_obsv_es"],
-        fcast_obsv_en=d["fcast_obsv_en"],
-        pub_time=d["pub_time"],
-        pub_date=d["pub_date"],
-        pub_date_en=d["pub_date_en"],
-        trigger_name_en=trigger_name_en,
-        test_email=FORCE_ALERT,
+    body = (
+        _env()
+        .get_template(f"{template_name}.html")
+        .render(
+            name=d["cyclone_name"],
+            fcast_obsv=d["fcast_obsv_es"],
+            fcast_obsv_en=d["fcast_obsv_en"],
+            pub_time=d["pub_time"],
+            pub_date=d["pub_date"],
+            pub_date_en=d["pub_date_en"],
+            trigger_name_en=trigger_name_en,
+            test_email=FORCE_ALERT,
+        )
     )
     _send_campaign(
         subject, body, "trigger", trigger_name, monitor_id, with_images=False
