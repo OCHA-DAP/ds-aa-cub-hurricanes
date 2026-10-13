@@ -1,17 +1,12 @@
 name: Daily Hurricane Report
 
+# Manual fallback only. The daily 06:00 UTC report is the Databricks job
+# "Cuba Daily Hurricane Report" (databricks.yml, daily_report). The report
+# reads storms.nhc_* on the prod DB, which GitHub Actions runners are losing
+# access to — and this workflow never had the DB creds, so it rendered
+# nothing and (until the script was made to fail loudly) still went green.
 on:
-  schedule:
-    # Run daily at 6:00 AM UTC (adjust timezone as needed)
-    - cron: '0 6 * * *'
   workflow_dispatch:  # Allow manual triggering
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'Report.qmd'
-      - 'pipelines/email_with_embedded_images.py'
-      - 'src/**'
-      - '.github/workflows/daily-hurricane-report.yml'
 
 jobs:
   generate-and-send-report:
