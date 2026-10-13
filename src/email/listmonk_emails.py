@@ -17,7 +17,6 @@ footer.
 import os
 from pathlib import Path
 
-import ocha_stratus as stratus
 import requests
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 from ocha_relay.listmonk import ListmonkClient
@@ -31,7 +30,7 @@ from src.constants import (
     TEST_EMAIL,
     _parse_bool_env,
 )
-from src.email.plotting import get_plot_blob_name
+from src.email.plotting import load_plot_bytes
 from src.email.send_emails import prepare_email_data
 from src.email.utils import TEMPLATES_DIR
 from src.utils.logging import get_logger
@@ -43,7 +42,9 @@ _LISTMONK_TEMPLATES_DIR = (
 )
 # Placeholder cids rendered into the content blocks, swapped for hosted
 # upload_media URLs after rendering (the content templates use cid: refs).
-_MAP_TOKEN = "LISTMONK_MAP"
+# No token may be a prefix of another, or the swap would clobber the longer.
+_MAP_ES_TOKEN = "LISTMONK_MAP_ES"
+_MAP_EN_TOKEN = "LISTMONK_MAP_EN"
 _SCATTER_TOKEN = "LISTMONK_SCATTER"
 
 # trigger_name -> (es label, en label, subject fragment). Mirrors the mapping
@@ -107,24 +108,22 @@ def _campaign_name(kind: str, monitor_id: str) -> str:
     return f"{name} [test]" if (FORCE_ALERT or TEST_EMAIL) else name
 
 
-def _read_plot_bytes(monitor_id: str, plot_type: str) -> bytes:
-    blob_name = get_plot_blob_name(monitor_id, plot_type)
-    container_client = stratus.get_container_client()
-    blob_client = container_client.get_blob_client(blob_name)
-    return blob_client.download_blob().readall()
-
-
 def _upload_and_swap(
     client: ListmonkClient, html: str, monitor_id: str
 ) -> str:
     """Upload referenced plots to the listmonk media library and replace the
     placeholder cid refs with the returned hosted URLs."""
-    for token, plot_type in ((_MAP_TOKEN, "map"), (_SCATTER_TOKEN, "scatter")):
+    for token, plot_type, lang in (
+        (_MAP_ES_TOKEN, "map", "es"),
+        (_MAP_EN_TOKEN, "map", "en"),
+        (_SCATTER_TOKEN, "scatter", "es"),
+    ):
         marker = f"cid:{token}"
         if marker not in html:
             continue
         url = client.upload_media(
-            _read_plot_bytes(monitor_id, plot_type), f"{plot_type}.png"
+            load_plot_bytes(monitor_id, plot_type, lang),
+            f"{plot_type}_{lang}.png",
         )
         html = html.replace(marker, url)
     return html
@@ -202,7 +201,8 @@ def send_info_email(monitor_id: str, fcast_obsv: str) -> None:
             readiness_en=d["readiness_en"],
             action_en=d["action_en"],
             obsv_en=d["obsv_en"],
-            map_cid=_MAP_TOKEN,
+            map_cid=_MAP_ES_TOKEN,
+            map_cid_en=_MAP_EN_TOKEN,
             scatter_cid=_SCATTER_TOKEN,
             show_scatter_plot=d["show_scatter_plot"],
         )

@@ -1,4 +1,3 @@
-import io
 import smtplib
 import ssl
 from email.headerregistry import Address
@@ -6,13 +5,12 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 from typing import Literal
 
-import ocha_stratus as stratus
 import pytz
 from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
 from src.constants import DRY_RUN, FORCE_ALERT, SPANISH_MONTHS
-from src.email.plotting import get_plot_blob_name
+from src.email.plotting import load_plot_bytes
 from src.email.utils import (
     EMAIL_ADDRESS,
     EMAIL_DISCLAIMER,
@@ -165,11 +163,13 @@ def create_info_email_content(
     if for_preview:
         # For preview, use placeholder CIDs that will be replaced later
         map_cid = "PREVIEW_MAP_PLACEHOLDER"
+        map_cid_en = "PREVIEW_MAP_EN_PLACEHOLDER"
         scatter_cid = "PREVIEW_SCATTER_PLACEHOLDER"
         ocha_logo_cid = "PREVIEW_LOGO_PLACEHOLDER"
     else:
         # For real emails, generate proper CIDs
         map_cid = make_msgid(domain="humdata.org")[1:-1]
+        map_cid_en = make_msgid(domain="humdata.org")[1:-1]
         scatter_cid = make_msgid(domain="humdata.org")[1:-1]
         ocha_logo_cid = make_msgid(domain="humdata.org")[1:-1]
 
@@ -189,6 +189,7 @@ def create_info_email_content(
         test_email=FORCE_ALERT,
         email_disclaimer=EMAIL_DISCLAIMER,
         map_cid=map_cid,
+        map_cid_en=map_cid_en,
         scatter_cid=scatter_cid,
         ocha_logo_cid=ocha_logo_cid,
     )
@@ -203,6 +204,7 @@ def create_info_email_content(
         "email_data": email_data,
         "cids": {
             "map": map_cid,
+            "map_en": map_cid_en,
             "scatter": scatter_cid,
             "ocha_logo": ocha_logo_cid,
         },
@@ -244,23 +246,21 @@ def send_info_email(monitor_id: str, fcast_obsv: Literal["fcast", "obsv"]):
     msg.add_alternative(email_content["html"], subtype="html")
 
     # Add plot images from blob storage using the CIDs from email content
-    for plot_type in ["map", "scatter"]:
-        blob_name = get_plot_blob_name(monitor_id, plot_type)
-        image_data = io.BytesIO()
-        container_client = stratus.get_container_client()
-        blob_client = container_client.get_blob_client(blob_name)
-
+    for cid_key, plot_type, lang in [
+        ("map", "map", "es"),
+        ("map_en", "map", "en"),
+        ("scatter", "scatter", "es"),
+    ]:
         try:
-            blob_client.download_blob().download_to_stream(image_data)
-            image_data.seek(0)
+            image_bytes = load_plot_bytes(monitor_id, plot_type, lang)
             # Use the CID that was already embedded in the email content
-            cid = email_content["cids"][plot_type]
+            cid = email_content["cids"][cid_key]
             msg.get_payload()[1].add_related(
-                image_data.read(), "image", "png", cid=cid
+                image_bytes, "image", "png", cid=cid
             )
-            print(f"✅ Added {plot_type} plot to email")
+            print(f"✅ Added {cid_key} plot to email")
         except Exception as e:
-            print(f"⚠️  Could not attach {plot_type} plot: {e}")
+            print(f"⚠️  Could not attach {cid_key} plot: {e}")
             # Continue without this plot - the email will show broken image
 
     # Add static images using the CIDs from email content

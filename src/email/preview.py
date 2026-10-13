@@ -13,7 +13,7 @@ from html2text import html2text
 from jinja2 import Environment, FileSystemLoader
 
 from src.constants import SPANISH_MONTHS
-from src.email.plotting import get_plot_blob_name
+from src.email.plotting import get_plot_blob_name, load_plot_bytes
 from src.email.send_emails import create_info_email_content
 from src.email.utils import (
     DRY_RUN,
@@ -118,6 +118,10 @@ def preview_info_email(
         scatter_blob_name = get_plot_blob_name(monitor_id, "scatter")
 
         map_data_url = get_image_as_base64(map_blob_name, is_blob=True)
+        map_en_base64 = base64.b64encode(
+            load_plot_bytes(monitor_id, "map", lang="en")
+        ).decode("utf-8")
+        map_en_data_url = f"data:image/png;base64,{map_en_base64}"
         scatter_data_url = get_image_as_base64(scatter_blob_name, is_blob=True)
 
         # Load static images from local files
@@ -135,7 +139,7 @@ def preview_info_email(
         print(f"Warning: Could not load images: {e}")
         # Use placeholder for plot images but load actual static images
         placeholder_url = get_image_as_base64("placeholder", is_blob=False)
-        map_data_url = scatter_data_url = placeholder_url
+        map_data_url = map_en_data_url = scatter_data_url = placeholder_url
 
         # Load actual static images even if plot images failed
         chd_banner_path = STATIC_DIR / "centre_banner.png"
@@ -151,6 +155,9 @@ def preview_info_email(
     # viewing
     html_str = html_str.replace(
         'src="cid:PREVIEW_MAP_PLACEHOLDER"', f'src="{map_data_url}"'
+    )
+    html_str = html_str.replace(
+        'src="cid:PREVIEW_MAP_EN_PLACEHOLDER"', f'src="{map_en_data_url}"'
     )
     html_str = html_str.replace(
         'src="cid:PREVIEW_SCATTER_PLACEHOLDER"', f'src="{scatter_data_url}"'
