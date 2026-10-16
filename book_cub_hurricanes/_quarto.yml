@@ -7,7 +7,7 @@ jupyter:
 book:
   title: "Anticipatory Action - Cuba Hurricanes"
   author: "OCHA Centre for Humanitarian Data"
-  date: "13/05/2024"
+  date: "2026-10-16"
   chapters:
     - index.qmd
     - intro.qmd
@@ -39,6 +39,8 @@ format:
     embed-resources: false
     toc: true          # Enable table of contents for navigation
     css: custom.css    # Apply the custom CSS globally
+    include-before-body:
+      - home-link.html  # back-link to the gh-pages landing page
     toc-depth: 3
     code-fold: true
     smooth-scroll: true

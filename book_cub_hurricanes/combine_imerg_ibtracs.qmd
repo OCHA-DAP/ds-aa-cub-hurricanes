@@ -1,6 +1,8 @@
 
 ## Combine IMERG and IBTrACS
 
+This plots each storm's maximum wind speed in the ZMA against the two-day rainfall computed in the IMERG chapter.
+
 ```{python}
 %load_ext jupyter_black
 %load_ext autoreload

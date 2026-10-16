@@ -319,9 +319,9 @@ display(
 )
 ```
 
-## Data for email scatter plot
+## Data for the email scatter plot
 
-Just quickly adding this for easy reference - later. Should clean up where this goes.
+The data behind the scatter plot used in the monitoring emails.
 ```{python}
 blob_name = (
       f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"

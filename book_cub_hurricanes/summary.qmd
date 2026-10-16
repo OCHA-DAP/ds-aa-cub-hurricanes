@@ -1,8 +1,11 @@
 
 ## Summary
 
-In summary, this book has no content whatsoever.
+In July 2025 the working group chose option 1b from the Visualize Options chapter. Both its forecast (action) and observational triggers use the 80th percentile of two-day rainfall across Cuba, combined with a wind speed threshold while the storm is in the ZMA. A readiness stage, using the same wind threshold as the action trigger, was added afterwards.
 
-```{python}
-1 + 1
-```
+With all three stages, the trigger would have fired in 7 of the 25 years from 2000 to 2024, a joint return period of 3.71 years:
+
+- All three stages: Irma 2017, Michelle 2001, Ian 2022, Ike 2008, Dennis 2005, Matthew 2016 and Paloma 2008.
+- Readiness and action only: Gustav 2008, Wilma 2005 and Ivan 2004.
+
+Rafael 2024 and Oscar 2024 both received CERF allocations but would not have triggered.
