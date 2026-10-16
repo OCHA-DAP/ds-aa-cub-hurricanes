@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>10&nbsp; CHIRPS-GEFS Raster Processing Pipeline – Anticipatory Action - Cuba Hurricanes</title>
+<title>11&nbsp; CHIRPS-GEFS Raster Processing Pipeline – Anticipatory Action - Cuba Hurricanes</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -68,7 +68,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="site_libs/quarto-search/fuse.min.js"></script>
 <script src="site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="./">
-<link href="./summary.html" rel="next">
+<link href="./references.html" rel="next">
 <link href="./chirps_gefs.html" rel="prev">
 <script src="site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -125,7 +125,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./chirps_gefs_raster_processing.html"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./chirps_gefs.html">Forecast rainfall</a></li><li class="breadcrumb-item"><a href="./chirps_gefs_raster_processing.html"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
@@ -162,90 +162,134 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Introduction</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Historical data</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./zma.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">ZMA</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./ibtracs.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">IBTrACS</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./imerg.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">IMERG</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./combine_imerg_ibtracs.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Combine IMERG and IBTrACS</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./plot_optimization.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Optimization - trigger selection and plotting</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./era5_soil_moisture.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">ERA5 Soil Moisture</span></span></a>
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">ERA5 Soil Moisture</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Trigger design</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./plot_optimization.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Optimization - trigger selection and plotting</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./threestage_trig_plot.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Visualize Options (Forecast + Observational)</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./chirps_gefs.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./chirps_gefs_raster_processing.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./summary.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Summary</span></span></a>
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Summary</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Forecast rainfall</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./appendix_check_quantile_calc.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Appendix 1A: Checking the Monitoring Rainfall Calculation</span></span></a>
+  <a href="./chirps_gefs.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./appendix_population_data.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Appendix 1B: Population Data Validation — WorldPop vs.&nbsp;ONEI</span></span></a>
+  <a href="./chirps_gefs_raster_processing.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./appendix_methodology_map.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Appendix 1C: Wind Footprint over Population</span></span></a>
-  </div>
-</li>
+      </ul>
+  </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./references.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">references</span></span></a>
+ <span class="menu-text">References</span></a>
   </div>
 </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_check_quantile_calc.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Checking the Monitoring Rainfall Calculation</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_population_data.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Population Data Validation: WorldPop vs.&nbsp;ONEI</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_methodology_map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Wind Footprint over Population</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
     </ul>
     </div>
 </nav>
@@ -256,16 +300,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#setup-and-configuration" id="toc-setup-and-configuration" class="nav-link active" data-scroll-target="#setup-and-configuration"><span class="header-section-number">10.1</span> Setup and Configuration</a></li>
-  <li><a href="#step-1-data-loading-for-single-issue-date" id="toc-step-1-data-loading-for-single-issue-date" class="nav-link" data-scroll-target="#step-1-data-loading-for-single-issue-date"><span class="header-section-number">10.2</span> Step 1: Data Loading for Single Issue Date</a></li>
-  <li><a href="#step-2-concatenation-and-time-series-creation" id="toc-step-2-concatenation-and-time-series-creation" class="nav-link" data-scroll-target="#step-2-concatenation-and-time-series-creation"><span class="header-section-number">10.3</span> Step 2: Concatenation and Time Series Creation</a></li>
-  <li><a href="#step-3-spatial-clipping-to-cuba" id="toc-step-3-spatial-clipping-to-cuba" class="nav-link" data-scroll-target="#step-3-spatial-clipping-to-cuba"><span class="header-section-number">10.4</span> Step 3: Spatial Clipping to Cuba</a></li>
-  <li><a href="#step-4-temporal-aggregation---2-day-rolling-sums" id="toc-step-4-temporal-aggregation---2-day-rolling-sums" class="nav-link" data-scroll-target="#step-4-temporal-aggregation---2-day-rolling-sums"><span class="header-section-number">10.5</span> Step 4: Temporal Aggregation - 2-Day Rolling Sums</a></li>
-  <li><a href="#step-5-quantile-analysis" id="toc-step-5-quantile-analysis" class="nav-link" data-scroll-target="#step-5-quantile-analysis"><span class="header-section-number">10.6</span> Step 5: Quantile Analysis</a></li>
-  <li><a href="#step-6-spatial-mean-calculation" id="toc-step-6-spatial-mean-calculation" class="nav-link" data-scroll-target="#step-6-spatial-mean-calculation"><span class="header-section-number">10.7</span> Step 6: Spatial Mean Calculation</a></li>
-  <li><a href="#step-7-data-preparation-for-database-storage" id="toc-step-7-data-preparation-for-database-storage" class="nav-link" data-scroll-target="#step-7-data-preparation-for-database-storage"><span class="header-section-number">10.8</span> Step 7: Data Preparation for Database Storage</a></li>
-  <li><a href="#summary-complete-processing-pipeline" id="toc-summary-complete-processing-pipeline" class="nav-link" data-scroll-target="#summary-complete-processing-pipeline"><span class="header-section-number">10.9</span> Summary: Complete Processing Pipeline</a></li>
-  <li><a href="#output" id="toc-output" class="nav-link" data-scroll-target="#output"><span class="header-section-number">10.10</span> Output</a></li>
+  <li><a href="#setup-and-configuration" id="toc-setup-and-configuration" class="nav-link active" data-scroll-target="#setup-and-configuration"><span class="header-section-number">11.1</span> Setup and Configuration</a></li>
+  <li><a href="#step-1-data-loading-for-single-issue-date" id="toc-step-1-data-loading-for-single-issue-date" class="nav-link" data-scroll-target="#step-1-data-loading-for-single-issue-date"><span class="header-section-number">11.2</span> Step 1: Data Loading for Single Issue Date</a></li>
+  <li><a href="#step-2-concatenation-and-time-series-creation" id="toc-step-2-concatenation-and-time-series-creation" class="nav-link" data-scroll-target="#step-2-concatenation-and-time-series-creation"><span class="header-section-number">11.3</span> Step 2: Concatenation and Time Series Creation</a></li>
+  <li><a href="#step-3-spatial-clipping-to-cuba" id="toc-step-3-spatial-clipping-to-cuba" class="nav-link" data-scroll-target="#step-3-spatial-clipping-to-cuba"><span class="header-section-number">11.4</span> Step 3: Spatial Clipping to Cuba</a></li>
+  <li><a href="#step-4-temporal-aggregation---2-day-rolling-sums" id="toc-step-4-temporal-aggregation---2-day-rolling-sums" class="nav-link" data-scroll-target="#step-4-temporal-aggregation---2-day-rolling-sums"><span class="header-section-number">11.5</span> Step 4: Temporal Aggregation - 2-Day Rolling Sums</a></li>
+  <li><a href="#step-5-quantile-analysis" id="toc-step-5-quantile-analysis" class="nav-link" data-scroll-target="#step-5-quantile-analysis"><span class="header-section-number">11.6</span> Step 5: Quantile Analysis</a></li>
+  <li><a href="#step-6-spatial-mean-calculation" id="toc-step-6-spatial-mean-calculation" class="nav-link" data-scroll-target="#step-6-spatial-mean-calculation"><span class="header-section-number">11.7</span> Step 6: Spatial Mean Calculation</a></li>
+  <li><a href="#step-7-data-preparation-for-database-storage" id="toc-step-7-data-preparation-for-database-storage" class="nav-link" data-scroll-target="#step-7-data-preparation-for-database-storage"><span class="header-section-number">11.8</span> Step 7: Data Preparation for Database Storage</a></li>
+  <li><a href="#summary-complete-processing-pipeline" id="toc-summary-complete-processing-pipeline" class="nav-link" data-scroll-target="#summary-complete-processing-pipeline"><span class="header-section-number">11.9</span> Summary: Complete Processing Pipeline</a></li>
+  <li><a href="#output" id="toc-output" class="nav-link" data-scroll-target="#output"><span class="header-section-number">11.10</span> Output</a></li>
   </ul>
 </nav>
     </div>
@@ -283,9 +327,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </style>
 <a class="home-link" href="../">← Cuba hurricanes AA</a>
 
-<header id="title-block-header" class="quarto-title-block default">
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./chirps_gefs.html">Forecast rainfall</a></li><li class="breadcrumb-item"><a href="./chirps_gefs_raster_processing.html"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></h1>
+<h1 class="title"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></h1>
 </div>
 
 
@@ -312,8 +356,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li>Reshape the results into the table format the pipeline writes to the team database.</li>
 </ol>
 <p>Nothing is written to the database here. Step 7 only shows what would be stored.</p>
-<section id="setup-and-configuration" class="level2" data-number="10.1">
-<h2 data-number="10.1" class="anchored" data-anchor-id="setup-and-configuration"><span class="header-section-number">10.1</span> Setup and Configuration</h2>
+<section id="setup-and-configuration" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="setup-and-configuration"><span class="header-section-number">11.1</span> Setup and Configuration</h2>
 <div id="83048a52" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
@@ -424,8 +468,8 @@ Geometry is in a geographic CRS. Results from 'area' are likely incorrect. Use '
 </div>
 </div>
 </section>
-<section id="step-1-data-loading-for-single-issue-date" class="level2" data-number="10.2">
-<h2 data-number="10.2" class="anchored" data-anchor-id="step-1-data-loading-for-single-issue-date"><span class="header-section-number">10.2</span> Step 1: Data Loading for Single Issue Date</h2>
+<section id="step-1-data-loading-for-single-issue-date" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="step-1-data-loading-for-single-issue-date"><span class="header-section-number">11.2</span> Step 1: Data Loading for Single Issue Date</h2>
 <p>A lead time with no file in blob storage is reported and skipped.</p>
 <div id="9dfd62df" class="cell" data-execution_count="5">
 <details class="code-fold">
@@ -520,8 +564,8 @@ Successfully loaded 16 out of 16 forecasts
 </div>
 </div>
 </section>
-<section id="step-2-concatenation-and-time-series-creation" class="level2" data-number="10.3">
-<h2 data-number="10.3" class="anchored" data-anchor-id="step-2-concatenation-and-time-series-creation"><span class="header-section-number">10.3</span> Step 2: Concatenation and Time Series Creation</h2>
+<section id="step-2-concatenation-and-time-series-creation" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="step-2-concatenation-and-time-series-creation"><span class="header-section-number">11.3</span> Step 2: Concatenation and Time Series Creation</h2>
 <div id="1de32b7a" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Code</summary>
@@ -617,8 +661,8 @@ Valid Dates in Time Series:
 </div>
 </div>
 </section>
-<section id="step-3-spatial-clipping-to-cuba" class="level2" data-number="10.4">
-<h2 data-number="10.4" class="anchored" data-anchor-id="step-3-spatial-clipping-to-cuba"><span class="header-section-number">10.4</span> Step 3: Spatial Clipping to Cuba</h2>
+<section id="step-3-spatial-clipping-to-cuba" class="level2" data-number="11.4">
+<h2 data-number="11.4" class="anchored" data-anchor-id="step-3-spatial-clipping-to-cuba"><span class="header-section-number">11.4</span> Step 3: Spatial Clipping to Cuba</h2>
 <div id="70cec71f" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Code</summary>
@@ -700,8 +744,8 @@ Spatial Clipping Results:
 </div>
 </div>
 </section>
-<section id="step-4-temporal-aggregation---2-day-rolling-sums" class="level2" data-number="10.5">
-<h2 data-number="10.5" class="anchored" data-anchor-id="step-4-temporal-aggregation---2-day-rolling-sums"><span class="header-section-number">10.5</span> Step 4: Temporal Aggregation - 2-Day Rolling Sums</h2>
+<section id="step-4-temporal-aggregation---2-day-rolling-sums" class="level2" data-number="11.5">
+<h2 data-number="11.5" class="anchored" data-anchor-id="step-4-temporal-aggregation---2-day-rolling-sums"><span class="header-section-number">11.5</span> Step 4: Temporal Aggregation - 2-Day Rolling Sums</h2>
 <div id="d3c5f8d0" class="cell" data-execution_count="11">
 <details class="code-fold">
 <summary>Code</summary>
@@ -769,8 +813,8 @@ Rolling Sum Statistics:
 </div>
 </div>
 </section>
-<section id="step-5-quantile-analysis" class="level2" data-number="10.6">
-<h2 data-number="10.6" class="anchored" data-anchor-id="step-5-quantile-analysis"><span class="header-section-number">10.6</span> Step 5: Quantile Analysis</h2>
+<section id="step-5-quantile-analysis" class="level2" data-number="11.6">
+<h2 data-number="11.6" class="anchored" data-anchor-id="step-5-quantile-analysis"><span class="header-section-number">11.6</span> Step 5: Quantile Analysis</h2>
 <div id="3d191d55" class="cell" data-execution_count="12">
 <details class="code-fold">
 <summary>Code</summary>
@@ -860,8 +904,8 @@ Rolling Sum Statistics:
 </div>
 </div>
 </section>
-<section id="step-6-spatial-mean-calculation" class="level2" data-number="10.7">
-<h2 data-number="10.7" class="anchored" data-anchor-id="step-6-spatial-mean-calculation"><span class="header-section-number">10.7</span> Step 6: Spatial Mean Calculation</h2>
+<section id="step-6-spatial-mean-calculation" class="level2" data-number="11.7">
+<h2 data-number="11.7" class="anchored" data-anchor-id="step-6-spatial-mean-calculation"><span class="header-section-number">11.7</span> Step 6: Spatial Mean Calculation</h2>
 <div id="82e330da" class="cell" data-execution_count="14">
 <details class="code-fold">
 <summary>Code</summary>
@@ -919,8 +963,8 @@ Spatial Mean Results:
 </div>
 </div>
 </section>
-<section id="step-7-data-preparation-for-database-storage" class="level2" data-number="10.8">
-<h2 data-number="10.8" class="anchored" data-anchor-id="step-7-data-preparation-for-database-storage"><span class="header-section-number">10.8</span> Step 7: Data Preparation for Database Storage</h2>
+<section id="step-7-data-preparation-for-database-storage" class="level2" data-number="11.8">
+<h2 data-number="11.8" class="anchored" data-anchor-id="step-7-data-preparation-for-database-storage"><span class="header-section-number">11.8</span> Step 7: Data Preparation for Database Storage</h2>
 <div id="e0f784cb" class="cell" data-execution_count="15">
 <details class="code-fold">
 <summary>Code</summary>
@@ -1147,8 +1191,8 @@ Database Schema (table: projects.ds_aa_cub_hurricanes_chirps_gefs):
 </div>
 </div>
 </section>
-<section id="summary-complete-processing-pipeline" class="level2" data-number="10.9">
-<h2 data-number="10.9" class="anchored" data-anchor-id="summary-complete-processing-pipeline"><span class="header-section-number">10.9</span> Summary: Complete Processing Pipeline</h2>
+<section id="summary-complete-processing-pipeline" class="level2" data-number="11.9">
+<h2 data-number="11.9" class="anchored" data-anchor-id="summary-complete-processing-pipeline"><span class="header-section-number">11.9</span> Summary: Complete Processing Pipeline</h2>
 <div id="d7e66cbf" class="cell" data-execution_count="17">
 <details class="code-fold">
 <summary>Code</summary>
@@ -1207,8 +1251,8 @@ Database Schema (table: projects.ds_aa_cub_hurricanes_chirps_gefs):
 </div>
 </div>
 </section>
-<section id="output" class="level2" data-number="10.10">
-<h2 data-number="10.10" class="anchored" data-anchor-id="output"><span class="header-section-number">10.10</span> Output</h2>
+<section id="output" class="level2" data-number="11.10">
+<h2 data-number="11.10" class="anchored" data-anchor-id="output"><span class="header-section-number">11.10</span> Output</h2>
 <p>For each issue date and valid date the pipeline stores six statistics of the two-day sum: the five quantiles and the mean. The first valid date has no two-day sum, because the sum needs the day before. The trigger uses the 80th percentile (<code>q80</code>).</p>
 <!-- markdownlint-enable MD013 -->
 
@@ -1619,12 +1663,12 @@ Database Schema (table: projects.ds_aa_cub_hurricanes_chirps_gefs):
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
       <a href="./chirps_gefs.html" class="pagination-link" aria-label="CHIRPS-GEFS Precipitation Forecasts">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span>
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="./summary.html" class="pagination-link" aria-label="Summary">
-        <span class="nav-page-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Summary</span></span> <i class="bi bi-arrow-right-short"></i>
+      <a href="./references.html" class="pagination-link" aria-label="References">
+        <span class="nav-page-text">References</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>13&nbsp; Appendix 1B: Population Data Validation — WorldPop vs.&nbsp;ONEI – Anticipatory Action - Cuba Hurricanes</title>
+<title>Appendix B — Population Data Validation: WorldPop vs.&nbsp;ONEI – Anticipatory Action - Cuba Hurricanes</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -154,7 +154,7 @@ window.Quarto = {
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./appendix_population_data.html"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Appendix 1B: Population Data Validation — WorldPop vs.&nbsp;ONEI</span></a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./appendix_check_quantile_calc.html">Appendices</a></li><li class="breadcrumb-item"><a href="./appendix_population_data.html"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Population Data Validation: WorldPop vs.&nbsp;ONEI</span></a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
@@ -191,90 +191,134 @@ window.Quarto = {
  <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Introduction</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Historical data</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./zma.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">ZMA</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./ibtracs.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">IBTrACS</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./imerg.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">IMERG</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./combine_imerg_ibtracs.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Combine IMERG and IBTrACS</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./plot_optimization.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Optimization - trigger selection and plotting</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./era5_soil_moisture.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">ERA5 Soil Moisture</span></span></a>
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">ERA5 Soil Moisture</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Trigger design</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./plot_optimization.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Optimization - trigger selection and plotting</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./threestage_trig_plot.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Visualize Options (Forecast + Observational)</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./chirps_gefs.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./chirps_gefs_raster_processing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./summary.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Summary</span></span></a>
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Summary</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Forecast rainfall</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./appendix_check_quantile_calc.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Appendix 1A: Checking the Monitoring Rainfall Calculation</span></span></a>
+  <a href="./chirps_gefs.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Precipitation Forecasts</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
+          <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./appendix_population_data.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Appendix 1B: Population Data Validation — WorldPop vs.&nbsp;ONEI</span></span></a>
+  <a href="./chirps_gefs_raster_processing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">CHIRPS-GEFS Raster Processing Pipeline</span></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./appendix_methodology_map.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Appendix 1C: Wind Footprint over Population</span></span></a>
-  </div>
-</li>
+      </ul>
+  </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./references.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">references</span></span></a>
+ <span class="menu-text">References</span></a>
   </div>
 </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_check_quantile_calc.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Checking the Monitoring Rainfall Calculation</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_population_data.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Population Data Validation: WorldPop vs.&nbsp;ONEI</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./appendix_methodology_map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Wind Footprint over Population</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
     </ul>
     </div>
 </nav>
@@ -285,15 +329,15 @@ window.Quarto = {
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#inputs" id="toc-inputs" class="nav-link active" data-scroll-target="#inputs"><span class="header-section-number">13.0.1</span> Inputs</a></li>
-  <li><a href="#zonal-sums" id="toc-zonal-sums" class="nav-link" data-scroll-target="#zonal-sums"><span class="header-section-number">13.0.2</span> Zonal sums</a></li>
-  <li><a href="#same-shape-different-totals" id="toc-same-shape-different-totals" class="nav-link" data-scroll-target="#same-shape-different-totals"><span class="header-section-number">13.0.3</span> Same shape, different totals</a></li>
-  <li><a href="#decomposing-the-per-province-difference" id="toc-decomposing-the-per-province-difference" class="nav-link" data-scroll-target="#decomposing-the-per-province-difference"><span class="header-section-number">13.0.4</span> Decomposing the per-province difference</a></li>
-  <li><a href="#rank-check" id="toc-rank-check" class="nav-link" data-scroll-target="#rank-check"><span class="header-section-number">13.0.5</span> Rank check</a></li>
-  <li><a href="#cross-checking-at-admin2" id="toc-cross-checking-at-admin2" class="nav-link" data-scroll-target="#cross-checking-at-admin2"><span class="header-section-number">13.0.6</span> Cross-checking at admin2</a></li>
-  <li><a href="#methodology-context" id="toc-methodology-context" class="nav-link" data-scroll-target="#methodology-context"><span class="header-section-number">13.0.7</span> Methodology context</a></li>
-  <li><a href="#what-this-means-for-the-trigger-framework" id="toc-what-this-means-for-the-trigger-framework" class="nav-link" data-scroll-target="#what-this-means-for-the-trigger-framework"><span class="header-section-number">13.0.8</span> What this means for the trigger framework</a></li>
-  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references"><span class="header-section-number">13.0.9</span> References</a></li>
+  <li><a href="#inputs" id="toc-inputs" class="nav-link active" data-scroll-target="#inputs"><span class="header-section-number">B.0.1</span> Inputs</a></li>
+  <li><a href="#zonal-sums" id="toc-zonal-sums" class="nav-link" data-scroll-target="#zonal-sums"><span class="header-section-number">B.0.2</span> Zonal sums</a></li>
+  <li><a href="#same-shape-different-totals" id="toc-same-shape-different-totals" class="nav-link" data-scroll-target="#same-shape-different-totals"><span class="header-section-number">B.0.3</span> Same shape, different totals</a></li>
+  <li><a href="#decomposing-the-per-province-difference" id="toc-decomposing-the-per-province-difference" class="nav-link" data-scroll-target="#decomposing-the-per-province-difference"><span class="header-section-number">B.0.4</span> Decomposing the per-province difference</a></li>
+  <li><a href="#rank-check" id="toc-rank-check" class="nav-link" data-scroll-target="#rank-check"><span class="header-section-number">B.0.5</span> Rank check</a></li>
+  <li><a href="#cross-checking-at-admin2" id="toc-cross-checking-at-admin2" class="nav-link" data-scroll-target="#cross-checking-at-admin2"><span class="header-section-number">B.0.6</span> Cross-checking at admin2</a></li>
+  <li><a href="#methodology-context" id="toc-methodology-context" class="nav-link" data-scroll-target="#methodology-context"><span class="header-section-number">B.0.7</span> Methodology context</a></li>
+  <li><a href="#what-this-means-for-the-trigger-framework" id="toc-what-this-means-for-the-trigger-framework" class="nav-link" data-scroll-target="#what-this-means-for-the-trigger-framework"><span class="header-section-number">B.0.8</span> What this means for the trigger framework</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references"><span class="header-section-number">B.0.9</span> References</a></li>
   </ul>
 </nav>
     </div>
@@ -311,9 +355,9 @@ window.Quarto = {
 </style>
 <a class="home-link" href="../">← Cuba hurricanes AA</a>
 
-<header id="title-block-header" class="quarto-title-block default">
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./appendix_check_quantile_calc.html">Appendices</a></li><li class="breadcrumb-item"><a href="./appendix_population_data.html"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Population Data Validation: WorldPop vs.&nbsp;ONEI</span></a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Appendix 1B: Population Data Validation — WorldPop vs.&nbsp;ONEI</span></h1>
+<h1 class="title">Appendix B — Population Data Validation: WorldPop vs.&nbsp;ONEI</h1>
 </div>
 
 
@@ -331,8 +375,8 @@ window.Quarto = {
 
 
 <p>The trigger framework uses gridded population to estimate exposure inside the ZMA. Before relying on those exposure numbers, this appendix sanity-checks the WorldPop raster we use against an independent official tabulation from ONEI (Oficina Nacional de Estadística e Información de Cuba). The two are not fully independent — both descend from Cuba’s 2012 census — but the comparison still diagnoses (i) whether province-level totals are coherent across products, (ii) where they disagree, and (iii) the order of magnitude of structural uncertainty on absolute counts.</p>
-<section id="inputs" class="level3" data-number="13.0.1">
-<h3 data-number="13.0.1" class="anchored" data-anchor-id="inputs"><span class="header-section-number">13.0.1</span> Inputs</h3>
+<section id="inputs" class="level3" data-number="B.0.1">
+<h3 data-number="B.0.1" class="anchored" data-anchor-id="inputs"><span class="header-section-number">B.0.1</span> Inputs</h3>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 6%">
@@ -361,8 +405,8 @@ window.Quarto = {
 </table>
 <p>The xlsx is published via ONEI’s <em>Observatorio de Igualdad de Género</em>. Despite the “2024” filename, rows are tagged <code>year = 2025</code> (this is the 2025-published projection for the 2024 reference year).</p>
 </section>
-<section id="zonal-sums" class="level3" data-number="13.0.2">
-<h3 data-number="13.0.2" class="anchored" data-anchor-id="zonal-sums"><span class="header-section-number">13.0.2</span> Zonal sums</h3>
+<section id="zonal-sums" class="level3" data-number="B.0.2">
+<h3 data-number="B.0.2" class="anchored" data-anchor-id="zonal-sums"><span class="header-section-number">B.0.2</span> Zonal sums</h3>
 <div id="5d3d6142" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
@@ -629,8 +673,8 @@ Difference: +1,100,778 (+11.29%)</code></pre>
 </div>
 </div>
 </section>
-<section id="same-shape-different-totals" class="level3" data-number="13.0.3">
-<h3 data-number="13.0.3" class="anchored" data-anchor-id="same-shape-different-totals"><span class="header-section-number">13.0.3</span> Same shape, different totals</h3>
+<section id="same-shape-different-totals" class="level3" data-number="B.0.3">
+<h3 data-number="B.0.3" class="anchored" data-anchor-id="same-shape-different-totals"><span class="header-section-number">B.0.3</span> Same shape, different totals</h3>
 <p>The +11% national gap could mean either (a) the two datasets disagree on the spatial distribution of people across provinces, or (b) the spatial distribution is similar and only the national total differs. To tell them apart, compare each province’s <em>share</em> of the national total in both datasets.</p>
 <div id="33cf3974" class="cell" data-execution_count="4">
 <details class="code-fold">
@@ -804,8 +848,8 @@ Difference: +1,100,778 (+11.29%)</code></pre>
 </div>
 </div>
 </section>
-<section id="decomposing-the-per-province-difference" class="level3" data-number="13.0.4">
-<h3 data-number="13.0.4" class="anchored" data-anchor-id="decomposing-the-per-province-difference"><span class="header-section-number">13.0.4</span> Decomposing the per-province difference</h3>
+<section id="decomposing-the-per-province-difference" class="level3" data-number="B.0.4">
+<h3 data-number="B.0.4" class="anchored" data-anchor-id="decomposing-the-per-province-difference"><span class="header-section-number">B.0.4</span> Decomposing the per-province difference</h3>
 <p>Per-province <code>pct_diff</code> ranges from +4% (Guantánamo) to +18% (La Habana). That is not the +11.3% you would get from a pure national rescale. Both components matter and they compose multiplicatively:</p>
 <p><span class="math display">\[\text{WP}_i = \text{ONEI}_i \times \underbrace{\frac{\sum \text{WP}}{\sum \text{ONEI}}}_{\text{rescale}} \times \underbrace{\frac{s^{\text{WP}}_i}{s^{\text{ONEI}}_i}}_{\text{reshape}}\]</span></p>
 <p>where <span class="math inline">\(s_i\)</span> is province <span class="math inline">\(i\)</span>’s share of the national total.</p>
@@ -1001,8 +1045,8 @@ Difference: +1,100,778 (+11.29%)</code></pre>
 </tbody>
 </table>
 </section>
-<section id="rank-check" class="level3" data-number="13.0.5">
-<h3 data-number="13.0.5" class="anchored" data-anchor-id="rank-check"><span class="header-section-number">13.0.5</span> Rank check</h3>
+<section id="rank-check" class="level3" data-number="B.0.5">
+<h3 data-number="B.0.5" class="anchored" data-anchor-id="rank-check"><span class="header-section-number">B.0.5</span> Rank check</h3>
 <p>For applications that rank provinces by exposure, the question is whether the ordering is preserved. 13 of 16 provinces have identical rank between WorldPop and ONEI; the three that swap are a single trio in the middle of the distribution:</p>
 <div id="7ba246f9" class="cell" data-execution_count="7">
 <details class="code-fold">
@@ -1164,8 +1208,8 @@ Difference: +1,100,778 (+11.29%)</code></pre>
 </div>
 <p>The only meaningful rank swap is Artemisa rising 2 places (9th → 11th in ONEI, but 9th in WorldPop), pushing Las Tunas and Guantánamo down one slot each. That is the same east-west reshape made visible on the rank scale.</p>
 </section>
-<section id="cross-checking-at-admin2" class="level3" data-number="13.0.6">
-<h3 data-number="13.0.6" class="anchored" data-anchor-id="cross-checking-at-admin2"><span class="header-section-number">13.0.6</span> Cross-checking at admin2</h3>
+<section id="cross-checking-at-admin2" class="level3" data-number="B.0.6">
+<h3 data-number="B.0.6" class="anchored" data-anchor-id="cross-checking-at-admin2"><span class="header-section-number">B.0.6</span> Cross-checking at admin2</h3>
 <p>If the shared-lineage story is right, we should see the same close agreement at admin2 (municipio). Both sources publish at this scale: CODAB has 168 admin2 polygons, ONEI’s <code>CUB_ADM2_POP_2024.xlsx</code> has 168 rows.</p>
 <p>The pcode systems do not match (CODAB uses <code>CU0201</code>-style, ONEI’s adm2 pcode column is NaN), so the join is on <code>(adm1_name, adm2_name)</code> after Unicode normalisation. The compound key also disambiguates two municipios called “San Luis” (one in Pinar del Río, one in Santiago de Cuba).</p>
 <p>A handful of municipio names have typos or spelling variants on one side (e.g.&nbsp;ONEI’s <code>"aguada de pasajajeros"</code> vs.&nbsp;CODAB’s <code>"aguada de pasajeros"</code>; ONEI’s <code>"la habana del este"</code> vs.&nbsp;CODAB’s <code>"habana del este"</code>). Rather than build a manual fix-up map and risk silently mis-matching, we apply a <strong>stricter quality filter</strong>: keep an admin1 only if <em>every</em> one of its admin2 names matches exactly between CODAB and ONEI under basic Unicode normalisation. If even one municipio in a province has uncertain name alignment, drop the whole province — because if names are uncertain, boundary alignment between the two sources is uncertain too.</p>
@@ -1476,8 +1520,8 @@ Cauto Cristo          Granma           15678.0         19921        -27.0
 <li><strong>The 7 dropped provinces include exactly the densest urban areas</strong> (La Habana, Santiago de Cuba, Cienfuegos). We can say nothing empirically validated about adm2 accuracy there; a polygon-level ONEI–CODAB crosswalk would be needed for a true test.</li>
 </ul>
 </section>
-<section id="methodology-context" class="level3" data-number="13.0.7">
-<h3 data-number="13.0.7" class="anchored" data-anchor-id="methodology-context"><span class="header-section-number">13.0.7</span> Methodology context</h3>
+<section id="methodology-context" class="level3" data-number="B.0.7">
+<h3 data-number="B.0.7" class="anchored" data-anchor-id="methodology-context"><span class="header-section-number">B.0.7</span> Methodology context</h3>
 <p><strong>ONEI projection.</strong> The xlsx is ONEI’s projection from the 2012 <em>Censo de Población y Viviendas</em> (Cuba’s last completed census) using a deterministic cohort-component method via CEPDE under a UNFPA collaboration. The xlsx’s “Methods” cell does not specify the technique explicitly. The known methodological weakness, documented by independent demographers (notably Albizu-Campos, CEDEM/UH), is in emigration accounting:</p>
 <ul>
 <li>Since 2013, ONEI does not classify as emigrants persons who hold a valid Cuban passport and re-enter the country at least once every 24 months, regardless of where they actually live.</li>
@@ -1521,8 +1565,8 @@ Cauto Cristo          Granma           15678.0         19921        -27.0
 </table>
 <p>Both WorldPop timepoints are ONEI products, and the UN WPP 2024 national control itself draws on ONEI. So WorldPop and our reference xlsx share the same 2012-census-rooted lineage and the same emigration blind-spot. R2025A is marked as an <strong>alpha</strong> release by WorldPop, with refinements expected.</p>
 </section>
-<section id="what-this-means-for-the-trigger-framework" class="level3" data-number="13.0.8">
-<h3 data-number="13.0.8" class="anchored" data-anchor-id="what-this-means-for-the-trigger-framework"><span class="header-section-number">13.0.8</span> What this means for the trigger framework</h3>
+<section id="what-this-means-for-the-trigger-framework" class="level3" data-number="B.0.8">
+<h3 data-number="B.0.8" class="anchored" data-anchor-id="what-this-means-for-the-trigger-framework"><span class="header-section-number">B.0.8</span> What this means for the trigger framework</h3>
 <ul>
 <li><strong>At admin1, rank- and share-based comparisons are robust.</strong> 13/16 ranks match exactly, all 16 shares match within 1.1 pp, and r ≈ 0.997. Exposure rankings used for provincial prioritisation are insensitive to the choice between WorldPop and ONEI.</li>
 <li><strong>At admin2, the raster is not a reliable per-municipio estimator — not even in provinces where names and boundaries align cleanly.</strong> After restricting to the 9 admin1s with perfect adm2-name matches between CODAB and ONEI (89 municipios), the per-adm2 <code>pct_diff</code> <em>median</em> tracks each province’s adm1 <code>pct_diff</code> closely, but the <em>spread</em> is ±20–80 percentage points within province. The dasymetric preservation property holds only at WorldPop’s internal nested input units (~161 for Cuba), not at CODAB’s published 168 — so within-province allocation is driven by the random-forest density
@@ -1533,8 +1577,8 @@ Cauto Cristo          Granma           15678.0         19921        -27.0
 <li><strong>The +11% gap between WorldPop and the xlsx is not evidence about real population.</strong> It is mostly a difference between UN WPP 2024 (WorldPop’s national control) and ONEI’s later 2025 projection (the xlsx). The ~6% east-west reshape on top is consistent with WorldPop’s 2022 input pre-dating ONEI’s 2025 redistribution of share away from eastern Cuba.</li>
 </ul>
 </section>
-<section id="references" class="level3" data-number="13.0.9">
-<h3 data-number="13.0.9" class="anchored" data-anchor-id="references"><span class="header-section-number">13.0.9</span> References</h3>
+<section id="references" class="level3" data-number="B.0.9">
+<h3 data-number="B.0.9" class="anchored" data-anchor-id="references"><span class="header-section-number">B.0.9</span> References</h3>
 <ul>
 <li>WorldPop. <em>Global Demographic Data: Public Release R2025A V1</em>, September
 <ol start="2025" type="1">
@@ -1953,13 +1997,13 @@ Cauto Cristo          Granma           15678.0         19921        -27.0
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="./appendix_check_quantile_calc.html" class="pagination-link" aria-label="Appendix 1A: Checking the Monitoring Rainfall Calculation">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Appendix 1A: Checking the Monitoring Rainfall Calculation</span></span>
+      <a href="./appendix_check_quantile_calc.html" class="pagination-link" aria-label="Checking the Monitoring Rainfall Calculation">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Checking the Monitoring Rainfall Calculation</span></span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="./appendix_methodology_map.html" class="pagination-link" aria-label="Appendix 1C: Wind Footprint over Population">
-        <span class="nav-page-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Appendix 1C: Wind Footprint over Population</span></span> <i class="bi bi-arrow-right-short"></i>
+      <a href="./appendix_methodology_map.html" class="pagination-link" aria-label="Wind Footprint over Population">
+        <span class="nav-page-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Wind Footprint over Population</span></span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
