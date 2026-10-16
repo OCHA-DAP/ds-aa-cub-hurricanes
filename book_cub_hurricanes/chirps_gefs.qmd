@@ -38,6 +38,7 @@ The module has five classes:
 ### Setup
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -74,8 +75,6 @@ cuba_gdf = codab.load_codab_from_blob()
 cuba_gdf = cuba_gdf[cuba_gdf["ADM0_PCODE"] == "CU"]
 cuba_gdf = cuba_gdf[["ADM0_ES", "ADM0_PCODE", "geometry"]].copy()
 
-print(f"Loaded Cuba geometry with {len(cuba_gdf)} features")
-print(f"Total bounds: {cuba_gdf.total_bounds}")
 cuba_gdf.head()
 ```
 
@@ -117,8 +116,6 @@ print(f"Total forecasts: {total_files} files")
 downloader = ChirpsGefsDownloader(config)
 loader = ChirpsGefsLoader(config)
 processor = ChirpsGefsProcessor(config)
-
-print("Initialized all components successfully")
 ```
 
 Each file is one issue date and one valid date. The source URL and blob path follow from the pair:

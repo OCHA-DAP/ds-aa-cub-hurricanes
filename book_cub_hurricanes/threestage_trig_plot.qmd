@@ -19,6 +19,7 @@ and looked for combinations that maximise:
 - Sum of `Amount in US$` from CERF for the triggered storms
 
 ```{python}
+#| include: false
 %load_ext autoreload
 %autoreload 2
 ```
@@ -517,7 +518,7 @@ df_metrics_balanced_high
 Option 1 (combination 60832):
 
 ```{python}
-plot_selected_threshs(60832)
+plot_selected_threshs(60832);
 ```
 
 
@@ -557,7 +558,7 @@ df_metrics_high_impact
 Option 2 (combination 321743):
 
 ```{python}
-plot_selected_threshs(321743)
+plot_selected_threshs(321743);
 ```
 
 ```{python}
@@ -599,7 +600,7 @@ df_metrics_high_cerf
 Option 3 (combination 91667):
 
 ```{python}
-plot_selected_threshs(91667)
+plot_selected_threshs(91667);
 ```
 
 ```{python}
@@ -632,7 +633,7 @@ df_twoyears
 ```
 
 ```{python}
-plot_selected_threshs(312998)
+plot_selected_threshs(312998);
 ```
 
 ```{python}
@@ -662,7 +663,7 @@ df_oneyear
 ```
 
 ```{python}
-plot_selected_threshs(321972)
+plot_selected_threshs(321972);
 ```
 
 ```{python}
@@ -706,7 +707,7 @@ df_fcast_only
 ```
 
 ```{python}
-plot_selected_threshs(25477)  # not sure if worth leaving in book.
+plot_selected_threshs(25477)  # not sure if worth leaving in book.;
 ```
 
 ## Simplified triggers (Phase 1)
@@ -735,7 +736,7 @@ plot_thresh_scatter(
     "Amount in US$",
     color="n_years_diff_abs",
     zero_intercept=True,
-)
+);
 ```
 
 ```{python}
@@ -745,7 +746,7 @@ plot_thresh_scatter(
     color="n_years_diff_abs",
     same_wind=True,
     zero_intercept=True,
-)
+);
 ```
 
 ```{python}
@@ -755,7 +756,7 @@ plot_thresh_scatter(
     color="n_years_diff_abs",
     same_rain_col=True,
     zero_intercept=True,
-)
+);
 ```
 
 ```{python}
@@ -766,7 +767,7 @@ plot_thresh_scatter(
     same_rain_col=True,
     same_wind=True,
     zero_intercept=True,
-)
+);
 ```
 
 ```{python}
@@ -777,7 +778,7 @@ df_simplified.sort_values(
 ```
 
 ```{python}
-plot_selected_threshs(321844)
+plot_selected_threshs(321844);
 ```
 
 ```{python}
@@ -865,7 +866,7 @@ df_metrics_reasonable_bestcerf[
 Among the reasonable combinations: at least USD 28 million of CERF allocations, closest to balanced (`n_years_diff == 1`), and the lowest observational wind threshold.
 
 ```{python}
-plot_selected_threshs(13136)
+plot_selected_threshs(13136);
 ```
 
 ```{python}
@@ -887,7 +888,7 @@ df_metrics_reasonable_bestimpact
 ```
 
 ```{python}
-plot_selected_threshs(321972)
+plot_selected_threshs(321972);
 ```
 
 ```{python}

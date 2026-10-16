@@ -4,6 +4,7 @@
 IBTrACS [@knapp2010ibtracs] is the global archive of historical storm tracks. We load the track points within the ZMA's bounds from the team database and plot them as a check.
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -25,9 +26,6 @@ gdf_zma = zma.load_zma()
 total_bounds = gdf_zma.total_bounds
 ```
 
-```{python}
-total_bounds
-```
 
 ```{python}
 df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
@@ -37,9 +35,6 @@ df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
 df_all
 ```
 
-```{python}
-df_all.dtypes
-```
 
 ```{python}
 def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:

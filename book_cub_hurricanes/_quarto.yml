@@ -53,6 +53,7 @@ format:
     smooth-scroll: true
 
 execute:
+  warning: false     # warnings are noise in the rendered book
   freeze: auto        # Freeze execution to avoid re-running code chunks
   cache: false         # Enable caching for faster re-renders
 

@@ -7,6 +7,7 @@ IMERG is NASA's satellite rainfall estimate. This chapter loads daily IMERG rain
 
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -27,7 +28,6 @@ pcode = "CU"
 ```
 
 ```{python}
-%%time
 # load all IMERG data - bit slow
 df_imerg = imerg.load_imerg(pcode)
 ```

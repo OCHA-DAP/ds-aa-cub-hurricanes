@@ -22,6 +22,9 @@ from src.monitoring.monitoring_utils import (
     IMERGRasterProcessor,
 )
 from src.constants import PROJECT_PREFIX, THRESHS
+
+import logging
+logging.getLogger("src.monitoring.monitoring_utils").setLevel(logging.WARNING)
 ```
 
 
@@ -33,7 +36,6 @@ print("=" * 50)
 blob_name = (
     f"{PROJECT_PREFIX}/processed/storm_stats/zma_stats_imerg_quantiles.parquet"
 )
-print(f"Loading pre-computed aggregations from: {blob_name}")
 try:
     df_precomputed = stratus.load_parquet_from_blob(blob_name)
     print(f"Loaded {len(df_precomputed)} storms from pre-computed data")
@@ -45,7 +47,6 @@ except Exception as e:
     df_precomputed = None
 
 # Load historical observational tracks from IBTrACS (same as used in imerg_aggregation.md)
-print(f"\nLoading historical observational tracks from IBTrACS...")
 try:
     # Load the same historical data used to create the pre-computed aggregations
     ibtracs_blob_name = (
@@ -54,7 +55,6 @@ try:
     obsv_tracks = stratus.load_parquet_from_blob(ibtracs_blob_name)
 
     # Load storm metadata to get SID to ATCF mapping (following your approach)
-    print("Loading SID to ATCF mapping...")
     df_storms = ibtracs.load_storms()
 
     # Filter to relevant storms and get SID-ATCF mapping
@@ -104,10 +104,8 @@ monitor = CubaHurricaneMonitor()
 raster_processor = IMERGRasterProcessor(quantile=0.8)
 
 # Step 1: Pre-filter to find ALL qualifying storms first
-print(f"\nFinding all qualifying storms...")
 qualifying_storms = []
 total_storms = obsv_tracks["sid"].nunique()
-print(f"   Checking {total_storms} total storms...")
 
 # Debug: Let's analyze the filtering process step by step
 wind_qualified = []
@@ -155,16 +153,6 @@ for sid, group in obsv_tracks.groupby("sid"):
                     "min_distance": min_distance,
                     "group_data": group,  # Store for later processing
                 }
-            )
-
-        # Debug output for first few storms
-        if (
-            len(wind_qualified + zma_qualified + both_qualified) <= 20
-        ):  # Show first 20
-            wind_status = "yes" if max_wind >= THRESHS["obsv"]["s"] else "no"
-            zma_status = "yes" if has_zma_intersection else "no"
-            print(
-                f"   {sid}: Wind={wind_status}({max_wind:.1f}kt) ZMA={zma_status}({min_distance:.1f}km)"
             )
 
     except Exception as e:
@@ -230,9 +218,6 @@ print(f"\nFinal dataset: {len(qualifying_storms)} storms for analysis")
 
 # Step 2: Now sample from qualifying storms for detailed processing
 sample_size = min(10, len(qualifying_storms))
-print(
-    f"\nProcessing detailed analysis for {sample_size} qualifying storms..."
-)
 
 
 for i, storm_info in enumerate(qualifying_storms[:sample_size]):
@@ -240,10 +225,6 @@ for i, storm_info in enumerate(qualifying_storms[:sample_size]):
     atcf_id = storm_info["atcf_id"]
     max_wind = storm_info["max_wind"]
     group = storm_info["group_data"]
-
-    print(
-        f"   Processing {i+1}/{sample_size}: {sid} (wind={max_wind:.1f} kt)..."
-    )
 
     try:
         # Now do the expensive interpolation for detailed analysis
@@ -261,7 +242,6 @@ for i, storm_info in enumerate(qualifying_storms[:sample_size]):
         gdf = monitor._create_track_geodataframe(df_interp)
         gdf_zma = monitor._filter_by_zma(gdf)
 
-        print(f"     {sid}: Detailed analysis complete")
 
         # Store storm info for comparison - use original group data for dates
         storm_start = storm_info["storm_start"]
@@ -283,15 +263,10 @@ print(f"   Storms available for analysis: {len(qualifying_storms)}")
 print(f"   Storms processed for detailed analysis: {sample_size}")
 
 if len(qualifying_storms) > 0:
-    print(
-        f"\nRunning on-the-fly rainfall calculations for qualifying storms..."
-    )
-
     validation_results = []
 
     # Process more storms for better validation - use at least 5-10 storms
     rainfall_sample_size = min(10, len(qualifying_storms))
-    print(f"   Processing rainfall for {rainfall_sample_size} storms...")
 
     for storm_info in qualifying_storms[:rainfall_sample_size]:
         sid = storm_info["sid"]
@@ -299,16 +274,11 @@ if len(qualifying_storms) > 0:
         storm_start = storm_info["storm_start"]
         storm_end = storm_info["storm_end"]
 
-        print(f"   Processing {sid} (ATCF: {atcf_id})...")
 
         # Extend period by 1 day on each side (same as monitoring_utils)
         analysis_start = storm_start - pd.Timedelta(days=1)
         analysis_end = storm_end + pd.Timedelta(days=1)
 
-        print(f"     Storm period: {storm_start.date()} to {storm_end.date()}")
-        print(
-            f"     Analysis period: {analysis_start.date()} to {analysis_end.date()}"
-        )
 
         try:
             # Calculate rainfall using monitoring_utils method
@@ -325,7 +295,6 @@ if len(qualifying_storms) > 0:
             # Get max rainfall for the period (same as monitoring_utils)
             max_rainfall = storm_rainfall_df["roll2_sum"].max()
 
-            print(f"     On-the-fly calculation: {max_rainfall:.2f} mm")
 
             validation_results.append(
                 {
@@ -377,13 +346,6 @@ if len(qualifying_storms) > 0:
             else:
                 print(f"     No exact SID match found for: {original_sid}")
 
-    print(f"\nValidation complete!")
-    print(
-        f"Note: This is a basic validation. Full comparison would require:"
-    )
-    print(f"   - Exact SID matching between datasets")
-    print(f"   - Same date ranges and quantile calculations")
-    print(f"   - Processing all storms, not just a subset")
 else:
     print(f"\nNo qualifying storms found in the sample. Try:")
     print(f"   - Increasing the storm limit (currently 10)")

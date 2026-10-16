@@ -15,6 +15,7 @@ Nothing is written to the database here. Step 7 only shows what would be stored.
 ## Setup and Configuration
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -44,10 +45,6 @@ TABLE_NAME = f'{PROJECT_PREFIX.replace("-", "_")}_chirps_gefs'
 adm0 = codab.load_codab_from_blob()
 cuba_bounds = adm0.total_bounds
 
-print(f"Cuba Administrative Boundaries:")
-print(f"  Longitude: {cuba_bounds[0]:.2f}° to {cuba_bounds[2]:.2f}°")
-print(f"  Latitude: {cuba_bounds[1]:.2f}° to {cuba_bounds[3]:.2f}°")
-print(f"  Total area: {adm0.geometry.area.sum():.2f} square degrees")
 
 # Display the geometry
 adm0.plot(figsize=(10, 6), color='lightblue', edgecolor='navy')
@@ -63,10 +60,6 @@ plt.show()
 config = ChirpsGefsConfig(geometry=adm0, region_name="databricks_run")
 loader = ChirpsGefsLoader(config)
 
-print(f"CHIRPS-GEFS Configuration:")
-print(f"  Region: {config.region_name}")
-print(f"  Leadtime days: {config.leadtime_days}")
-print(f"  Date range: {config.start_date} to {config.end_date}")
 ```
 
 ## Step 1: Data Loading for Single Issue Date
@@ -76,8 +69,6 @@ A lead time with no file in blob storage is reported and skipped.
 ```{python}
 # Select a specific issue date for demonstration
 issue_date = pd.Timestamp("2024-10-15")  # Example issue date
-print(f"Processing issue date: {issue_date.strftime('%Y-%m-%d')}")
-print(f"Loading {config.leadtime_days} days of forecasts...")
 
 # Load all leadtimes for this issue date (this is one iteration of the main loop)
 das_i = []
@@ -143,7 +134,6 @@ if das_i:
 ```{python}
 # Concatenate all leadtimes into a single time series dataset
 if das_i:
-    print("Concatenating forecasts into time series...")
     
     # This combines all 16 leadtimes into a single xarray Dataset
     da_i = xr.concat(das_i, dim="valid_date")
@@ -196,28 +186,13 @@ if das_i:
 ```{python}
 # Apply precise spatial clipping to Cuba's boundaries
 if das_i:
-    print("Applying spatial clipping to Cuba boundaries...")
 
     # Clip the time series data to Cuba's exact geometry
     da_i_clip = da_i.rio.clip(adm0.geometry, all_touched=True)
-    # Show data size comparison
-    print(f"  Non-NaN pixels before clipping: {da_i.count().max().values:.0f}")
-    print(
-        f"  Non-NaN pixels after clipping: {da_i_clip.count().max().values:.0f}"
-    )
 
     print(f"Spatial Clipping Results:")
     print(f"  Original shape: {da_i.shape}")
     print(f"  Clipped shape: {da_i_clip.shape}")
-
-    # Calculate reduction in data size
-    original_pixels = da_i.x.size * da_i.y.size
-    clipped_pixels = da_i_clip.count().max().values
-    reduction = (1 - clipped_pixels / original_pixels) * 100
-
-    print(f"  Original pixels: {original_pixels:,}")
-    print(f"  Valid pixels after clipping: {int(clipped_pixels):,}")
-    print(f"  Data reduction: {reduction:.1f}%")
 ```
 
 ```{python}
@@ -256,7 +231,6 @@ if das_i:
 ```{python}
 # Create 2-day rolling sums for enhanced precipitation analysis
 if das_i:
-    print("Creating 2-day rolling sums...")
     
     # Calculate 2-day rolling precipitation sums
     da_rolling2 = da_i_clip.rolling(valid_date=2).sum()
@@ -302,7 +276,6 @@ if das_i:
 ```{python}
 # Calculate quantiles across space for each time step
 if das_i:
-    print("Calculating spatial quantiles...")
     
     # Define quantiles to calculate
     quantiles = [0.5, 0.8, 0.9, 0.95, 0.99]
@@ -311,7 +284,6 @@ if das_i:
     quantile_results = {}
     
     for quantile in quantiles:
-        print(f"  Calculating {quantile*100:.0f}th percentile...")
         
         # Calculate spatial quantiles for each day
         da_quantile_threshs = da_rolling2.quantile(quantile, dim=["x", "y"])
@@ -357,7 +329,6 @@ if das_i and quantile_results:
 ```{python}
 # Calculate spatial means for each time step
 if das_i:
-    print("Calculating spatial means...")
     
     # Calculate mean precipitation across all pixels in Cuba for each day
     da_means = da_rolling2.mean(dim=["x", "y"])
@@ -399,7 +370,6 @@ if das_i:
 ```{python}
 # Transform quantile data into database format
 if das_i and quantile_results:
-    print("Preparing data for database storage...")
     
     # Demonstrate data transformation for quantiles
     sample_quantile = 0.8  # 80th percentile
