@@ -2,35 +2,43 @@
 jupyter: ds-aa-cub-hurricanes
 ---
 
-## CHIRPS GEFS Precipitation Forecasts
+## CHIRPS-GEFS Precipitation Forecasts
 
 <!-- markdownlint-disable MD013 -->
 
-The CHIRPS GEFS (Climate Hazards Group InfraRed Precipitation with Station data - Global Ensemble Forecast System) module demonstrates efficient COG-based raster processing workflows for precipitation forecast data. This chapter focuses on the technical implementation of cloud-optimized spatial data processing, showing how to work with large raster datasets efficiently using two-stage spatial clipping.
+CHIRPS-GEFS is the Climate Hazards Center's 16-day daily precipitation forecast, published as global Cloud-Optimized GeoTIFFs (COGs). The forecast part of the trigger takes its rainfall from it. This chapter describes `src/datasources/chirps_gefs.py`, which downloads the forecasts for Cuba, stores them in blob storage and summarises them over the country. The next chapter goes through the processing for a single issue date.
 
-### COG Processing Workflow Overview
+### How the module works
 
-This system demonstrates best practices for working with Cloud-Optimized GeoTIFFs:
+The rasters are clipped in two stages. On download, each global COG (about 7,200 × 3,600 pixels) is opened over HTTP and cut to Cuba's bounding box (about 218 × 70 pixels) before it is written to blob storage. Because COGs can be read by window, only that box is transferred:
 
-- **Two-Stage Spatial Clipping**: Bounding box filtering during streaming + precise geometry clipping during processing
-- **99.9% Data Reduction**: Global datasets (26M pixels) → Regional subsets (22K pixels) 
-- **Direct COG Streaming**: No temporary files, immediate spatial filtering
-- **Modular Architecture**: Configurable components for download, storage, and processing
-- **Custom Zonal Statistics Ready**: Framework prepared for implementing custom spatial statistics
+```python
+# ChirpsGefsDownloader.download_single_file
+with rxr.open_rasterio(source_url) as da_global:
+    da_aoi = da_global.rio.clip_box(*self.config.geometry.total_bounds)
+    stratus.upload_cog_to_blob(da_aoi, blob_path)
+```
 
-### Technical Architecture
+When the stored rasters are processed, they are clipped again to Cuba's actual boundary, which removes sea pixels inside the box:
 
-The system uses five main classes that demonstrate different aspects of COG processing:
+```python
+# ChirpsGefsProcessor.process_spatial_mean
+da_clipped = da_loaded.rio.clip(self.config.geometry.geometry, all_touched=True)
+spatial_mean = da_clipped.mean(dim=["x", "y"]).values
+```
 
-- **ChirpsGefsConfig**: Parameter validation and configuration management
-- **ChirpsGefsDownloader**: COG streaming and spatial cropping during download
-- **ChirpsGefsLoader**: Efficient loading of processed COG data from storage
-- **ChirpsGefsProcessor**: Spatial statistics and geometry-based clipping
-- **ChirpsGefsManager**: High-level workflow orchestration
+The module has five classes:
 
-### Setting Up the Processing Environment
+- `ChirpsGefsConfig`: the region geometry, date range, number of lead times and blob location.
+- `ChirpsGefsDownloader`: builds source URLs and blob paths, and downloads, clips and uploads files.
+- `ChirpsGefsLoader`: loads stored rasters, one at a time or as a lazily loaded (dask) time series.
+- `ChirpsGefsProcessor`: clips to the region geometry and computes spatial means.
+- `ChirpsGefsManager`: runs downloading and processing together.
+
+### Setup
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -57,9 +65,9 @@ from src.datasources import codab
 from src.constants import *
 ```
 
-### Demonstration Geometry: Cuba Administrative Boundaries
+### Cuba geometry
 
-We'll use Cuba as our example geometry to demonstrate the spatial processing efficiency:
+The national boundary from the CODAB, and its bounding box, which sets the download window:
 
 ```{python}
 # Load Cuba administrative boundaries for demonstration
@@ -67,352 +75,8 @@ cuba_gdf = codab.load_codab_from_blob()
 cuba_gdf = cuba_gdf[cuba_gdf["ADM0_PCODE"] == "CU"]
 cuba_gdf = cuba_gdf[["ADM0_ES", "ADM0_PCODE", "geometry"]].copy()
 
-print(f"Loaded Cuba geometry with {len(cuba_gdf)} features")
-print(f"Total bounds: {cuba_gdf.total_bounds}")
 cuba_gdf.head()
 ```
-
-## Getting Started: Download Your First COGs
-
-Let's start with the most practical example - downloading a small amount of data to test the system:
-
-### Step 1: Create a Small Test Configuration
-
-```{python}
-# Start small: 2 days, 5 leadtimes = 10 files total
-config = ChirpsGefsConfig(
-    geometry=cuba_gdf,
-    region_name="cuba_test",
-    start_date="2000-01-01",  # Single day to start
-    end_date="2024-12-11",    # Just 2 days  
-    leadtime_days=5,          # First 5 leadtimes only
-    verbose=True
-)
-
-print(f"🌍 Region: {config.region_name}")
-print(f"📅 Date range: {config.start_date} to {config.end_date}")
-print(f"⏱️  Leadtime: {config.leadtime_days} days")
-
-# Calculate total number of files: days × leadtimes
-date_range = pd.date_range(config.start_date, config.end_date, freq='D')
-total_files = len(date_range) * config.leadtime_days
-print(f"📊 Total forecasts: {total_files} files (small test!)")
-```
-
-### Step 2: Download the COGs
-
-```{python}
-# | eval: false
-
-# Initialize downloader
-downloader = ChirpsGefsDownloader(config)
-
-# Download just our small test dataset
-download_stats = downloader.download_date_range(
-    config.start_date, 
-    config.end_date
-)
-
-print("Download Results:")
-print(f"✅ Successful: {download_stats['success']}")
-print(f"❌ Failed: {download_stats['failed']}")
-print(f"📊 Total attempted: {download_stats['total']}")
-```
-
-### Step 3: Load and Examine Your Downloaded Rasters
-
-```{python}
-# | eval: false
-
-# Load and examine one of the downloaded rasters
-loader = ChirpsGefsLoader(config)
-
-# Option 1: Load a single specific forecast
-da_single = loader.load_raster(
-    issue_date=pd.Timestamp("2024-12-10"),
-    valid_date=pd.Timestamp("2024-12-12"),
-)
-
-print("Single COG Properties:")
-print(f"✅ Shape: {da_single.shape}")
-print(f"📐 CRS: {da_single.rio.crs}")
-print(f"📏 Resolution: {da_single.rio.resolution()}")
-print(f"🗺️  Bounds: {da_single.rio.bounds()}")
-print(f"💧 Data range: {da_single.min().values:.2f} to {da_single.max().values:.2f} mm/day")
-print(f"📊 Data size: {da_single.nbytes / 1024:.1f} KB (compare to ~103 MB global!)")
-```
-
-```{python}
-# | eval: false
-
-# Option 2: Load entire time series from your configuration
-# ⚡ OPTIMIZED: Uses lazy loading with dask for instant loading!
-ds_timeseries = loader.load_raster_time_series(
-    start_date = "2024-12-10",
-    end_date = "2024-12-11",
-    chunks = {"x": -1, "y": -1},  # Full spatial chunks (optimal for small regions)
-    lazy = True  # Default: data loads on-demand for maximum speed
-)
-
-print("\n⚡ Time Series Dataset Properties (Lazy Loading):")
-print(f"✅ Dataset dimensions: {dict(ds_timeseries.dims)}")
-print(f"📅 Issue dates: {len(ds_timeseries.issue_date)} dates")
-print(f"📅 Valid dates: {len(ds_timeseries.valid_date)} dates")
-print(f"⏱️  Leadtimes: {len(ds_timeseries.leadtime)} leadtimes")
-
-if "precipitation" in ds_timeseries.data_vars:
-    precip = ds_timeseries.precipitation
-    print(f"💧 Precipitation range: {precip.min().values:.2f} to {precip.max().values:.2f} mm/day")
-    print(f"📊 Memory usage: Lazy (loads on access)")
-    print(f"🚀 Processing mode: {ds_timeseries.attrs.get('processing_mode', 'unknown')}")
-
-    # Show some sample data structure
-    print(f"\nSample coordinate values:")
-    print(f"  Issue dates: {[str(d.date()) for d in ds_timeseries.issue_date.values[:3]]}")
-    print(f"  Valid dates: {[str(d.date()) for d in ds_timeseries.valid_date.values[:3]]}")
-    print(f"  Leadtimes: {ds_timeseries.leadtime.values[:3]}")
-
-print("\n💡 Pro Tip: Data is only loaded from blob storage when you access it!")
-print("   This makes dataset creation nearly instantaneous.")
-```
-
-::: {.callout-tip title="Performance Optimization"}
-The `load_raster_time_series` method now uses **lazy loading with dask** for optimal performance:
-
-**🚀 Speed Benefits:**
-- **Instant dataset creation** - no waiting for file downloads
-- **Parallel data access** - multiple files loaded simultaneously when needed  
-- **Memory efficient** - only requested data loaded into memory
-- **Optimized chunks** - customize chunk sizes for your analysis pattern
-
-**⚙️ Customization Options:**
-```python
-# For small regions like Cuba (default - prevents warnings)
-chunks = {"x": -1, "y": -1}  # Full spatial chunks
-
-# For larger regions or custom analysis
-chunks = {"x": 512, "y": 512, "time": 5}  
-
-# Let dask decide automatically
-chunks = None  # or {} 
-```
-
-**🔧 Dask Optimization (v2.0):**
-- **Fixed chunk multiplication warning** - eliminated "Increasing number of chunks by factor of 11" warning
-- **Single concat operation** - replaced multiple concat operations with optimized single operation
-- **Automatic rechunking** - applies consistent chunking after concatenation operations
-- **Optimal chunking strategy** - `{"x": -1, "y": -1}` prevents fragmentation for small regions
-
-**📊 Performance Impact:**
-- ✅ **Eliminated dask warnings** - no more chunk multiplication alerts
-- ✅ **Faster loading** - 50-70% reduction in dataset creation time
-- ✅ **Better memory usage** - consistent chunking reduces overhead
-
-**🔧 Chunking Strategy:**
-The default `{"x": -1, "y": -1}` prevents dask performance warnings by using full spatial chunks for small regional COGs (~220×100 pixels for Cuba). This is optimal for regions smaller than typical chunk sizes.
-:::
-    print(f"  Leadtimes: {ds_timeseries.leadtime.values[:3]}")
-```
-
-::: {.callout-note}
-
-**Note**: If you get an `AttributeError` about `load_raster_time_series` not being found, restart your Jupyter kernel or reload the module:
-
-```python
-import importlib
-from src.datasources import chirps_gefs
-importlib.reload(chirps_gefs)
-from src.datasources.chirps_gefs import ChirpsGefsLoader
-loader = ChirpsGefsLoader(config)
-```
-
-:::
-
-### Step 4: Using Your Test Script Configuration
-
-If you've already run the `test_download_chirps_gefs.py` script, you can use the exact same configuration to load time series data:
-
-```{python}
-# | eval: false
-
-# Create the EXACT same configuration as your test script
-config_dbx = ChirpsGefsConfig(
-    geometry=cuba_gdf,
-    region_name="databricks_run",
-    start_date="2000-01-01",  # Single day to start
-    end_date="2025-06-17",  # Just 2 days
-    leadtime_days=16,  # First 5 leadtimes only
-    verbose=True,
-)
-
-# Initialize loader with the same config
-loader_dbx = ChirpsGefsLoader(config_dbx)
-
-print(f"🎯 Configuration matches test_download_chirps_gefs.py:")
-print(f"   Region: {config_dbx.region_name}")
-print(f"   Dates: {config_dbx.start_date} to {config_dbx.end_date}")
-print(f"   Leadtimes: {config_dbx.leadtime_days} days")
-
-# Load time series using the downloaded data
-ds_test = loader_dbx.load_raster_time_series(
-    start_date="2001-12-13",
-    end_date="2001-12-23",
-    chunks={
-        "x": -1,
-        "y": -1,
-    },  # Full spatial chunks (optimal for small regions)
-    lazy=True,  # Default: data loads on-demand for maximum speed
-)
-
-print(f"\n✅ Loaded time series from your test data:")
-print(f"📊 Dataset dimensions: {dict(ds_test.dims)}")
-print(f"📅 Issue dates: {len(ds_test.issue_date)} dates")
-print(f"📅 Valid dates: {len(ds_test.valid_date)} dates")
-print(f"⏱️  Leadtimes: {len(ds_test.leadtime)} leadtimes")
-
-# Show the actual coordinate values
-print(f"\n📋 Coordinate Details:")
-print(f"   Issue dates: {[str(d.date()) for d in ds_test.issue_date.values]}")
-print(
-    f"   Valid dates: {[str(d.date()) for d in ds_test.valid_date.values[:5]]}..."
-)
-print(f"   Leadtimes: {ds_test.leadtime.values}")
-
-if "precipitation" in ds_test.data_vars:
-    precip = ds_test.precipitation
-    print(f"\n💧 Precipitation Analysis:")
-    print(
-        f"   Data range: {precip.min().values:.2f} to {precip.max().values:.2f} mm/day"
-    )
-    print(
-        f"   Memory usage: {ds_test.attrs.get('processing_mode', 'unknown')}"
-    )
-    print(f"   Shape: {precip.shape}")
-
-# Demonstrate lazy loading performance
-print(f"\n⚡ Lazy Loading Demo:")
-print("   Dataset creation: Instant!")
-print("   Data access: Only when needed")
-print("   Memory usage: Minimal until computation")
-```
-
-### Performance Optimization Deep Dive
-
-The optimized `load_raster_time_series` method provides significant performance improvements:
-
-```{python}
-# | eval: false
-
-# ⚡ Performance Comparison Example
-import time
-
-# Method 1: Optimized lazy loading (FAST)
-start_time = time.time()
-ds_lazy = loader.load_raster_time_series(
-    start_date="2024-12-10",
-    end_date="2024-12-11", 
-    lazy=True  # Uses dask lazy loading
-)
-lazy_time = time.time() - start_time
-
-print(f"⚡ Lazy loading time: {lazy_time:.2f} seconds")
-print(f"📊 Dataset shape: {ds_lazy.precipitation.shape}")
-print(f"💾 Memory usage: {ds_lazy.attrs['processing_mode']}")
-
-# Accessing data triggers actual loading
-print("\n🔥 On-demand data loading:")
-start_compute = time.time()
-mean_precip = ds_lazy.precipitation.mean().compute()  # This loads data
-compute_time = time.time() - start_compute
-
-print(f"   Computation time: {compute_time:.2f} seconds")
-print(f"   Mean precipitation: {mean_precip.values:.2f} mm/day")
-
-# Customize chunks for your workflow
-print("\n⚙️ Chunk Optimization:")
-chunks_options = {
-    "small_regions": {"x": -1, "y": -1},               # Full spatial (Cuba, small countries)
-    "large_regions": {"x": 512, "y": 512},             # Chunked spatial (large countries)  
-    "time_analysis": {"x": -1, "y": -1, "time": 10},   # Chunked time dimension
-    "auto_chunks": None                                 # Let dask decide
-}
-
-for name, chunks in chunks_options.items():
-    ds_chunked = loader.load_raster_time_series(
-        start_date="2024-12-10",
-        end_date="2024-12-11",
-        chunks=chunks
-    )
-    print(f"   {name}: {chunks}")
-```
-
-### Step 5: Analyze Your Time Series Data
-
-```{python}
-# | eval: false
-
-# Working with the loaded time series dataset
-ds = loader.load_raster_time_series()
-
-# Example 1: Extract data for a specific issue date
-issue_dec10 = ds.sel(issue_date="2024-12-10")
-print(f"Dec 10 issue forecast shape: {issue_dec10.precipitation.shape}")
-print(f"Leadtimes available: {issue_dec10.leadtime.values}")
-
-# Example 2: Extract data for a specific valid date (across all issue dates)
-valid_dec12 = ds.sel(valid_date="2024-12-12", method="nearest")
-print(f"Dec 12 valid forecasts shape: {valid_dec12.precipitation.shape}")
-print(
-    f"Issue dates that forecast Dec 12: {[str(d.date()) for d in valid_dec12.issue_date.values]}"
-)
-
-# Example 3: Calculate spatial mean for each forecast
-spatial_means = ds.precipitation.mean(dim=["x", "y"])
-print(f"Spatial means shape: {spatial_means.shape}")
-print(f"Sample spatial means: {spatial_means.values.flatten()[:5]} mm/day")
-
-# Example 4: Create a summary DataFrame
-summary_data = []
-for issue_dt in ds.issue_date.values:
-    for valid_dt in ds.valid_date.values:
-        for leadtime in ds.leadtime.values:
-            try:
-                precip_data = ds.precipitation.sel(
-                    issue_date=issue_dt, valid_date=valid_dt, leadtime=leadtime
-                )
-                mean_precip = float(precip_data.mean().values)
-
-                summary_data.append(
-                    {
-                        "issue_date": pd.to_datetime(issue_dt).date(),
-                        "valid_date": pd.to_datetime(valid_dt).date(),
-                        "leadtime_days": int(leadtime),
-                        "mean_precipitation_mm_day": mean_precip,
-                    }
-                )
-            except (KeyError, ValueError):
-                # Skip if combination doesn't exist
-                continue
-
-df_summary = pd.DataFrame(summary_data)
-print(f"\nSummary DataFrame:")
-print(f"Shape: {df_summary.shape}")
-print(df_summary.head())
-```
-
-## TBD
-
-## Understanding What Just Happened: COG Processing Deep Dive
-
-Now that you've successfully downloaded your first COGs, let's understand the technical details of what made this so efficient:
-
-### Spatial Efficiency: Two-Stage Clipping Approach
-
-The key innovation in this workflow is the two-stage spatial processing that dramatically reduces data transfer and processing requirements:
-
-The key innovation in this workflow is the two-stage spatial processing that dramatically reduces data transfer and processing requirements:
-
-**CHIRPS GEFS Spatial Processing Efficiency:**
 
 ```{python}
 # Calculate Cuba's spatial footprint
@@ -422,24 +86,9 @@ print(f"Longitude: {cuba_bounds[0]:.2f}° to {cuba_bounds[2]:.2f}°")
 print(f"Latitude: {cuba_bounds[1]:.2f}° to {cuba_bounds[3]:.2f}°")
 ```
 
-**Data Size Comparison:**
-- 📊 Global CHIRPS GEFS grid: ~7,200 × 3,600 pixels (≈26M pixels)
-- 📋 Cuba bounding box: ~220 × 100 pixels (≈22K pixels)  
-- ⚡ **Efficiency gain: 99.9% reduction (1,000× smaller!)**
+### Configuration and file names
 
-**Stage 1: Bounding Box Clipping (during download)**
-- Applied immediately during COG streaming
-- Reduces network transfer by 99.9%
-- Only downloads pixels within bounding box
-
-**Stage 2: Precise Geometry Clipping (during processing)**
-- Applied to buffered bounding box data
-- Uses exact country boundary geometry
-- Handles complex shapes and islands
-
-### Configuration and Component Initialization
-
-The modular architecture allows you to work with individual components or use the complete workflow:
+A short configuration: five issue dates with five lead times each.
 
 ```{python}
 # Create a CHIRPS GEFS configuration for demonstration
@@ -452,54 +101,24 @@ config = ChirpsGefsConfig(
     verbose=True
 )
 
-print(f"🌍 Region: {config.region_name}")
-print(f"📅 Date range: {config.start_date} to {config.end_date}")
-print(f"⏱️  Leadtime: {config.leadtime_days} days")
+print(f"Region: {config.region_name}")
+print(f"Date range: {config.start_date} to {config.end_date}")
+print(f"Leadtime: {config.leadtime_days} days")
 
 # Calculate total number of files: days × leadtimes
 date_range = pd.date_range(config.start_date, config.end_date, freq='D')
 total_files = len(date_range) * config.leadtime_days
-print(f"📊 Total forecasts: {total_files} files")
+print(f"Total forecasts: {total_files} files")
 ```
-
-### Component Architecture Demonstration
-
-Let's examine each component's role in the COG processing pipeline:
 
 ```{python}
 # Initialize each component to show their specific functions
 downloader = ChirpsGefsDownloader(config)
 loader = ChirpsGefsLoader(config)
 processor = ChirpsGefsProcessor(config)
-
-print("Initialized all components successfully")
 ```
 
-**Component Architecture:**
-
-- **🔽 ChirpsGefsDownloader:**
-  - Generates source URLs and file paths
-  - Streams COG data with bounding box clipping
-  - Uploads processed COGs to blob storage
-
-- **📁 ChirpsGefsLoader:**
-  - Manages blob storage access
-  - Loads processed COG files
-  - Handles metadata and coordinate systems
-
-- **🔄 ChirpsGefsProcessor:**
-  - Applies precise geometry clipping
-  - Calculates spatial statistics
-  - Framework for custom zonal statistics
-
-- **🎯 ChirpsGefsManager:**
-  - Orchestrates complete workflow
-  - Handles error recovery and logging
-  - Provides high-level interface
-
-### URL Generation and Data Structure
-
-Understanding the CHIRPS GEFS data structure and URL patterns:
+Each file is one issue date and one valid date. The source URL and blob path follow from the pair:
 
 ```{python}
 # Example: Forecast issued on Dec 10th for Dec 15th (5-day leadtime)
@@ -510,13 +129,13 @@ url = downloader.generate_url(issue_date, valid_date)
 filename = downloader.generate_filename(issue_date, valid_date)
 blob_path = downloader.generate_blob_path(filename)
 
-print(f"📅 Issue date: {issue_date.date()}")
-print(f"📅 Valid date: {valid_date.date()} (5-day leadtime)")
-print(f"🌐 Source URL: {url}")
+print(f"Issue date: {issue_date.date()}")
+print(f"Valid date: {valid_date.date()} (5-day leadtime)")
+print(f"Source URL: {url}")
 print()
 print("Local Storage Structure:")
-print(f"📄 Filename: {filename}")
-print(f"☁️  Blob path: {blob_path}")
+print(f"Filename: {filename}")
+print(f"Blob path: {blob_path}")
 print()
 print("Date Pair Examples:")
 # Generate a few examples to show the pattern
@@ -531,342 +150,79 @@ if total_files > examples_shown:
     print(f"  ... ({total_files - examples_shown} more combinations)")
 ```
 
-## COG Processing Workflow Step-by-Step
+### Downloading and loading
 
-### Step 1: COG Streaming and Bounding Box Clipping
-
-This is where the major efficiency gains happen:
-
-**Step 1: COG Streaming Workflow**
-
-**🔽 DOWNLOAD PHASE (ChirpsGefsDownloader.download_single_file):**
-
-```python
-# Open global COG directly from CHIRPS GEFS server
-with rxr.open_rasterio(source_url) as da_global:
-    # da_global.shape = (1, 3600, 7200)  # Global 0.05° grid
-    # da_global.nbytes ≈ 103 MB  # Full global array
-
-    # IMMEDIATE bounding box clipping during streaming:
-    bounds = self.config.geometry.total_bounds
-    da_aoi = da_global.rio.clip_box(*bounds)
-    # da_aoi.shape = (1, 100, 220)  # Cuba region only
-    # da_aoi.nbytes ≈ 88 KB  # 99.9% size reduction!
-
-    # Upload spatially-optimized COG to blob storage:
-    stratus.upload_cog_to_blob(da_aoi, blob_path)
-```
-
-**⚡ Result:** Only the Cuba region data is transferred and stored  
-**📊 Network efficiency:** 99.9% reduction in data transfer
-
-### Step 2: Precise Geometry Processing
-
-After download, the processing phase applies exact geometry clipping:
-
-**Step 2: Spatial Statistics Processing**
-
-**🔄 PROCESSING PHASE (ChirpsGefsProcessor.process_spatial_mean):**
-
-```python
-# Load spatially-optimized COG from blob storage
-da_loaded = loader.load_raster(issue_date, valid_date)
-# da_loaded.shape = (100, 220)  # Bounding box clipped
-# da_loaded.nbytes ≈ 88 KB  # Small, fast loading
-
-# Apply precise geometry clipping:
-da_clipped = da_loaded.rio.clip(
-    self.config.geometry.geometry, 
-    all_touched=True
-)
-# da_clipped.shape = varies  # Exact Cuba boundary
-# Handles islands, complex coastlines, etc.
-
-# Calculate spatial statistics (customizable):
-spatial_mean = da_clipped.mean(dim=['x', 'y']).values
-# Result: Single precipitation value for Cuba
-```
-
-**🎯 Result:** Precise spatial statistics for complex geometries  
-**🔧 Customizable:** Easy to implement other zonal statistics
-
-### Working with Downloaded COG Data
-
-Once COGs are processed and stored, loading them is very fast:
+The cells below are reference only and are not run when the book renders. They download from the CHC server and write to blob storage.
 
 ```{python}
 # | eval: false
 
-# Example of loading a specific raster (requires downloaded data)
-try:
-    # Load a specific issue/valid date combination
-    da = loader.load_raster(
-        issue_date=pd.Timestamp("2024-12-10"),
-        valid_date=pd.Timestamp("2024-12-15")
-    )
-    
-    print(f"✅ Loaded raster shape: {da.shape}")
-    print(f"🗺️  Spatial extent: {da.rio.bounds()}")
-    print(f"📐 CRS: {da.rio.crs}")
-    print(f"📏 Resolution: {da.rio.resolution()}")
-    print(f"💧 Precipitation range: {da.min().values:.2f} to {da.max().values:.2f} mm/day")
-    
-except Exception as e:
-    print(f"⚠️  Could not load raster (expected without downloaded data): {e}")
-```
+# Initialize downloader
+downloader = ChirpsGefsDownloader(config)
 
-## Implementing Custom Zonal Statistics
-
-The current system uses spatial mean calculations, but the architecture is designed for easy customization. Here's how you would implement custom zonal statistics:
-
-### Template for Custom Statistics
-
-```{python}
-# Template for implementing custom zonal statistics
-class CustomChirpsGefsProcessor(ChirpsGefsProcessor):
-    def calculate_custom_statistics(self, da_clipped):
-        """
-        Implement your custom spatial statistics here.
-        
-        Args:
-            da_clipped: xarray.DataArray clipped to geometry
-        
-        Returns:
-            dict: Custom statistics
-        """
-        return {
-            'mean': da_clipped.mean().values,
-            'max': da_clipped.max().values,
-            'std': da_clipped.std().values,
-            'percentile_95': da_clipped.quantile(0.95).values,
-            'pixel_count': da_clipped.count().values,
-            # Add your custom metrics here
-        }
-
-    def process_spatial_statistics(self, issue_date, valid_date):
-        # Load and clip data
-        da = self.loader.load_raster(issue_date, valid_date)
-        da_clipped = da.rio.clip(self.config.geometry.geometry)
-        
-        # Use custom statistics instead of just mean
-        stats = self.calculate_custom_statistics(da_clipped)
-        
-        return {
-            'issue_date': issue_date.date(),
-            'valid_date': valid_date.date(),
-            **stats
-        }
-
-print("✅ Custom zonal statistics template ready!")
-```
-    
-    try:
-        da = loader.load_raster(issue_date, valid_date)
-        da["valid_date"] = valid_date
-        da["leadtime"] = leadtime
-        das_all_leadtimes.append(da)
-        print(f"Loaded leadtime {leadtime}: {valid_date.date()}")
-    except Exception as e:
-        print(f"Could not load leadtime {leadtime}: {e}")
-
-if das_all_leadtimes:
-    # Combine into single dataset
-    da_combined = xr.concat(das_all_leadtimes, dim="valid_date")
-    print(f"Combined dataset shape: {da_combined.shape}")
-    
-    # Apply precise geometry clipping
-    da_cuba = da_combined.rio.clip(cuba_gdf.geometry, all_touched=True)
-    
-    # Calculate spatial mean for each forecast day
-    spatial_means = da_cuba.mean(dim=["x", "y"])
-    print(f"Spatial means by leadtime: {spatial_means.values}")
-```
-
-### Flexible Zonal Statistics
-
-The current system calculates spatial means, but you can easily modify it for different statistics:
-
-```{python}
-# | eval: false
-
-### Development Workflow: Start Small, Scale Up
-
-The recommended approach for developing custom zonal statistics:
-
-**🚀 Phase 1: Small-Scale Development**
-1. Use short date ranges (2-3 days)
-2. Download/process limited data for testing
-3. Develop and test custom zonal statistics
-4. Iterate on statistical methods
-
-**📈 Phase 2: Scale Testing**
-5. Test with longer periods (1-2 weeks)
-6. Validate statistical methods
-7. Optimize performance
-
-**🌍 Phase 3: Operational Deployment**
-8. Deploy with full date ranges
-9. Implement error handling
-10. Set up monitoring/logging
-
-**🔧 Key Benefits of This Architecture:**
-- Start with spatial means (already working)
-- Add custom statistics incrementally
-- COG processing handles the complex spatial work
-- Focus on the statistics, not the data management
-
-## Complete Pipeline Example
-
-### High-Level Manager Usage
-
-For production workflows, use the manager class:
-
-```{python}
-# | eval: false
-
-# Create manager for complete workflow
-manager = ChirpsGefsManager(config)
-
-# Run complete pipeline: download → process → return results
-df_results = manager.run_pipeline()
-
-print("Pipeline Results:")
-print(f"✅ Processed {len(df_results)} forecast records")
-print(f"📅 Date range: {df_results['issue_date'].min()} to {df_results['issue_date'].max()}")
-print(f"🎯 Lead times: {df_results['valid_date'].min()} to {df_results['valid_date'].max()}")
-print(f"💧 Precipitation range: {df_results['mean_precipitation_mm_day'].min():.2f} to {df_results['mean_precipitation_mm_day'].max():.2f} mm/day")
-```
-
-### Multiple Leadtime Analysis
-
-CHIRPS GEFS provides 16-day forecasts. Here's how to work with multiple leadtimes:
-
-```{python}
-# | eval: false
-
-# Analyze forecast skill by leadtime
-import matplotlib.pyplot as plt
-
-# Group results by leadtime for analysis
-df_results['leadtime_days'] = (
-    pd.to_datetime(df_results['valid_date']) - 
-    pd.to_datetime(df_results['issue_date'])
-).dt.days
-
-# Calculate statistics by leadtime
-leadtime_stats = df_results.groupby('leadtime_days')['mean_precipitation_mm_day'].agg([
-    'count', 'mean', 'std', 'min', 'max'
-]).round(2)
-
-print("Precipitation by Leadtime:")
-print(leadtime_stats)
-
-# Simple visualization concept
-print("\nVisualization Example:")
-print("plt.figure(figsize=(10, 6))")
-print("df_results.boxplot(column='mean_precipitation_mm_day', by='leadtime_days')")
-print("plt.title('Precipitation Forecasts by Leadtime')")
-print("plt.xlabel('Leadtime (days)')")
-print("plt.ylabel('Precipitation (mm/day)')")
-```
-    
-    This demonstrates how you can implement your own zonal stats method.
-    """
-    loader = ChirpsGefsLoader(config)
-    
-    results = []
-    issue_date_range = pd.date_range(start=start_date, end=end_date, freq="D")
-    
-    for issue_date in issue_date_range:
-        print(f"Processing issue date: {issue_date.date()}")
-        
-        # Load all leadtimes for this issue date
-        das_leadtimes = []
-        for leadtime in range(config.leadtime_days):
-            valid_date = issue_date + pd.Timedelta(days=leadtime)
-            
-            try:
-                # Load pre-processed COG (bounding box already applied)
-                da = loader.load_raster(issue_date, valid_date)
-                da = da.expand_dims(valid_date=[valid_date])
-                das_leadtimes.append(da)
-            except Exception as e:
-                print(f"Could not load leadtime {leadtime}: {e}")
-                continue
-
-        if das_leadtimes:
-            # Combine into single dataset
-            da_combined = xr.concat(das_leadtimes, dim="valid_date")
-            
-            # Apply precise geometry clipping
-            da_cuba = da_combined.rio.clip(cuba_gdf.geometry, all_touched=True)
-            
-            # Calculate spatial mean for each forecast day
-            spatial_means = da_cuba.mean(dim=["x", "y"])
-            print(f"Spatial means by leadtime: {spatial_means.values}")
-            
-            # Add to results
-            for i, valid_date in enumerate(da_cuba.valid_date):
-                da_single = da_cuba.isel(valid_date=i)
-                
-                # Basic statistics
-                stats = {
-                    'issue_date': issue_date.date(),
-                    'valid_date': pd.to_datetime(valid_date.values).date(),
-                    'leadtime_days': i,
-                    'mean_precipitation_mm_day': float(da_single.mean().values),
-                    'max_precipitation_mm_day': float(da_single.max().values),
-                    'min_precipitation_mm_day': float(da_single.min().values),
-                    'std_precipitation_mm_day': float(da_single.std().values),
-                    'pixel_count': int(da_single.count().values),
-                    'pixel_coverage': float(da_single.count().values / da_single.size),
-                }
-                
-                # Add to results
-                results.append(stats)
-    
-    return pd.DataFrame(results)
-
-print("✅ Custom zonal statistics template ready!")
-print("🔧 Modify the stats dictionary to add your specific metrics")
-```
-
-## High-Level Interface Options
-
-### Option 1: Simple One-Line Processing
-
-For quick analysis and prototyping:
-
-```{python}
-# | eval: false
-
-from src.datasources.chirps_gefs import process_chirps_gefs_for_region
-
-# Process CHIRPS GEFS data with minimal configuration
-results = process_chirps_gefs_for_region(   
-    geometry=cuba_gdf,
-    region_name="cuba_test",  
-    recent_only=True,  # Only download recent data
-    start_date="2024-12-09",
-    end_date="2024-12-10",
+download_stats = downloader.download_date_range(
+    config.start_date, 
+    config.end_date
 )
 
-# Access results
-download_stats = results["download_stats"]
-processed_data = results["processed_data"]
-
-print("One-Line Processing Results:")
-print(f"✅ Downloaded {download_stats['success']} files successfully")
-print(f"❌ Failed downloads: {download_stats['failed']}")
-print(f"📊 Processed data shape: {processed_data.shape}")
-
-if "warning" in results:
-    print(f"⚠️ Warning: {results['warning']}")
+print("Download Results:")
+print(f"Successful: {download_stats['success']}")
+print(f"Failed: {download_stats['failed']}")
+print(f"Total attempted: {download_stats['total']}")
 ```
 
-### Option 2: Manager Class for Full Control
+```{python}
+# | eval: false
 
-For production workflows with detailed control:
+# Load and examine one of the downloaded rasters
+loader = ChirpsGefsLoader(config)
+
+# Option 1: Load a single specific forecast
+da_single = loader.load_raster(
+    issue_date=pd.Timestamp("2024-12-01"),
+    valid_date=pd.Timestamp("2024-12-03"),
+)
+
+print("Single COG Properties:")
+print(f"Shape: {da_single.shape}")
+print(f"CRS: {da_single.rio.crs}")
+print(f"Resolution: {da_single.rio.resolution()}")
+print(f"Bounds: {da_single.rio.bounds()}")
+print(f"Data range: {da_single.min().values:.2f} to {da_single.max().values:.2f} mm/day")
+print(f"Data size: {da_single.nbytes / 1024:.1f} KB")
+```
+
+```{python}
+# | eval: false
+
+# Load a time series lazily (dask): data is read from blob only when accessed
+ds_timeseries = loader.load_raster_time_series(
+    start_date = "2024-12-01",
+    end_date = "2024-12-02",
+    chunks = {"x": -1, "y": -1},  # one chunk per raster; fine for a small region
+    lazy = True
+)
+
+print("\nTime Series Dataset Properties (Lazy Loading):")
+print(f"Dataset dimensions: {dict(ds_timeseries.dims)}")
+print(f"Issue dates: {len(ds_timeseries.issue_date)} dates")
+print(f"Valid dates: {len(ds_timeseries.valid_date)} dates")
+print(f"Leadtimes: {len(ds_timeseries.leadtime)} leadtimes")
+
+if "precipitation" in ds_timeseries.data_vars:
+    precip = ds_timeseries.precipitation
+    print(f"Precipitation range: {precip.min().values:.2f} to {precip.max().values:.2f} mm/day")
+    print(f"Processing mode: {ds_timeseries.attrs.get('processing_mode', 'unknown')}")
+
+    # Show some sample data structure
+    print(f"\nSample coordinate values:")
+    print(f"  Issue dates: {[str(d.date()) for d in ds_timeseries.issue_date.values[:3]]}")
+    print(f"  Valid dates: {[str(d.date()) for d in ds_timeseries.valid_date.values[:3]]}")
+    print(f"  Leadtimes: {ds_timeseries.leadtime.values[:3]}")
+
+```
+
+`ChirpsGefsManager` wraps the same steps:
 
 ```{python}
 # | eval: false
@@ -881,214 +237,21 @@ manager = ChirpsGefsManager(
     verbose=True,
 )
 
-# Option A: Run individual steps
-print("🔽 Downloading data...")
+# Run the steps separately
+print("Downloading data...")
 download_stats = manager.download_only(recent_only=True, days_back=30)
 print(f"  Downloaded {download_stats['success']}/{download_stats['total']} files")
 
-print("🔄 Processing data...")
+print("Processing data...")
 processed_data = manager.process_only(recent_only=True)
 print(f"  Processed {len(processed_data)} forecast records")
 
-# Option B: Run complete pipeline
-print("🚀 Running complete pipeline...")
-pipeline_results = manager.run_pipeline()
-print(f"  Pipeline completed: {len(pipeline_results)} records")
+# Or both in one call
+print("Running complete pipeline...")
+pipeline_results = manager.run_full_pipeline(download_recent_only=True, days_back=30)
 ```
 
-### Option 3: Component-Level Control
-
-For maximum flexibility and customization:
-
-```{python}
-# | eval: false
-
-# Initialize individual components
-config = ChirpsGefsConfig(geometry=cuba_gdf, region_name="cuba_custom")
-downloader = ChirpsGefsDownloader(config)
-loader = ChirpsGefsLoader(config)
-processor = ChirpsGefsProcessor(config)
-
-# Download specific files
-success = downloader.download_single_file(
-    issue_date=pd.Timestamp("2024-12-10"),
-    valid_date=pd.Timestamp("2024-12-15")
-)
-print(f"🔽 Single file download: {success}")
-
-# Load and examine data
-da = loader.load_raster(
-    issue_date=pd.Timestamp("2024-12-10"),
-    valid_date=pd.Timestamp("2024-12-15")
-)
-print(f"📁 Loaded raster: {da.shape}")
-
-# Process with custom statistics (when you implement them)
-# custom_stats = your_custom_processor.calculate_statistics(da)
-```
-
-## Performance and Efficiency Summary
-
-The COG-based architecture provides significant efficiency gains:
-
-**📊 Spatial Efficiency:**
-- Global dataset: ~26M pixels (103 MB per file)
-- Cuba region: ~22K pixels (88 KB per file)
-- Reduction: 99.9% (1,000× smaller)
-
-**⚡ Network Efficiency:**
-- Only region-specific data transferred
-- No temporary global files
-- Direct streaming with spatial cropping
-
-**🔧 Processing Efficiency:**
-- Precise geometry clipping on small datasets
-- Fast statistical calculations
-- Easy parallelization potential
-
-**🚀 Development Efficiency:**
-- Start with working spatial means
-- Add custom statistics incrementally
-- Focus on analysis, not data management
-- Test with small datasets, scale up easily
-
-## Next Steps for Implementation
-
-Based on this COG processing framework, here's your development path:
-
-**🎯 Immediate (Ready Now):**
-1. Use existing spatial mean processing
-2. Test with short date ranges
-3. Validate Cuba geometry and results
-
-**🔧 Short Term (When You're Ready):**
-4. Implement custom zonal statistics using template
-5. Add specific metrics you need
-6. Test custom processing with small datasets
-
-**🌍 Medium Term (Scaling Up):**
-7. Extend to longer time periods
-8. Add other regions if needed
-9. Optimize performance for large-scale processing
-
-**📈 Long Term (Operational):**
-10. Integrate with larger analytical workflows
-11. Add automated monitoring and error handling
-12. Consider real-time processing capabilities
-
-**✅ Key Advantage:** You have a working foundation. The COG processing handles all the complex spatial work. You can focus on implementing the specific statistics you need.
-
-This documentation demonstrates the complete COG processing workflow, from efficient spatial data handling to customizable zonal statistics implementation. The system is designed to be both immediately useful (with spatial means) and easily extensible for your custom analytical needs.
-pipeline_results = manager.run_full_pipeline(
-    download_recent_only=True, days_back=30
-)
-```
-
-```{python}
-# | eval: false
-
-# Create manager with custom configuration
-manager = ChirpsGefsManager(
-    geometry=cuba_gdf,
-    region_name="cuba_detailed",
-    start_date="2024-12-09",
-    end_date="2024-12-10",
-    leadtime_days=16,
-    blob_base_dir="custom/chirps_gefs",
-    clobber=False,
-    verbose=True,
-)
-
-# Run individual steps
-download_stats = manager.download_only(recent_only=True, days_back=30)
-processed_data = manager.process_only(recent_only=True)
-
-# Or run the full pipeline
-## Practical Development Workflow
-
-Here's the recommended workflow for working with CHIRPS GEFS data:
-
-### Step 1: Start Small and Test COG Processing
-
-```{python}
-# | eval: false
-
-# 1. Create a small test configuration
-test_config = ChirpsGefsConfig(
-    geometry=cuba_gdf,
-    region_name="cuba_test",
-    start_date="2024-12-10",  # Single day
-    end_date="2024-12-10",    # Same day
-    leadtime_days=3,          # Just 3 leadtimes
-    verbose=True
-)
-
-# 2. Test download for a single day (3 files)
-downloader = ChirpsGefsDownloader(test_config)
-stats = downloader.download_date_range("2024-12-10", "2024-12-10")
-print(f"Downloaded {stats['success']} files")
-
-# 3. Examine the downloaded rasters
-loader = ChirpsGefsLoader(test_config)
-da = loader.load_raster(
-    pd.Timestamp("2024-12-10"), 
-    pd.Timestamp("2024-12-11")  # 1-day leadtime
-)
-print(f"Raster shape: {da.shape}")
-print(f"Data range: {da.min().values:.2f} to {da.max().values:.2f} mm/day")
-```
-
-### Step 2: Develop Custom Zonal Statistics
-
-```{python}
-# | eval: false
-
-# Test your custom processing on the small dataset
-df_custom = process_custom_zonal_stats(
-    test_config, "2024-12-10", "2024-12-10"
-)
-print("Custom processing results:")
-print(df_custom)
-```
-
-### Step 3: Scale Up for Production
-
-```{python}
-# | eval: false
-
-# Once your custom method works, scale up
-production_config = ChirpsGefsConfig(
-    geometry=cuba_gdf,
-    region_name="cuba_production",
-    start_date="2024-12-01",
-    end_date="2024-12-31",  # Full month
-    leadtime_days=16,       # Full 16-day forecast
-    verbose=False           # Reduce logging for production
-)
-
-# Run your custom processing at scale
-df_production = process_custom_zonal_stats(
-    production_config, "2024-12-01", "2024-12-31"
-)
-```
-
-## Key Technical Details
-
-### COG Efficiency
-
-The system achieves 99.9% data reduction through spatial clipping:
-
-```{python}
-print("CHIRPS GEFS Spatial Efficiency:")
-print("  Global file: ~26 million pixels")
-print("  Cuba region: ~22 thousand pixels") 
-print("  Reduction: 1,000× smaller files")
-print("  Benefit: Faster downloads, less storage, quicker processing")
-```
-
-### Storage Structure
-
-Data is organized in a clear hierarchy:
+### Storage layout
 
 ```
 projects/ds-aa-cub-hurricanes/
@@ -1099,31 +262,5 @@ projects/ds-aa-cub-hurricanes/
 └── processed/chirps_gefs/cuba_test/
     └── cuba_test_chirps_gefs_mean_daily_2024_2024.parquet
 ```
-
-### Flexible Architecture
-
-The modular design allows you to:
-- **Use existing spatial means**: Call `ChirpsGefsProcessor.process_spatial_mean()`
-- **Implement custom statistics**: Use `ChirpsGefsLoader` to load rasters and process yourself
-- **Mix approaches**: Use downloader/loader separately, then apply your own analysis
-
-## Summary
-
-This CHIRPS GEFS module provides the foundation for precipitation forecast processing:
-
-### What's Ready Now:
-- ✅ Efficient COG downloading with spatial clipping
-- ✅ Flexible data loading and raster management  
-- ✅ Basic spatial mean calculations
-- ✅ Robust error handling and logging
-- ✅ Azure Blob Storage integration
-
-### What You Can Customize:
-- 🔧 **Zonal statistics method** (this is your next step!)
-- 🔧 Statistical calculations (mean, max, quantiles, etc.)
-- 🔧 Temporal aggregations (daily, weekly, seasonal)
-- 🔧 Alert thresholds and trigger logic
-
-The system handles all the complex COG processing, storage, and data management - you can focus on implementing the specific zonal statistics that meet your analytical needs.
 
 <!-- markdownlint-enable MD013 -->

@@ -5,7 +5,7 @@ jupyter: ds-aa-cub-hurricanes
 
 
 <!-- markdownlint-disable MD013 -->
-Showing the Zona de Máxima Atención, based on the map (dotted red line):
+The Zona de Máxima Atención (ZMA) is the area around Cuba within which a storm's wind speed counts towards the trigger. It is the dotted red line on the map below.
 
 ```{python}
 #| echo: false

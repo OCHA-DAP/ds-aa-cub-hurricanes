@@ -1,14 +1,6 @@
 ## ERA5 Soil Moisture
 
-Below is the end-to-end workflow for extracting and analyzing daily soil moisture over Cuba at storm landfall dates:
-
-- Authenticate and initialize Google Earth Engine
-- Load Cuba’s national boundary from FAO GAUL
-- Aggregate IBTrACS storm data to identify landfall dates
-- Compute mean soil moisture per day from ERA5-Land layers
-- Filter images to storm dates and calculate zonal mean over Cuba
-- Import results into pandas, reshape to long format, and parse dates
-- Merge with storm names and plot the soil moisture time series
+ERA5-Land daily soil moisture averaged over Cuba, on the landfall dates of past storms. The values were extracted with Google Earth Engine. Those cells are not run when the book renders: they were run once and the result saved to blob storage, which is loaded here and plotted.
 
 
 ```{python}
@@ -195,7 +187,7 @@ blob_name = f"{PROJECT_PREFIX}/processed/era5_soil_moisture/era5_daily_sm_storm_
 df_long = stratus.load_parquet_from_blob(blob_name=blob_name)
 ```
 
-load storms
+Storm names from IBTrACS, to label the plot:
 
 
 ```{python}

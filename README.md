@@ -8,6 +8,22 @@
 
 Analysis for Cuba Hurricanes Anticipatory Action framework.
 
+**Site:** https://ocha-dap.github.io/ds-aa-cub-hurricanes/ — the trigger
+development book and a link to the trigger redesign app.
+
+## Pages site
+
+https://ocha-dap.github.io/ds-aa-cub-hurricanes/ is served straight from the
+`gh-pages` branch: a landing page at `/` with one card per product, and the
+Quarto book from `book_cub_hurricanes/` at `/book/`. The branch's `README.md`
+documents the layout and how to add a page.
+
+Publish the book with `book_cub_hurricanes/publish_book.sh` (add `--dry-run` to
+preview). It renders from `book_cub_hurricanes/_freeze/`, which is not in git,
+and refuses to render if any chapter would re-execute. **Never use
+`quarto publish gh-pages`**: it deletes everything on the branch that isn't the
+book, including the landing page.
+
 ## Developer Setup
 
 1. Create and activate a virtual environment:

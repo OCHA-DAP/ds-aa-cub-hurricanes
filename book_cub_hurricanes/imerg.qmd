@@ -3,7 +3,11 @@
 
 <!-- markdownlint-disable MD013 -->
 
+IMERG is NASA's satellite rainfall estimate. This chapter loads daily IMERG rainfall averaged over Cuba and, for each storm, finds the largest two-day rainfall total while it was in the ZMA.
+
+
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -24,7 +28,6 @@ pcode = "CU"
 ```
 
 ```{python}
-%%time
 # load all IMERG data - bit slow
 df_imerg = imerg.load_imerg(pcode)
 ```
@@ -41,7 +44,7 @@ df_imerg["mean"].hist()
 df_imerg["roll2_mean"] = df_imerg["mean"].rolling(2).sum()
 ```
 
-Just get a general idea of yearly peak values
+The highest two-day total in each year, as a rough sense of scale:
 
 ```{python}
 df_imerg.groupby(df_imerg["valid_date"].dt.year)[
@@ -78,7 +81,7 @@ df_agg = (
 
 ### Get rainfall per storm
 
-Relatively simplistic - look at the dates the storm was in the ZMI, and take the 2-day rolling sum of rainfall over the whole country (this is what is used as a trigger in Haiti, so could be a good starting point). We include one day on either side of the time the storm is in the ZMI.
+The method is simple. For each storm, take the days it was in the ZMA plus the following day, and find the largest two-day rolling sum of country-average rainfall in that window. Because each sum covers two days, the day before the storm entered the ZMA also counts. Haiti's trigger uses the same measure, which made it a reasonable starting point.
 
 ```{python}
 def get_storm_rainfall(storm_row):

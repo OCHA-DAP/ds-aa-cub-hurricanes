@@ -1,9 +1,11 @@
 # Introduction
 
-This is a book created from markdown and executable code.
+The book has three parts, in the order the work was done.
 
-See @knuth84 for additional discussion of literate programming.
+- Historical data: the ZMA, IBTrACS storm tracks and IMERG rainfall, a first look at wind against rainfall for past storms, and ERA5 soil moisture at landfall.
+- Trigger design: a first, observational-only optimization using IBTrACS and IMERG, then the main trigger chapter (Visualize Options). That chapter filters the candidate forecast and observational combinations, shows the options put to the working group, and adds a readiness stage to the chosen option. The Summary closes the part.
+- Forecast rainfall: how the CHIRPS-GEFS forecast rasters are downloaded, clipped to Cuba and summarised.
 
-```{python}
-1 + 1
-```
+The appendices check that the monitoring code computes the same rainfall quantiles as the historical analysis, compare WorldPop with official population figures, and map one storm's wind footprint over population.
+
+Code is folded by default. Click "Code" above an output to see what produced it.

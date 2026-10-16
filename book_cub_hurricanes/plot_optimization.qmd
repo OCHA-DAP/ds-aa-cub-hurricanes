@@ -13,9 +13,20 @@ jupyter:
     name: ds-aa-cub-hurricanes
 ---
 
+## Rainfall aggregation
+
+The trigger needs one rainfall number per storm, but IMERG gives a value for every pixel over Cuba. For each storm we take two-day rainfall totals in each pixel, over the days the storm was in the ZMA plus one day either side, and summarise them across the country as the mean or the 50th, 80th, 90th or 95th percentile. The storm's value is the highest of these over its window. The optimizations in this part try each of these aggregations.
+
+The figure shows this for Hurricane Oscar's wettest two days (20-21 October 2024). Most of the rain fell in the far east, so the mean (25 mm) comes out above the 80th percentile (23 mm), while the 50th percentile is only 3 mm. The higher the percentile, the smaller the area of heavy rain it takes to push the value up.
+
+![Hurricane Oscar's two-day rainfall over Cuba and the pixels at or above each percentile.](figures/rainfall_aggregation_oscar.png)
+
+The figure is made by `scripts/rainfall_aggregation_map.py`. The script checks its 80th percentile against the value stored in the trigger data (`q80_roll2`, 22.6 mm for Oscar) and stops if they differ.
+
 
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -319,9 +330,9 @@ display(
 )
 ```
 
-## Data for email scatter plot
+## Data for the email scatter plot
 
-Just quickly adding this for easy reference - later. Should clean up where this goes.
+The data behind the scatter plot used in the monitoring emails.
 ```{python}
 blob_name = (
       f"{PROJECT_PREFIX}/processed/storm_stats/stats_with_targets.parquet"

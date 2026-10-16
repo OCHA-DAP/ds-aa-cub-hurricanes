@@ -1,9 +1,10 @@
 ## IBTrACS
 <!-- markdownlint-disable MD013 -->
 
-Load IBTrACS (@knapp2010ibtracs) from Postgres, and plot just to check the right stuff has been loaded.
+IBTrACS [@knapp2010ibtracs] is the global archive of historical storm tracks. We load the track points within the ZMA's bounds from the team database and plot them as a check.
 
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -25,9 +26,6 @@ gdf_zma = zma.load_zma()
 total_bounds = gdf_zma.total_bounds
 ```
 
-```{python}
-total_bounds
-```
 
 ```{python}
 df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
@@ -37,9 +35,6 @@ df_all = ibtracs.load_ibtracs_in_bounds(*total_bounds)
 df_all
 ```
 
-```{python}
-df_all.dtypes
-```
 
 ```{python}
 def df_to_track_lines(df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -94,7 +89,7 @@ for sid, row in gdf_lines.iterrows():
 
 gdf_zma.boundary.plot(ax=ax, color="k")
 ```
-Looks like all the tracks are inside the ZMA, so should be good
+All the tracks fall inside the ZMA, so the load looks right.
 
 ```{python}
 # | eval: false

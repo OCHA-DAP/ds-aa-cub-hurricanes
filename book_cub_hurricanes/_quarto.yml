@@ -7,24 +7,31 @@ jupyter:
 book:
   title: "Anticipatory Action - Cuba Hurricanes"
   author: "OCHA Centre for Humanitarian Data"
-  date: "13/05/2024"
+  date: "2026-10-16"
   chapters:
     - index.qmd
     - intro.qmd
-    - zma.qmd
-    - ibtracs.qmd
-    - imerg.qmd
-    - combine_imerg_ibtracs.qmd
-    - plot_optimization.qmd
-    - era5_soil_moisture.qmd
-    - threestage_trig_plot.qmd
-    - chirps_gefs.qmd
-    - chirps_gefs_raster_processing.qmd
-    - summary.qmd
+    - part: "Historical data"
+      chapters:
+        - zma.qmd
+        - ibtracs.qmd
+        - imerg.qmd
+        - combine_imerg_ibtracs.qmd
+        - era5_soil_moisture.qmd
+    - part: "Trigger design"
+      chapters:
+        - plot_optimization.qmd
+        - threestage_trig_plot.qmd
+        - summary.qmd
+    - part: "Forecast rainfall"
+      chapters:
+        - chirps_gefs.qmd
+        - chirps_gefs_raster_processing.qmd
+    - references.qmd
+  appendices:
     - appendix_check_quantile_calc.qmd
     - appendix_population_data.qmd
     - appendix_methodology_map.qmd
-    - references.qmd
 
 bibliography: references.bib
 
@@ -39,11 +46,14 @@ format:
     embed-resources: false
     toc: true          # Enable table of contents for navigation
     css: custom.css    # Apply the custom CSS globally
+    include-before-body:
+      - home-link.html  # back-link to the gh-pages landing page
     toc-depth: 3
     code-fold: true
     smooth-scroll: true
 
 execute:
+  warning: false     # warnings are noise in the rendered book
   freeze: auto        # Freeze execution to avoid re-running code chunks
   cache: false         # Enable caching for faster re-renders
 

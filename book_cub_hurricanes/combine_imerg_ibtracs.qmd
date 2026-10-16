@@ -1,7 +1,10 @@
 
 ## Combine IMERG and IBTrACS
 
+This plots each storm's maximum wind speed in the ZMA against the two-day rainfall computed in the IMERG chapter.
+
 ```{python}
+#| include: false
 %load_ext jupyter_black
 %load_ext autoreload
 %autoreload 2
@@ -52,5 +55,5 @@ for _, row in df_stats.iterrows():
     )
 
 ax.set_xlabel("Max. wind speed while in ZMA (knots)")
-ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)")
+ax.set_ylabel("Total 2-day precipitation, average over whole country (mm)");
 ```

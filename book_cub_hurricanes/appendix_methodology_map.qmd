@@ -2,7 +2,7 @@
 jupyter: ds-aa-cub-hurricanes
 ---
 
-## Appendix 1C: Wind Footprint over Population
+## Wind Footprint over Population
 
 This appendix is a visual illustration of the idea behind the wind-based
 trigger: a storm's wind-radii buffers are overlaid on the gridded population the
