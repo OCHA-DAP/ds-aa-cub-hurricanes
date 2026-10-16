@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuba Hurricanes Anticipatory Action — OCHA Centre for Humanitarian Data</title>
+<meta name="description" content="Analysis behind the OCHA anticipatory action framework for hurricanes in Cuba: trigger design from historical storms, forecasts and rainfall.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <canvas id="bg" aria-hidden="true"></canvas>
+    <div class="inner">
+      <p class="eyebrow">OCHA Centre for Humanitarian Data</p>
+      <h1>Cuba Hurricanes — Anticipatory Action</h1>
+      <p>Analysis behind the OCHA anticipatory action framework for hurricanes in Cuba: how
+         the forecast and observational triggers were designed from historical storm tracks,
+         forecasts, rainfall and impact data.</p>
+    </div>
+  </header>
+
+  <main>
+    <p class="label">Products</p>
+    <div class="grid">
+
+      <a class="k" href="book/">
+        <h2>Trigger development book</h2>
+        <p>The 2025 trigger analysis: storm and rainfall data, the optimization of forecast
+           and observational thresholds, the options put to the working group, and the chosen
+           option with its readiness stage.</p>
+        <span class="foot"><em>/book/</em></span>
+      </a>
+
+      <a class="k" href="https://chd-ds-cub-trigger.azurewebsites.net/">
+        <h2>Trigger redesign explorer</h2>
+        <p>Interactive app for the 2026 trigger redesign, which uses population exposed to
+           hurricane-force winds in place of wind speed in the ZMA.</p>
+        <span class="foot"><em>Azure web app</em><span class="chip chip-ext">External</span></span>
+      </a>
+
+    </div>
+  </main>
+
+  <div class="note">
+    <p><strong>Adding a page?</strong> Commit a directory with an <code>index.html</code> to the
+       <code>gh-pages</code> branch and add a card above. Publish the book only with
+       <code>book_cub_hurricanes/publish_book.sh</code>, never
+       <code>quarto publish gh-pages</code>, which deletes everything else on the branch. See
+       <a href="https://github.com/OCHA-DAP/ds-aa-cub-hurricanes/blob/gh-pages/README.md">README.md</a>
+       on the <code>gh-pages</code> branch.</p>
+  </div>
+
+</div>
+
+<script src="assets/hero.js" defer></script>
+</body>
+</html>
