@@ -2,7 +2,7 @@
 jupyter: ds-aa-cub-hurricanes
 ---
 
-## Appendix 1B: Population Data Validation — WorldPop vs. ONEI
+## Population Data Validation: WorldPop vs. ONEI
 
 The trigger framework uses gridded population to estimate exposure inside the
 ZMA. Before relying on those exposure numbers, this appendix sanity-checks the

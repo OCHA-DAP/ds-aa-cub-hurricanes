@@ -2,7 +2,7 @@
 jupyter: ds-aa-cub-hurricanes
 ---
 
-## Appendix 1A: Checking the Monitoring Rainfall Calculation
+## Checking the Monitoring Rainfall Calculation
 
 The live monitoring code computes storm rainfall differently from the historical analysis. The historical analysis uses pre-computed values in `zma_stats_imerg_quantiles.parquet`, calculated from IBTrACS tracks for 2000-2024. Monitoring computes them on the fly with `IMERGRasterProcessor`, as the 80th percentile of two-day rolling sums of IMERG rainfall over Cuba. This appendix checks that the two give the same numbers.
 
