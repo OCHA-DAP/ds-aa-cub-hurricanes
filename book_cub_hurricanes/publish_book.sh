@@ -40,24 +40,26 @@ if [ "$render" = 1 ]; then
   export PATH="$repo_root/.venv/bin:$PATH"
   export QUARTO_PYTHON="$repo_root/.venv/bin/python"
 
-  stale="$(cd "$book_dir" && python3 - <<'EOF'
-import hashlib, json, pathlib, re
+  # Exits non-zero, listing the chapters, if any would re-execute.
+  if ! (cd "$book_dir" && python3 - "$allow_execute" <<'EOF'
+import hashlib, json, pathlib, re, sys
 chapters = re.findall(r"^\s+- (\S+\.qmd)", pathlib.Path("_quarto.yml").read_text(), re.M)
+stale = []
 for qmd in chapters:
     src = pathlib.Path(qmd).read_bytes()
-    if b"```{python" not in src:
+    if b"\x60\x60\x60{python" not in src:  # no executable chunks
         continue
     frz = pathlib.Path("_freeze", qmd[:-4], "execute-results", "html.json")
     if not frz.exists():
-        print(f"{qmd}: no freeze entry")
+        stale.append(f"{qmd}: no freeze entry")
     elif json.loads(frz.read_text())["hash"] != hashlib.md5(src).hexdigest():
-        print(f"{qmd}: freeze hash does not match source")
+        stale.append(f"{qmd}: freeze hash does not match source")
+if stale and sys.argv[1] != "1":
+    print("error: these chapters would re-execute during render:", *stale, sep="\n", file=sys.stderr)
+    print("Re-run with --allow-execute if that is intended (needs DB/blob access).", file=sys.stderr)
+    sys.exit(1)
 EOF
-)"
-  if [ -n "$stale" ] && [ "$allow_execute" = 0 ]; then
-    echo "error: these chapters would re-execute during render:" >&2
-    echo "$stale" >&2
-    echo "Re-run with --allow-execute if that is intended (needs DB/blob access)." >&2
+  ); then
     exit 1
   fi
   quarto render "$book_dir"
