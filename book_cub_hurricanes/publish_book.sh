@@ -54,6 +54,17 @@ for qmd in chapters:
         stale.append(f"{qmd}: no freeze entry")
     elif json.loads(frz.read_text())["hash"] != hashlib.md5(src).hexdigest():
         stale.append(f"{qmd}: freeze hash does not match source")
+# Static figures (e.g. figures/*.png from scripts/) are gitignored, so they exist only
+# where they were generated. A missing one would render as a broken image.
+missing = []
+for qmd in chapters:
+    for img in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", pathlib.Path(qmd).read_text()):
+        if "://" not in img and not pathlib.Path(img).exists():
+            missing.append(f"{qmd}: {img}")
+if missing:
+    print("error: static figures referenced by the book are missing:", *missing, sep="\n", file=sys.stderr)
+    print("Regenerate them with the scripts in scripts/ (e.g. rainfall_aggregation_map.py).", file=sys.stderr)
+    sys.exit(1)
 if stale and sys.argv[1] != "1":
     print("error: these chapters would re-execute during render:", *stale, sep="\n", file=sys.stderr)
     print("Re-run with --allow-execute if that is intended (needs DB/blob access).", file=sys.stderr)
