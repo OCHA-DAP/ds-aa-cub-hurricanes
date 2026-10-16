@@ -10,7 +10,7 @@ CHIRPS-GEFS is the Climate Hazards Center's 16-day daily precipitation forecast,
 
 ### How the module works
 
-The rasters are clipped in two stages. On download, each global COG (about 7,200 × 3,600 pixels, 103 MB) is opened over HTTP and cut to Cuba's bounding box (about 220 × 100 pixels, 88 KB) before it is written to blob storage. Because COGs can be read by window, only that box is transferred:
+The rasters are clipped in two stages. On download, each global COG (about 7,200 × 3,600 pixels) is opened over HTTP and cut to Cuba's bounding box (about 218 × 70 pixels) before it is written to blob storage. Because COGs can be read by window, only that box is transferred:
 
 ```python
 # ChirpsGefsDownloader.download_single_file
