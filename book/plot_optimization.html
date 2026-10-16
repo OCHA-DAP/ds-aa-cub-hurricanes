@@ -300,7 +300,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#data-for-the-email-scatter-plot" id="toc-data-for-the-email-scatter-plot" class="nav-link active" data-scroll-target="#data-for-the-email-scatter-plot"><span class="header-section-number">7.1</span> Data for the email scatter plot</a></li>
+  <li><a href="#rainfall-aggregation" id="toc-rainfall-aggregation" class="nav-link active" data-scroll-target="#rainfall-aggregation"><span class="header-section-number">7.1</span> Rainfall aggregation</a></li>
+  <li><a href="#data-for-the-email-scatter-plot" id="toc-data-for-the-email-scatter-plot" class="nav-link" data-scroll-target="#data-for-the-email-scatter-plot"><span class="header-section-number">7.2</span> Data for the email scatter plot</a></li>
   </ul>
 </nav>
     </div>
@@ -337,6 +338,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
+<section id="rainfall-aggregation" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="rainfall-aggregation"><span class="header-section-number">7.1</span> Rainfall aggregation</h2>
+<p>The trigger needs one rainfall number per storm, but IMERG gives a value for every pixel over Cuba. For each storm we take two-day rainfall totals in each pixel, over the days the storm was in the ZMA plus one day either side, and summarise them across the country as the mean or the 50th, 80th, 90th or 95th percentile. The storm’s value is the highest of these over its window. The optimizations in this part try each of these aggregations.</p>
+<p>The figure shows this for Hurricane Oscar’s wettest two days (20-21 October 2024). Most of the rain fell in the far east, so the mean (25 mm) comes out above the 80th percentile (23 mm), while the 50th percentile is only 3 mm. The higher the percentile, the smaller the area of heavy rain it takes to push the value up.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/rainfall_aggregation_oscar.png" class="img-fluid figure-img"></p>
+<figcaption>Hurricane Oscar’s two-day rainfall over Cuba and the pixels at or above each percentile.</figcaption>
+</figure>
+</div>
+<p>The figure is made by <code>scripts/rainfall_aggregation_map.py</code>. The script checks its 80th percentile against the value stored in the trigger data (<code>q80_roll2</code>, 22.6 mm for Oscar) and stops if they differ.</p>
 <div id="0758fe7d" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code</summary>
@@ -3155,8 +3167,9 @@ Name: 225075, dtype: object</code></pre>
 </table>
 </div>
 </div>
-<section id="data-for-the-email-scatter-plot" class="level2" data-number="7.1">
-<h2 data-number="7.1" class="anchored" data-anchor-id="data-for-the-email-scatter-plot"><span class="header-section-number">7.1</span> Data for the email scatter plot</h2>
+</section>
+<section id="data-for-the-email-scatter-plot" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="data-for-the-email-scatter-plot"><span class="header-section-number">7.2</span> Data for the email scatter plot</h2>
 <p>The data behind the scatter plot used in the monitoring emails.</p>
 <div id="b9e12feb" class="cell" data-execution_count="27">
 <details class="code-fold">
