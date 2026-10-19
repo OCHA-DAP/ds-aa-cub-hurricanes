@@ -42,11 +42,11 @@ schedule.
   (`pipelines/`, `src/`) stays pure Python and DBX-agnostic — the GHA workflows
   run the same scripts. (The copy-to-local step is required because importing
   Python packages off the wsfs FUSE mount is unreliable — see Gotchas.)
-- **Compute: an ephemeral job cluster per run, under the "Job Compute" cluster
-  policy** (`000C79D951EAF0D6`) — required since unrestricted compute is no
-  longer available to the deployer. The policy forbids single-node and fixes
-  `num_workers=1`, so each run is a **driver + 1 worker** (fine — the monitors
-  are plain Python and run on the driver). It also **injects the DB/blob/IMERG
+- **Compute: an ephemeral job cluster per run, under the "Job Compute (single
+  node)" cluster policy** (`0017962FF5D1E3B9`) — a policy is required since
+  unrestricted compute is no longer available to the deployer. The policy fixes
+  `num_workers=0` and the single-node profile, so each run is **one VM** (the
+  monitors are plain Python and run on the driver). It also **injects the DB/blob/IMERG
   credentials** (`DSCI_AZ_*`, `IMERG_*`, `STORAGE_ACCOUNT_*`, `CONTAINER_*`,
   consumed by ocha_stratus) as hidden `spark_env_vars`, so the bundle's cluster
   spec only adds `DSCI_LISTMONK_*` (the listmonk sender creds the policy doesn't
@@ -151,7 +151,7 @@ Common tasks:
   spec adds only `DSCI_LISTMONK_*`. If the pipeline needs a new credential, add it
   to the bundle's `spark_env_vars` — or, if it's shared across the storms stack,
   to the policy. Also note the policy **fixes** some attributes (e.g.
-  `spot_bid_max_price=100`, `num_workers=1`): the spec must match those or the
+  `spot_bid_max_price=100`, `num_workers=0`): the spec must match those or the
   deploy is rejected.
 - **Verify runs from the task logs, not the CLI exit code.** `databricks bundle run`
   can report exit 0 while the task itself failed. Check the run output for the

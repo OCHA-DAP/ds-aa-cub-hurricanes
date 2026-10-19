@@ -56,11 +56,12 @@ variables:
     description: '"True" = inject dummy storm data (PRUEBA prefix) to force an alert; "False" = real data only'
     default: "False"
 
-# Reusable job-cluster spec, governed by the "Job Compute" cluster policy
-# (000C79D951EAF0D6) — required since unrestricted compute is no longer
-# available. The policy:
-#   - forbids single-node and fixes num_workers=1, so this is a driver + 1
-#     worker (fine: the monitors are plain Python and run on the driver);
+# Reusable job-cluster spec, governed by the "Job Compute (single node)"
+# cluster policy (0017962FF5D1E3B9) — a policy is required since unrestricted
+# compute is no longer available. The policy:
+#   - fixes num_workers=0 and the singleNode profile, so each run is one VM
+#     (the monitors are plain Python and run on the driver); neither is set
+#     below, the policy applies its fixed values;
 #   - fixes spot_bid_max_price=100 (set explicitly below; the provider's -1
 #     default is rejected by the policy);
 #   - injects all DB/blob/IMERG creds (DSCI_AZ_DB_*, DSCI_AZ_BLOB_*, IMERG_*,
@@ -68,10 +69,10 @@ variables:
 # So those creds are dropped here and supplied by the policy; we only add
 # DSCI_LISTMONK_* (the listmonk sender creds), which the policy does not set.
 .monitor_cluster_spec: &monitor_cluster_spec
-  policy_id: "000C79D951EAF0D6"
+  policy_id: "0017962FF5D1E3B9"
+  apply_policy_default_values: true
   spark_version: "18.2.x-scala2.13"   # policy allows any (spark_version unlimited)
   node_type_id: "Standard_DS3_v2"     # in the policy's node_type allowlist (its default)
-  num_workers: 1                       # policy fixes this; single-node is forbidden
   data_security_mode: SINGLE_USER
   azure_attributes:
     # Policy fixes spot_bid_max_price=100; must be set explicitly because the
